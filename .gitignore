@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.*
+*.log
+.DS_Store
+.vscode/
+
+deploy.ps1
+Dockerfile
+
+docker-compose.yml
+
+Product Requirement Document.md

@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: d_ph-com-sa-server
+    ports:
+      - "7000:7000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production

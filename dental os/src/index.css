@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Tahoma, Arial, sans-serif;
+  color-scheme: light;
+}
+
+.dark body {
+  color-scheme: dark;
+}
+
+/* Use a more Arabic-friendly stack when the document is in Arabic. */
+html[lang='ar'] body {
+  font-family: 'Segoe UI', Tahoma, 'Geeza Pro', system-ui, Arial, sans-serif;
+}
+
+/* Keep native date/select controls legible in dark mode. */
+.dark input[type='date']::-webkit-calendar-picker-indicator,
+.dark input[type='datetime-local']::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}

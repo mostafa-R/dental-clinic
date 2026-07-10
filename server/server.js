@@ -1,0 +1,84 @@
+import http from "node:http";
+
+import app, { upgradeRateLimitStore } from "./app.js";
+import { connectDB, disconnectDB } from "./config/db.js";
+import { connectRedis, disconnectRedis } from "./config/redis.js";
+import { getIO, initSocket } from "./socket/index.js";
+import { startSuspensionCron, stopSuspensionCron } from "./services/suspensionCron.js";
+import { startAbuseCron, stopAbuseCron, stopAbuseFlusher } from "./services/abuseDetection.js";
+import { startWhatsAppReminderCron, stopWhatsAppReminderCron } from "./services/whatsappReminderCron.js";
+import { startBackupCron, stopBackupCron } from "./services/backupCron.js";
+import { disconnectAllWhatsAppClients } from "./services/whatsapp.js";
+
+const PORT = process.env.PORT || 5000;
+
+function validateEnv() {
+  const required = [
+    ["MONGO_URI", "MongoDB connection string"],
+    ["JWT_SECRET", "JWT signing secret"],
+    ["JWT_REFRESH_SECRET", "JWT refresh signing secret"],
+  ];
+  const missing = required.filter(([key]) => !process.env[key]);
+  if (missing.length > 0) {
+    console.error("Missing required environment variables:");
+    missing.forEach(([key, desc]) => console.error(`  ${key} — ${desc}`));
+    process.exit(1);
+  }
+}
+
+async function start() {
+  validateEnv();
+
+  await connectDB();
+  await connectRedis();
+  await upgradeRateLimitStore();
+
+  const httpServer = http.createServer(app);
+  initSocket(httpServer);
+
+  httpServer.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+
+  startSuspensionCron();
+  startAbuseCron();
+  startWhatsAppReminderCron();
+  startBackupCron();
+
+  const shutdown = async (signal) => {
+    console.log(`\n${signal} received. Shutting down gracefully...`);
+
+    stopSuspensionCron();
+    stopAbuseCron();
+    stopAbuseFlusher();
+    stopWhatsAppReminderCron();
+    stopBackupCron();
+
+    await disconnectAllWhatsAppClients();
+
+    const io = getIO();
+    if (io) io.close();
+
+    await disconnectRedis();
+    await disconnectDB();
+
+    httpServer.close(() => {
+      console.log("HTTP server closed");
+      process.exit(0);
+    });
+    setTimeout(() => {
+      console.error("Forced shutdown after timeout");
+      process.exit(0);
+    }, 15000);
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+}
+
+start().catch((err) => {
+  console.error("Failed to start server:", err);
+  process.exit(1);
+});
+
+export default app;
