@@ -1,13 +1,13 @@
 import { Router } from 'express';
+import { authorizeSite, protectSite } from '../../../middleware/siteAuth.js';
 import { validate } from '../../../middleware/validate.js';
-import { protectSite, authorizeSite } from '../../../middleware/siteAuth.js';
+import { paymentSchema, subscriptionSchema } from '../tenant/site.validator.js';
 import {
-  getSubscriptions,
   getRevenueStats,
-  updateSubscription,
+  getSubscriptions,
   processPayment,
+  updateSubscription,
 } from './siteSubscription.controller.js';
-import { subscriptionSchema, paymentSchema } from '../tenant/site.validator.js';
 
 const router = Router();
 

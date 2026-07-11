@@ -1,7 +1,7 @@
+import ApiError from '../../../utils/ApiError.js';
+import Plan from '../../platform/plan.model.js';
 import Subscription from '../tenant/subscription.model.js';
 import Tenant from '../tenant/tenant.model.js';
-import Plan from '../../platform/plan.model.js';
-import ApiError from '../../../utils/ApiError.js';
 
 async function getPlanPrice(planKey, billingCycle) {
   const planDoc = await Plan.findOne({ key: planKey, isActive: true }).lean();

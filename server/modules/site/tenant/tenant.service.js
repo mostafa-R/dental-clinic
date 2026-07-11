@@ -1,13 +1,13 @@
 import crypto from 'crypto';
+import ApiError from '../../../utils/ApiError.js';
 import Appointment from '../../appointments/appointment.model.js';
-import Branch from '../../users/branch.model.js';
 import Invoice from '../../billing/invoice.model.js';
 import Patient from '../../patients/patient.model.js';
 import Plan from '../../platform/plan.model.js';
+import Branch from '../../users/branch.model.js';
+import User from '../../users/user.model.js';
 import Subscription from './subscription.model.js';
 import Tenant from './tenant.model.js';
-import User from '../../users/user.model.js';
-import ApiError from '../../../utils/ApiError.js';
 
 function generatePassword() {
   const chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';

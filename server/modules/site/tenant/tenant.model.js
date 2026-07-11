@@ -140,9 +140,9 @@ tenantSchema.methods.updatePlanSettings = function updatePlanSettings(planDoc) {
   } else {
     // Hardcoded fallback when no Plan doc exists (legacy)
     const fallback = {
-      starter:  { maxBranches: 1, maxDoctors: 3, maxPatients: 500, storageLimit: 5120 },
+      starter: { maxBranches: 1, maxDoctors: 3, maxPatients: 500, storageLimit: 5120 },
       professional: { maxBranches: 5, maxDoctors: 10, maxPatients: 5000, storageLimit: 51200 },
-      enterprise:   { maxBranches: 999, maxDoctors: 999, maxPatients: 999999, storageLimit: 0 },
+      enterprise: { maxBranches: 999, maxDoctors: 999, maxPatients: 999999, storageLimit: 0 },
     };
     const s = fallback[this.plan] || fallback.starter;
     Object.assign(this.settings, s);

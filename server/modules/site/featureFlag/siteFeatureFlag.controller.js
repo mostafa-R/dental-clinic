@@ -1,6 +1,6 @@
-import * as featureFlagService from './featureFlag.service.js';
 import asyncHandler from '../../../utils/asyncHandler.js';
 import { sendSuccess } from '../../../utils/sendSuccess.js';
+import * as featureFlagService from './featureFlag.service.js';
 
 export const getTenantModules = asyncHandler(async (req, res) => {
   const result = await featureFlagService.getTenantModules(req.params.tenantId);

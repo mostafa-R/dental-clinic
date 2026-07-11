@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { protectSite, authorizeSite } from '../../../middleware/siteAuth.js';
-import { audit } from '../../../middleware/audit.js';
-import { validate } from '../../../middleware/validate.js';
 import { z } from 'zod';
-import { getTenantModules, toggleModule, setModules } from './siteFeatureFlag.controller.js';
+import { audit } from '../../../middleware/audit.js';
+import { authorizeSite, protectSite } from '../../../middleware/siteAuth.js';
+import { validate } from '../../../middleware/validate.js';
+import { getTenantModules, setModules, toggleModule } from './siteFeatureFlag.controller.js';
 
 const router = Router();
 

@@ -1,4 +1,8 @@
 import { Router } from "express";
+import { z } from "zod";
+import { audit } from "../../../middleware/audit.js";
+import { authorizeSite, protectSite } from "../../../middleware/siteAuth.js";
+import { validate } from "../../../middleware/validate.js";
 import {
   createAdmin,
   deleteAdmin,
@@ -7,10 +11,6 @@ import {
   updateAdmin,
   updateAdminPermissions,
 } from "./siteAdmin.controller.js";
-import { authorizeSite, protectSite } from "../../../middleware/siteAuth.js";
-import { validate } from "../../../middleware/validate.js";
-import { audit } from "../../../middleware/audit.js";
-import { z } from "zod";
 
 const router = Router();
 

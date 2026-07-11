@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { protectSite, authorizeSite } from '../../../middleware/siteAuth.js';
+import { authorizeSite, protectSite } from '../../../middleware/siteAuth.js';
 import { getUsersByTenant } from './siteUser.controller.js';
 
 const router = Router();

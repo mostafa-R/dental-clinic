@@ -1,10 +1,10 @@
-import Branch from "../../users/branch.model.js";
-import Tenant from "./tenant.model.js";
-import User from "../../users/user.model.js";
 import ApiError from "../../../utils/ApiError.js";
 import asyncHandler from "../../../utils/asyncHandler.js";
-import { sendSuccess } from "../../../utils/sendSuccess.js";
 import { escapeRegex } from "../../../utils/escapeRegex.js";
+import { sendSuccess } from "../../../utils/sendSuccess.js";
+import Branch from "../../users/branch.model.js";
+import User from "../../users/user.model.js";
+import Tenant from "./tenant.model.js";
 
 // Get all branches with pagination and filtering
 export const getBranches = asyncHandler(async (req, res) => {
@@ -37,9 +37,9 @@ export const getBranches = asyncHandler(async (req, res) => {
   const branchIds = branches.map(b => b._id);
   const userCounts = branchIds.length
     ? await User.aggregate([
-        { $match: { branch: { $in: branchIds } } },
-        { $group: { _id: '$branch', count: { $sum: 1 } } },
-      ])
+      { $match: { branch: { $in: branchIds } } },
+      { $group: { _id: '$branch', count: { $sum: 1 } } },
+    ])
     : [];
   const userCountMap = new Map(userCounts.map(c => [String(c._id), c.count]));
 

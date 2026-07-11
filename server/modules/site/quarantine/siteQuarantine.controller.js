@@ -1,8 +1,8 @@
-import Tenant from "../tenant/tenant.model.js";
+import { getAbuseStatsForTenants, resetStatsForTenant } from "../../../services/abuseDetection.js";
 import ApiError from "../../../utils/ApiError.js";
 import asyncHandler from "../../../utils/asyncHandler.js";
 import { sendSuccess } from "../../../utils/sendSuccess.js";
-import { getAbuseStatsForTenants, resetStatsForTenant } from "../../../services/abuseDetection.js";
+import Tenant from "../tenant/tenant.model.js";
 
 /**
  * PUT /site/quarantine/:tenantId

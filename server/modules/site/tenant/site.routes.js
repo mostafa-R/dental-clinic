@@ -1,18 +1,18 @@
 import { Router } from "express";
-import {
-    activateTenant,
-    archiveTenant,
-    createTenant,
-    deleteTenant,
-    getTenant,
-    getTenants,
-    getTenantStats,
-    suspendTenant,
-    updateTenant,
-} from "./site.controller.js";
-import { authorizeSite, protectSite } from "../../../middleware/siteAuth.js";
 import { audit } from "../../../middleware/audit.js";
+import { authorizeSite, protectSite } from "../../../middleware/siteAuth.js";
 import { validate } from "../../../middleware/validate.js";
+import {
+  activateTenant,
+  archiveTenant,
+  createTenant,
+  deleteTenant,
+  getTenant,
+  getTenants,
+  getTenantStats,
+  suspendTenant,
+  updateTenant,
+} from "./site.controller.js";
 import { tenantSchema } from "./site.validator.js";
 
 const router = Router();

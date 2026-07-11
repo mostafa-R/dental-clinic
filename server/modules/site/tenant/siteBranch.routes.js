@@ -1,14 +1,14 @@
 import { Router } from "express";
-import {
-  getBranches,
-  getBranch,
-  createBranch,
-  updateBranch,
-  deleteBranch,
-} from "./siteBranch.controller.js";
 import { authorizeSite, protectSite } from "../../../middleware/siteAuth.js";
 import { validate } from "../../../middleware/validate.js";
 import { createBranchSchema, updateBranchSchema } from "../../users/branch.validator.js";
+import {
+  createBranch,
+  deleteBranch,
+  getBranch,
+  getBranches,
+  updateBranch,
+} from "./siteBranch.controller.js";
 
 const router = Router();
 

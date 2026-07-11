@@ -1,6 +1,6 @@
-import * as tenantService from './tenant.service.js';
 import asyncHandler from '../../../utils/asyncHandler.js';
 import { sendSuccess } from '../../../utils/sendSuccess.js';
+import * as tenantService from './tenant.service.js';
 
 export const getTenants = asyncHandler(async (req, res) => {
   const { page = 1, limit = 10, status, plan, search } = req.query;

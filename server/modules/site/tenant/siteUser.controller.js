@@ -1,7 +1,6 @@
-import User from "../../users/user.model.js";
-import ApiError from "../../../utils/ApiError.js";
 import asyncHandler from "../../../utils/asyncHandler.js";
 import { sendSuccess } from "../../../utils/sendSuccess.js";
+import User from "../../users/user.model.js";
 
 export const getUsersByTenant = asyncHandler(async (req, res) => {
   const { tenantId } = req.params;

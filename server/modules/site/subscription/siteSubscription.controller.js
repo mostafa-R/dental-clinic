@@ -1,6 +1,6 @@
-import * as subscriptionService from './subscription.service.js';
 import asyncHandler from '../../../utils/asyncHandler.js';
 import { sendSuccess } from '../../../utils/sendSuccess.js';
+import * as subscriptionService from './subscription.service.js';
 
 export const getSubscriptions = asyncHandler(async (_req, res) => {
   const subscriptions = await subscriptionService.listSubscriptions();

@@ -1,7 +1,7 @@
-import SiteAdmin from "../admin/admin.model.js";
 import ApiError from "../../../utils/ApiError.js";
 import asyncHandler from "../../../utils/asyncHandler.js";
 import { sendSuccess } from "../../../utils/sendSuccess.js";
+import SiteAdmin from "../admin/admin.model.js";
 
 const SAFE_ADMIN_FIELDS = "-password -twoFactorSecret -twoFactorBackupCodes";
 
