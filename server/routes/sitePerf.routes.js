@@ -1,11 +1,12 @@
 import { Router } from "express";
-import { protectSite } from "../middleware/siteAuth.js";
-import { authorizeSite } from "../middleware/siteAuth.js";
-import { getPerfStats, resetPerfStats } from "../services/perfMonitor.js";
+import { protectSite, authorizeSite } from "../middleware/siteAuth.js";
+import { getPerfStats, resetPerfStats } from "../utils/perfMonitor.js";
 
 const router = Router();
 
 router.use(protectSite);
+
+// site_admin
 
 router.get("/", authorizeSite("super_admin", "admin"), (_req, res) => {
   const stats = getPerfStats();

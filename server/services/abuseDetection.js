@@ -1,4 +1,4 @@
-import Tenant from '../models/Tenant.js';
+import Tenant from '../modules/site/tenant/tenant.model.js';
 
 const reqCounts = new Map();
 const FLUSH_INTERVAL = 60 * 1000;
@@ -58,7 +58,9 @@ export async function checkAbuse(tenantId) {
         tenant.isActive = false;
         await tenant.save();
       }
-    } catch {}
+    } catch (err) {
+      console.error('[AbuseDetection] Failed to quarantine tenant:', err.message);
+    }
     return { flagged: true, reason: 'Extreme request rate — auto-quarantined', level: 'critical', rate };
   }
 

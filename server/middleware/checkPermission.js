@@ -1,4 +1,4 @@
-import Role from '../models/Role.js';
+import Role from '../modules/users/role.model.js';
 import ApiError from '../utils/ApiError.js';
 import { MODULES } from '../constants/permissions.js';
 import { planIncludesModule } from '../constants/plans.js';
@@ -67,7 +67,7 @@ export async function resolveRole(req) {
   }
 
   return {
-    isSystemAdmin: roleDoc.isSystemAdmin || ['site_admin', 'clinic_admin', 'super_admin'].includes(roleKey),
+    isSystemAdmin: !!roleDoc.isSystemAdmin,
     permissionMap: () => perms,
   };
 }

@@ -1,4 +1,4 @@
-import AuditLog from '../models/AuditLog.js';
+import AuditLog from '../modules/site/audit/auditLog.model.js';
 
 /**
  * Middleware factory that logs an audit trail entry after the response is sent.
@@ -33,6 +33,7 @@ export function audit(action, targetType) {
             ? { type: targetType, id: targetId, name: targetName }
             : undefined,
           details,
+          requestId: req.id || null,
           ip: req.ip || req.headers?.['x-forwarded-for'] || '',
           userAgent: (req.headers?.['user-agent'] || '').substring(0, 500),
         }).catch((err) => console.error('Audit log error:', err.message));

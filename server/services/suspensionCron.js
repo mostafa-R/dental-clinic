@@ -1,7 +1,7 @@
 import cron from "node-cron";
-import PlatformSetting from "../models/PlatformSetting.js";
-import Subscription from "../models/Subscription.js";
-import Tenant from "../models/Tenant.js";
+import PlatformSetting from "../modules/platform/platformSetting.model.js";
+import Subscription from "../modules/site/tenant/subscription.model.js";
+import Tenant from "../modules/site/tenant/tenant.model.js";
 
 async function checkAndSuspend() {
   try {

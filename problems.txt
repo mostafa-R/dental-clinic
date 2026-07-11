@@ -1,0 +1,214 @@
+دلوقتى عايز افحص ال سيرفر كامان و لوجيك و الفلو بتاع العمليات 
+وفين المشاكل 
+
+
+فحص شامل للسيرفر — تقرير النتائج
+تم فحص كل ملف في server/ (~128 ملف). Here's the full picture:
+
+CRITICAL (13 مشكلة)
+#	المشكلة	الملف	المشكلة باختصار
+1	PHI Protection معطّل بالكامل	middleware/auth.js + phiRestrict.js	Impersonation token بيحمل type: 'impersonation' لكن protect middleware مش بيقرأه، فالـ req.isImpersonation دائمًا false — يعني كل بيانات المرضى الحساسة بتتسرب للـ admin المتنكر
+2	CORS bypass بال prefix	app.js:61	origin.startsWith(o) — لو الـ allowed origin هو https://app.com，则 https://app.com.evil.com هيمر
+3	tokenVersion مش بيتشيك على Access Token	middleware/auth.js:19	بعد تغيير الباسورد، التوكن القديم فضّل شغّال لحد ما ينتهي (15 دقيقة)
+4	patientId unique globally بدل per-tenant	patient.model.js:39	Counter.next("patient", tenant) بيعمل PT-00001 لكل tenant، بس الـ index globally unique — tenant تاني هيعمل duplicate key error
+5	نفس المشكلة مع invoiceNo	invoice.model.js:60	INV-00001 globally unique بس بيتعمل per-tenant
+6	** نفس المشكلة مع planNo, rxNo, noteNo, drawingNo, expenseNo**	5 models تانية	كلهم same pattern — counter per-tenant بس index globally unique
+7	commissionNo مش محفوظ خالص	commission.model.js:88	Field مش موجود في الـ schema، Mongoose بيشيله — كل الـ commissions بتحفظ بدون رقم
+8	Double-booking — appointments	appointment.controller.js:128,155	لا create ولا update بيفحصوا لو الدكتور أو الكرسي عنده موعد تاني في نفس الوقت
+9	Wallet مش بيتنخص عند دفع installment بالـ wallet	installmentPlan.controller.js:98	paymentMethod: 'wallet' بيسجل الدفع بس مش بيخصم من المحفظة — فلوس بتختفي
+10	Stock deductions مش atomic	inventory.service.js:160,108	read-modify-write بدون atomicity — concurrent requests بتخسر deductions
+11	Net profit محسوب بطريقة مختلفة	accounting.controller.js:317 vs accounting.service.js:32	Controller مش بخصم owner drawings، Service بخصمهم — أرقام مختلفة
+12	Admin passwords بتتولّد بـ Math.random()	tenant.service.js:13	مش cryptographically secure
+13	twoFactorSecret بيتسلّل في API responses	siteAuth.service.js:68,79 + siteAdmin.controller.js:20,36	.lean() بيرجّع كل الـ fields 포함 الـ 2FA secret — أي admin يقدر يشوف secrets بتاعته
+HIGH (25 مشكلة)
+#	المشكلة	الملف
+1	Logout مش بي invalidate الـ refresh token	auth.controller.js:21
+2	protect مش بيتشيك على tokenVersion في socket auth	socket/index.js:50
+3	Deleted tenant bypasses subscription check	middleware/auth.js:30
+4	No email uniqueness check على user update	user.controller.js:180
+5	No role validation — أي string مقبول	user.validator.js:13
+6	No branch validation على user update	user.controller.js:185
+7	Hard-deleting branch بي orphan كل الـ users	branch.controller.js:70
+8	Role deletion مش بيupdate الـ assigned users	role.controller.js:124
+9	Race condition على token refresh	auth.controller.js:46
+10	Invoice per-item discount/tax متجاهلين تمامًا	invoice.model.js:129
+11	taxRate مقبول بس مش بيتحسب	invoice.model.js:93
+12	Wallet balance check بره الـ transaction (TOCTOU)	invoice.service.js:236
+13	Wallet balance race condition	wallet.service.js:16
+14	voidInvoice مش بيreverse الـ wallet payments	invoice.service.js:316
+15	Refund دايمًا بيروح لل wallet حتى لو الدفع كان بالكارت	invoice.service.js:377
+16	adjustStock race condition	inventory.service.js:108
+17	updateItem ممكن يعدي على الـ ledger ويغيّر quantity مباشرة	inventory.service.js:79
+18	expiryDate: "" بيسبب CastError	inventory.service.js:83
+19	Accounting date range filter مش شغّال على payments	accounting.controller.js:268
+20	Commission aggregation مش بيتخذ date range	accounting.controller.js:247
+21	Treatment item invoice field writable by users	emr.validator.js:101
+22	ممكن تحذف completed/invoiced treatment items	treatmentPlan.controller.js:184
+23	Prescriptions و clinical notes بيتنحذفوا hardcoded (medical records!)	prescription.controller.js:128, clinicalNote.controller.js:177
+24	No treatment status lifecycle validation	treatmentPlan.controller.js:90
+25	Quarantine مش بيعمل status: 'suspended' — بس بيعمل isActive: false	siteQuarantine.controller.js:19
+MEDIUM (40 مشكلة)
+#	المشكلة	الملف
+1	Regex injection في search params	siteAuth.service.js:62, tenant.service.js:26
+2	Socket subscribe:branch بيسأل عن siteAdmins field مش موجود	socket/index.js:92
+3	Impersonation بتعدي 2FA	siteImpersonation.controller.js:19
+4	No rate limiting على login endpoints	auth.routes.js, siteAuth.routes.js
+5	logError بيقفل الـ non-ApiError 500s	middleware/logError.js:4
+6	WhatsApp client بيتقتل على أي error	services/whatsapp.js:184
+7	installmentCron race condition	services/installmentCron.js:8
+8	siteAuth.js مش بيcheck tokenVersion	middleware/siteAuth.js:31
+9	validate.js — Object.assign(req.body) بيسيب extra fields	middleware/validate.js:15
+10	Duplicate perfMonitor.js — utils/ و services/ identical	2 files
+11	No uncaughtException / unhandledRejection handlers	server.js
+12	Encryption keys stored in plain text	tenant.service.js:107
+13	Encryption key returned in API response	tenant.service.js:154
+14	redis.keys() بدل SCAN — blocking	config/redis.js:118
+15	Plan limit enforcement TOCTOU race	patient.controller.js:95
+16	Wallet balance clamped to 0 بدل ما يرمي error	wallet.model.js:35
+17	getOrCreateWallet create race condition	wallet.service.js:4
+18	voidInvoice reason مش بيتخزن	invoice.service.js:316
+19	ممكن تعمل duplicate installment plans لنفس الـ invoice	installmentPlan.controller.js:49
+20	Commission بيتخلق per-payment مش per-invoice	invoice.service.js:283
+21	Dental chart queries مش branch-scoped	dentalChart.controller.js:22
+22	N+1 query في invoice generation	treatmentPlan.service.js:68
+23	Invoice creation + stock deduction مش في transaction	treatmentPlan.service.js:49
+24	createTreatmentPlan بيقبل أي status	treatmentPlan.controller.js:66
+25	Expenses/drawings مش بيتعملوا soft-delete	accounting.controller.js:71
+26	Owner drawing مش بي verify الـ owner role	accounting.controller.js:112
+27	Platform settings .passthrough() بيقبل أي fields	platformSetting.routes.js:18
+28	abuseMonitor counter مش بيتنقص	middleware/abuseMonitor.js:11
+29	redis incr+expire مش atomic	config/redis.js:110
+30	emrHelpers.js ممكن يعمل duplicate appointments	utils/emrHelpers.js:21
+31	error.js — Mongoose ValidationError بيضيع الـ messages	middleware/error.js:12
+32	WhatsApp reminders بتبعت كل الرسايل مرة واحدة (rate limit)	services/whatsappReminderCron.js:60
+33	Backup بيعمل blocking fs calls	services/backup.js:57
+34	requireFeature.js — فاضي خالص	middleware/requireFeature.js
+35	listTenants N+1 query	tenant.service.js:37
+36	jwt.js — malformed expiry بيرجّع undefined	utils/jwt.js:108
+37	checkPermission.js — clinic_admin دايمًا bypasses RBAC	middleware/checkPermission.js:70
+38	Admin self-deactivation ممكن	user.controller.js:186
+39	Appointment create بيقبل completed/cancelled status	appointment.validator.js:18
+40	siteAdmin.controller.js بيرجّع raw lean docs بدون stripping	siteAdmin.controller.js:20
+LOW (20 مشكلة)
+Dead code، redundant checks، minor inconsistencies، missing features.
+
+الإصلاحات الأعلى أولوية
+لما تبدأ، ابدأ بالـ CRITICALs دي:
+
+auth.js:protect — propagate decoded.type === 'impersonation' → fixes PHI leak
+app.js:61 — strict CORS comparison instead of startsWith
+auth.js:protect — check tokenVersion against DB
+All models with counters — change to compound index { tenant: 1, field: 1 }
+commission.model.js — add commissionNo field to schema
+appointment.controller.js — add overlap check before create/update
+installmentPlan.controller.js:98 — debit wallet when paymentMethod === 'wallet'
+inventory.service.js — use atomic findOneAndUpdate with $inc
+tenant.service.js:13 — use crypto.randomBytes instead of Math.random()
+الفيود: 13 CRITICAL, 25 HIGH, 40 MEDIUM, 20 LOW
+
+عايز أبدأ أصلح إيه؟ أنصح نبدأ بالـ CRITICALs واحدة واحدة.
+
+
+
+تقرير فحص السيرفر — النتيجة النهائية
+اللي اتثبت إنها اتصلحت (من problems.txt)
+#	المشكلة	الحالة
+1	CORS bypass بـ startsWith	اتصلح — app.js:60 بيستخدم ===
+2	tokenVersion مش بيتشيك على Access Token	اتصلح — auth.js:30 بيتاكد
+3	patientId unique globally	اتصلح — compound index { tenant: 1, patientId: 1 }
+4	invoiceNo unique globally	اتصلح — same pattern
+5	commissionNo مش محفوظ	اتصلح — field موجود في model
+6	Socket.IO مش بيتشيك tokenVersion	اتصلح — socket/index.js:61 بيتاكد
+7	voidInvoice مش بي reverse wallet	اتصلح — invoice.service.js:330-358 بيعملها
+8	Wallet debit عند installment payment	اتصلح — installmentPlan.controller.js:148 بيخصم
+المشاكل المتبقية (مؤكدة بالكود)
+CRITICAL
+1. checkPermission.js:70 — clinic_admin بيعدي RBAC بالكامل
+
+isSystemAdmin: roleDoc.isSystemAdmin || ['site_admin', 'clinic_admin', 'super_admin'].includes(roleKey)
+لو المستخدم عنده role = clinic_admin، هو بypass كل صلاحيات الـ RBAC حتى لو الـ Role document بتاعته بيقول isSystemAdmin: false. ده معناه إن أي clinic_admin يقدر يعمل أي حاجة.
+
+2. siteAuth.js — مش بيتشيك tokenVersion لو الـ site admin غير باسورد، التوكن القديم فضّل شغال. مفيش tokenVersion check في protectSite (siteAuth.js:31).
+
+3. validate.js:15 — extra fields بتنعدم من req.body
+
+for (const key of Object.keys(result.data)) { req.body[key] = result.data[key]; }
+الـ Zod schema بيعمل strip للـ unknown fields من result.data، بس الـ extra fields الأصلية في req.body فضلت موجودة. يعني لو الـ schema بيقبل name بس الـ client بعت name + role، الـ role هيعدّي.
+
+4. treatmentPlan.service.js:49 — Invoice creation + stock deduction مش في transaction generateInvoiceFromPlan بيعمل Invoice.create() وبعدين بيخصم الـ inventory في operations منفصلة. لو الـ deduction فشل، الفاتورة اتعملت بالفعل ومفيش rollback.
+
+5. wallet.service.js:5-15 — getOrCreateWallet race condition
+
+let wallet = await Wallet.findOne({ patient: patient._id });
+if (!wallet) {
+  wallet = await Wallet.create({...});
+}
+طلبين concurrent ممكن يشوفوا إن مفيش wallet، والاتنين يحاولوا يعملوا create. الـ unique index هيرجع duplicate key error بدل ما يرجّع الـ wallet الموجود.
+
+HIGH
+6. auth.controller.js:21 — Logout مش بي invalidate الـ access token بي bumps الـ tokenVersion (اللي بيلغي الـ refresh token)، بس الـ access token (15 دقيقة) فضّل شغال. ده design trade-off بس ممكن يكون مش مقبول في بعض الحالات.
+
+7. invoice.service.js:282-297 — Commission بتتخلق per-payment مش per-invoice كل payment بيتعملها commission record جديد. يعني لو مريض دفع 5 مرات على نفس الفاتورة، الدكتور هياخد 5 عمولات على نفس الفاتورة.
+
+8. invoice.service.js:373-448 — Refund مش بيرجع للمكان الأصلي لو المريض دفع بالكارت وعمل refund، الـ refund بيروح للـ wallet (لو method='wallet') أو كاش. مفيش logic بيرجع الفلوس لنفس طريقة الدفع الأصلية.
+
+9. invoice.model.js:159-173 — paidAmount distribution ممكن يخسر أرقام بسبب الـ rounding الـ proportional allocation بيجمع round2() في كل iteration، والباقي (remaining) ممكن يتأثر. في فاتورة بـ 3 items ومبلغ صغير، ممكن تلاقي paidAmount != sum(item.paidAmount).
+
+10. installmentPlan.controller.js:126 — مش بيقيّد الـ installment plan بالـ branch
+
+const plan = await InstallmentPlan.findOne({ _id: req.params.planId, patient: patient._id })
+مش بيضيف branch filter. لو الـ patient عنده installments في branch تاني، ممكن يوصلهم.
+
+MEDIUM
+11. server.js — مفيش uncaughtException/unhandledRejection handlers لو حصل unhandled rejection، السيرفر بيقول بدون cleanup (مبيقفلش الـ crons أو الـ DB connections).
+
+12. app.js:91-97 — Rate limiter in-memory في production مع multiple instances، الـ rate limit مش بيتشترك بينهم. الـ Redis upgrade هو optional بس مش بيتنفع تلقائياً.
+
+13. treatmentPlan.service.js:68-77 — N+1 queries في invoice generation كل treatment item بيعمل query منفصل للـ DentalChart ولـ deductForProcedure. ممكن يتعمل batch.
+
+14. siteAuth.js — مفيش tokenVersion في SiteAdmin model أصلاً لو عايز تلغي site admin token، مفيش way تعملها غير إنك تمسح الـ cookie. مفيش token rotation.
+
+
+
+
+
+HIGH (8)
+#	المشكلة	الملف	التفاصيل
+3	Refund مش بيرجع لنفس طريقة الدفع	invoice.service.js:384-471	refundPayment بيقبل method parameter — لو المريض دفع بالكارت وعمل refund بالـ wallet، الفلوس بتروح للـ wallet مش للكارت. مفيش logic بيرجع لنفس طريقة الدفع الأصلية
+4	installmentPlan مش branch-scoped في update	installmentPlan.controller.js:91	InstallmentPlan.findOne({ _id: req.params.planId, patient: patient._id }) — مش بيضيف branch filter. لو الـ patient عنده installments في branch تاني، ممكن يوصلهم
+5	Owner drawing مش بي verify الـ owner role في create	accounting.controller.js:112	بيتحقق إن owner.role !== 'clinic_admin' بس مش بيتحقق إن الـ owner نفس الـ tenant
+6	Expenses/drawings مش بيتعملوا soft-delete	accounting.controller.js:71,145	findOneAndDelete — hard delete بدون سجل. لو حد حذف غلطة، البيانات ضاعت
+7	Net profit محسوب بطريقة مختلفة	accounting.controller.js:326	netProfit = totalRevenue - totalExpenses - pendingCommissions — مش بخصم totalDrawings. يعني الأرباح الظاهرة أكبر من الواقع
+8	Platform settings .passthrough()	محتاج أتأكد من الملف	الـ validation مش بيقيّد الـ fields المقبولة
+9	abuseMonitor counter مش بيتنقص	middleware/abuseMonitor.js	الـ counter بيزود بس مش بينقص — معناه إن بعد 200 request في الدقيقة، الـ counter مش بيتصفّر تاني
+10	WhatsApp reminders بتبعت كل الرسايل مرة واحدة	services/whatsappReminderCron.js	مفيش delay بين الرسايل — لو فيه 50 موعد، هتبعت 50 رسالة في ثانية واحدة. WhatsApp ممكن ي ban الـ number
+MEDIUM (15)
+#	المشكلة	الملف	التفاصيل
+11	Regex injection في search params	siteAuth.service.js:61	الـ search parameter بيتعمله escape في tenant.service.js:24 بس مش في كل الأماكن
+12	Impersonation بتعدي 2FA	siteImpersonation.controller.js	ممكن يعمل impersonation من غير ما يعمل 2FA
+13	No rate limiting على login endpoints	auth.routes.js	الـ rate limiter موجود في app.js:86-89 بس على /api/auth/login — لو فيه route تاني للـ login مش بيتشيك
+14	Error handler بيقفل non-ApiError 500s	middleware/logError.js	الـ logError middleware مش بي log الـ errors اللي مش ApiError
+15	WhatsApp client بيتقتل على أي error	services/whatsapp.js	الـ error handler بيقفل الـ client بالكامل بدل ما يعمل reconnect
+16	installmentCron race condition	services/installmentCron.js	الـ cron job بيعمل read-modify-write بدون transaction
+17	Wallet balance clamped to 0	wallet.model.js	لو الـ balance سالب، بيتعمل clamp لـ 0 بدل ما يرمي error — معناه إن الـ data بتتفسّد في الصمت
+18	voidInvoice reason مش بيتخزن	invoice.service.js:350	الـ changelog مش بيحفظ السبب بتاع الـ void
+19	Dental chart queries مش branch-scoped	dentalChart.controller.js	الـ queries مش بيضيفوا branch filter
+20	N+1 query في invoice generation	treatmentPlan.service.js:66-84	كل treatment item بيعمل deductForProcedure منفصل — مع إن الـ dentalChart اتلود مرة واحدة
+21	expenses/drawings query على payments	accounting.controller.js:268	الـ date filter مش بيتطبّق على الـ payments array بشكل صحيح
+22	Commission aggregation مش بيتخذ date range	accounting.controller.js:254	الـ commissionFilter بيتطبّق على createdAt بس مش بيؤثر على الـ aggregate result بشكل صحيح
+23	Admin self-deactivation ممكن	user.controller.js:251-260	toggleUserActive مش بيتحقق إن الـ user مش بيعدّل على نفسه
+24	Appointment create بيقبل completed/cancelled status	محتاج أتأكد من الـ validator	لو الـ validator بيقبل أي status، ممكن يتعمل create بـ status completed مباشرة
+25	SiteAdmin toSafeObject() مش مستخدم في كل الأماكن	siteAuth.service.js:69,81	الـ .lean() في listSiteAdmins و getSiteAdmin بيرجّع كل الـ fields حتى مع select: false في الـ schema
+LOW (10+)
+#	المشكلة
+26	Dead code — requireFeature.js فاضي خالص
+27	Duplicate perfMonitor.js — utils/ و services/ متطابقين
+28	N+1 query في tenant.service.js — كل tenant بيعمل query منفصل للـ branch/user counts (اتصلح بـ aggregation)
+29	Missing try/catch في بعض الـ Socket.IO handlers
+30	jwt.js — malformed expiry بيرجّع undefined
+31	Missing input sanitization في بعض الـ routes
+32	emrHelpers.js ممكن يعمل duplicate appointments
+33	Backup بيعمل blocking fs calls
+34	Rate limiter in-memory في production مع multiple instances
+35	مفيش health check endpoint في الـ Docker setup
+ملخص

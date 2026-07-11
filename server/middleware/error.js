@@ -11,8 +11,11 @@ export function errorHandler(err, _req, res, _next) {
 
   if (err.name === 'ValidationError') {
     statusCode = 400;
-    message = 'Validation failed';
-    details = Object.keys(err.errors);
+    message = err.message || 'Validation failed';
+    details = Object.entries(err.errors).reduce((acc, [key, val]) => {
+      acc[key] = val.message || val.kind || 'Invalid value';
+      return acc;
+    }, {});
   } else if (err.code === 11000) {
     statusCode = 409;
     message = 'Duplicate value';

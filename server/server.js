@@ -8,6 +8,7 @@ import { startSuspensionCron, stopSuspensionCron } from "./services/suspensionCr
 import { startAbuseCron, stopAbuseCron, stopAbuseFlusher } from "./services/abuseDetection.js";
 import { startWhatsAppReminderCron, stopWhatsAppReminderCron } from "./services/whatsappReminderCron.js";
 import { startBackupCron, stopBackupCron } from "./services/backupCron.js";
+import { startInstallmentCron, stopInstallmentCron } from "./services/installmentCron.js";
 import { disconnectAllWhatsAppClients } from "./services/whatsapp.js";
 
 const PORT = process.env.PORT || 5000;
@@ -44,6 +45,7 @@ async function start() {
   startAbuseCron();
   startWhatsAppReminderCron();
   startBackupCron();
+  startInstallmentCron();
 
   const shutdown = async (signal) => {
     console.log(`\n${signal} received. Shutting down gracefully...`);
@@ -53,6 +55,7 @@ async function start() {
     stopAbuseFlusher();
     stopWhatsAppReminderCron();
     stopBackupCron();
+    stopInstallmentCron();
 
     await disconnectAllWhatsAppClients();
 
@@ -78,6 +81,16 @@ async function start() {
 
 start().catch((err) => {
   console.error("Failed to start server:", err);
+  process.exit(1);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("[FATAL] Uncaught Exception:", err);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("[FATAL] Unhandled Rejection:", reason);
   process.exit(1);
 });
 

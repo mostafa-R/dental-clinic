@@ -12,7 +12,7 @@ export function validate(schema, source = 'body') {
       req.validatedQuery = result.data;
     } else {
       req.validatedBody = result.data;
-      Object.assign(req.body, result.data);
+      req.body = result.data;
     }
     return next();
   };

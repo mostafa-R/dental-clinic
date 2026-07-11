@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import SiteAdmin from '../models/SiteAdmin.js';
+import SiteAdmin from '../modules/site/admin/admin.model.js';
 import ApiError from '../utils/ApiError.js';
 
 /**

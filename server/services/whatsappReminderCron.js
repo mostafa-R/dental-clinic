@@ -1,10 +1,10 @@
 import cron from "node-cron";
 import mongoose from "mongoose";
 
-import Appointment from "../models/Appointment.js";
-import WhatsAppSetting from "../models/WhatsAppSetting.js";
-import Patient from "../models/Patient.js";
-import Branch from "../models/Branch.js";
+import Appointment from "../modules/appointments/appointment.model.js";
+import WhatsAppSetting from "../modules/whatsapp/whatsappSetting.model.js";
+import Patient from "../modules/patients/patient.model.js";
+import Branch from "../modules/users/branch.model.js";
 import { sendWhatsAppMessage } from "./whatsapp.js";
 
 const REMINDER_CHECK_INTERVAL = "*/30 * * * *";
@@ -57,24 +57,33 @@ async function sendMessagesForTenant(settings, type) {
     .populate("patient", "firstName phone")
     .lean();
 
-  const messages = appointments
-    .filter((apt) => apt.patient?.phone)
-    .map(async (apt) => {
-      try {
-        const message = await buildMessage(apt.patient, apt, type);
-        await sendWhatsAppMessage(String(tenantId), apt.patient.phone, message);
-        await Appointment.findByIdAndUpdate(apt._id, { [filterField]: new Date() });
-        console.log(
-          `[WhatsApp-${type === "reminder" ? "Reminder" : "Confirm"}] Sent to ${apt.patient.firstName} (${apt.patient.phone}) for appointment ${apt._id}`,
-        );
-      } catch (err) {
-        console.error(
-          `[WhatsApp-${type === "reminder" ? "Reminder" : "Confirm"}] Failed for appointment ${apt._id}: ${err.message}`,
-        );
-      }
-    });
+  const eligible = appointments.filter((apt) => apt.patient?.phone);
 
-  await Promise.allSettled(messages);
+  const BATCH_SIZE = 5;
+  const BATCH_DELAY_MS = 2000;
+  for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
+    const batch = eligible.slice(i, i + BATCH_SIZE);
+    await Promise.allSettled(
+      batch.map(async (apt) => {
+        try {
+          const message = await buildMessage(apt.patient, apt, type);
+          await sendWhatsAppMessage(String(tenantId), apt.patient.phone, message);
+          await Appointment.findByIdAndUpdate(apt._id, { [filterField]: new Date() });
+          console.log(
+            `[WhatsApp-${type === "reminder" ? "Reminder" : "Confirm"}] Sent to ${apt.patient.firstName} (${apt.patient.phone}) for appointment ${apt._id}`,
+          );
+        } catch (err) {
+          console.error(
+            `[WhatsApp-${type === "reminder" ? "Reminder" : "Confirm"}] Failed for appointment ${apt._id}: ${err.message}`,
+          );
+        }
+      }),
+    );
+    // Delay between batches to avoid WhatsApp rate limits.
+    if (i + BATCH_SIZE < eligible.length) {
+      await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
+    }
+  }
 }
 
 async function processReminders() {
@@ -87,6 +96,9 @@ async function processReminders() {
 
     const reminderPromises = activeSettings.map((s) => sendMessagesForTenant(s, "reminder"));
     await Promise.allSettled(reminderPromises);
+
+    // Delay between tenant batches to avoid cross-tenant rate limiting.
+    await new Promise((resolve) => setTimeout(resolve, 3000));
 
     const confirmSettings = await WhatsAppSetting.find({
       enabled: true,

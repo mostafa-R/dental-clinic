@@ -1,5 +1,5 @@
 import fs from 'fs';
-import WhatsAppSetting from '../models/WhatsAppSetting.js';
+import WhatsAppSetting from '../modules/whatsapp/whatsappSetting.model.js';
 
 const clients = new Map();
 
@@ -44,6 +44,8 @@ function getChromePath() {
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files\\Chromium\\Application\\chrome.exe',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
     '/usr/bin/google-chrome',
     '/usr/bin/chromium-browser',
     '/snap/bin/chromium',
@@ -119,10 +121,28 @@ export async function connectWhatsApp(tenantId) {
       { tenant: tenantId },
       { $set: { status: 'disconnected', qrCode: '' } },
     );
+
+    const setting = await WhatsAppSetting.findOne({ tenant: tenantId }).lean();
+    if (setting?.enabled) {
+      const retryDelays = [5000, 15000, 30000];
+      for (let attempt = 0; attempt < retryDelays.length; attempt++) {
+        await new Promise((r) => setTimeout(r, retryDelays[attempt]));
+        if (clients.has(key)) break;
+        try {
+          console.log(`[WhatsApp] Auto-reconnect attempt ${attempt + 1} for tenant ${tenantId}`);
+          await connectWhatsApp(tenantId);
+          console.log(`[WhatsApp] Auto-reconnected for tenant ${tenantId}`);
+          break;
+        } catch {
+          console.warn(`[WhatsApp] Auto-reconnect attempt ${attempt + 1} failed for tenant ${tenantId}`);
+        }
+      }
+    }
   });
 
   client.on('auth_failure', async (msg) => {
     clients.delete(key);
+    try { await client.destroy(); } catch {}
     await WhatsAppSetting.findOneAndUpdate(
       { tenant: tenantId },
       { $set: { status: 'error', lastError: msg, qrCode: '' } },
@@ -134,6 +154,7 @@ export async function connectWhatsApp(tenantId) {
     clients.set(key, client);
     return { status: 'connecting' };
   } catch (err) {
+    try { await client.destroy(); } catch {}
     clients.delete(key);
     await WhatsAppSetting.findOneAndUpdate(
       { tenant: tenantId },
@@ -182,15 +203,18 @@ export async function sendWhatsAppMessage(tenantId, to, message) {
   try {
     await client.sendMessage(chatId, message);
   } catch (err) {
-    clients.delete(key);
-    try { await client.destroy(); } catch {}
-    const errorMsg = err.message === 't'
+    const isFatal = err.message === 't';
+    if (isFatal) {
+      clients.delete(key);
+      try { await client.destroy(); } catch {}
+      await WhatsAppSetting.findOneAndUpdate(
+        { tenant: tenantId },
+        { $set: { status: 'error', lastError: err.message, qrCode: '' } },
+      );
+    }
+    const errorMsg = isFatal
       ? 'Browser engine error. Install Chrome 124+ or set CHROME_PATH env var.'
       : err.message;
-    await WhatsAppSetting.findOneAndUpdate(
-      { tenant: tenantId },
-      { $set: { status: 'error', lastError: errorMsg, qrCode: '' } },
-    );
     throw new Error(errorMsg);
   }
 }

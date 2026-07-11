@@ -12,7 +12,8 @@ import helmet from "helmet";
 import { errorHandler, notFound } from "./middleware/error.js";
 import { logError } from "./middleware/logError.js";
 import { abuseMonitor } from "./middleware/abuseMonitor.js";
-import { perfMiddleware } from "./services/perfMonitor.js";
+import { requestId } from "./middleware/requestId.js";
+import { perfMiddleware } from "./utils/perfMonitor.js";
 import apiRouter from "./routes/routes.js";
 
 dotenv.config({ path: path.join(__dirname, ".env") });
@@ -57,7 +58,7 @@ app.use(
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       const allowed = allowedOrigins.some(
-        (o) => origin === o || origin.startsWith(o.replace(/\/$/, "")),
+        (o) => origin === o,
       );
       if (allowed) return callback(null, true);
       callback(new Error("Not allowed by CORS"));
@@ -86,6 +87,7 @@ app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/refresh", authLimiter);
 app.use("/api/site/auth/login", authLimiter);
 app.use("/api/site/auth/refresh", authLimiter);
+app.use("/api/site/auth/create", authLimiter);
 
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -95,7 +97,7 @@ const generalLimiter = rateLimit({
   message: { success: false, message: "Too many requests, please slow down" },
 });
 
-app.use("/api", generalLimiter, perfMiddleware, abuseMonitor, apiRouter);
+app.use("/api", requestId, generalLimiter, perfMiddleware, abuseMonitor, apiRouter);
 
 app.use(logError);
 app.use(notFound);

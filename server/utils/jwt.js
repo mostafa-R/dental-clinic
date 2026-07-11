@@ -106,9 +106,9 @@ export function clearAuthCookies(res, type = "clinic") {
 }
 
 function msFromExpiry(expiry) {
-  if (typeof expiry !== "string") return undefined;
+  if (typeof expiry !== "string") return 86400000;
   const match = expiry.match(/^(\d+)([smhd])$/);
-  if (!match) return undefined;
+  if (!match) return 86400000;
   const value = Number(match[1]);
   const unit = match[2];
   const multipliers = { s: 1000, m: 60000, h: 3600000, d: 86400000 };

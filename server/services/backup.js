@@ -1,11 +1,10 @@
 import { spawn } from "node:child_process";
-import fs from "node:fs";
+import { mkdir, stat, rm, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import mongoose from "mongoose";
 
-import BackupLog from "../models/BackupLog.js";
-import PlatformSetting from "../models/PlatformSetting.js";
+import BackupLog from "../modules/site/backup/backupLog.model.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -54,7 +53,7 @@ export async function performBackup(type = "scheduled", triggeredBy = null) {
   const backupDir = getBackupDir();
   const uri = getMongoUri();
 
-  fs.mkdirSync(backupDir, { recursive: true });
+  await mkdir(backupDir, { recursive: true });
 
   const dbName = parseDbName(uri);
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -71,7 +70,7 @@ export async function performBackup(type = "scheduled", triggeredBy = null) {
     const mongodumpBin = process.env.MONGODUMP_PATH || "mongodump";
     await runMongodump(mongodumpBin, uri, archivePath);
 
-    const stats = fs.statSync(archivePath);
+    const stats = await stat(archivePath);
     const durationMs = Date.now() - start;
 
     let dbSizeBytes = 0;
@@ -81,7 +80,9 @@ export async function performBackup(type = "scheduled", triggeredBy = null) {
         scale: 1,
       });
       dbSizeBytes = dbStats.dataSize || 0;
-    } catch {}
+    } catch (err) {
+      console.warn('[Backup] Could not fetch dbStats:', err.message);
+    }
 
     logEntry.status = "completed";
     logEntry.sizeBytes = stats.size;
@@ -98,9 +99,7 @@ export async function performBackup(type = "scheduled", triggeredBy = null) {
     logEntry.durationMs = Date.now() - start;
     await logEntry.save();
 
-    if (fs.existsSync(archivePath)) {
-      fs.rmSync(archivePath);
-    }
+    try { await rm(archivePath); } catch {}
 
     throw err;
   }
@@ -111,13 +110,13 @@ async function cleanOldBackups(backupDir) {
   const cutoff = Date.now() - retention * 24 * 60 * 60 * 1000;
 
   try {
-    const files = fs.readdirSync(backupDir);
+    const files = await readdir(backupDir);
     for (const file of files) {
       if (!file.startsWith("backup-")) continue;
       const filePath = path.join(backupDir, file);
-      const stat = fs.statSync(filePath);
-      if (stat.isFile() && stat.mtimeMs < cutoff) {
-        fs.rmSync(filePath);
+      const fileStat = await stat(filePath);
+      if (fileStat.isFile() && fileStat.mtimeMs < cutoff) {
+        await rm(filePath);
         console.log(`[Backup] Cleaned old backup: ${file}`);
       }
     }

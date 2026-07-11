@@ -1,8 +1,8 @@
 import mongoose from 'mongoose';
 import { Server } from 'socket.io';
 
-import User from '../models/User.js';
-import Tenant from '../models/Tenant.js';
+import User from '../modules/users/user.model.js';
+import Branch from '../modules/users/branch.model.js';
 import { ACCESS_COOKIE, verifyAccessToken } from '../utils/jwt.js';
 
 let io = null;
@@ -58,6 +58,9 @@ export function initSocket(httpServer) {
         if (!user || !user.isActive) {
           return next(new Error('User no longer valid'));
         }
+        if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== user.tokenVersion) {
+          return next(new Error('Token revoked — please log in again'));
+        }
         socket.user = {
           _id: user._id.toString(),
           name: user.name,
@@ -71,7 +74,7 @@ export function initSocket(httpServer) {
   });
 
   io.on('connection', (socket) => {
-    if (socket.user.role === 'site_admin') {
+    if (['site_admin', 'super_admin'].includes(socket.user.role)) {
       socket.join(ADMIN_ROOM);
     }
     if (socket.user.branch) {
@@ -86,14 +89,17 @@ export function initSocket(httpServer) {
 
     socket.on('subscribe:branch', async (branchId) => {
       try {
-        if (socket.user.role === 'site_admin' && branchId) {
-          const branch = await mongoose.model('Branch').findById(branchId).select('tenant').lean();
+        if (!branchId) return;
+        // site_admin and super_admin can subscribe to any branch.
+        if (['site_admin', 'super_admin'].includes(socket.user.role)) {
+          socket.join(branchRoom(branchId));
+          return;
+        }
+        // Clinic-level users can subscribe to branches in their own tenant.
+        if (socket.user.tenant) {
+          const branch = await Branch.findOne({ _id: branchId, tenant: socket.user.tenant }).select('_id').lean();
           if (branch) {
-            const adminTenants = await Tenant.find({ siteAdmins: socket.user._id }).select('_id').lean();
-            const isAuthorized = adminTenants.some((t) => t._id.toString() === String(branch.tenant));
-            if (isAuthorized) {
-              socket.join(branchRoom(branchId));
-            }
+            socket.join(branchRoom(branchId));
           }
         }
       } catch (err) {

@@ -107,24 +107,41 @@ export async function incrementTenantCounter(tenantId, counter) {
   if (!redis || !isConnected) return;
   const key = `${TELEMETRY_PREFIX}${counter}:${tenantId}`;
   try {
-    await redis.incr(key);
-    await redis.expire(key, TELEMETRY_TTL);
+    await redis.multi()
+      .incr(key)
+      .expire(key, TELEMETRY_TTL)
+      .exec();
+  } catch {}
+}
+
+export async function decrementTenantCounter(tenantId, counter) {
+  if (!redis || !isConnected) return;
+  const key = `${TELEMETRY_PREFIX}${counter}:${tenantId}`;
+  try {
+    await redis.multi()
+      .decr(key)
+      .expire(key, TELEMETRY_TTL)
+      .exec();
   } catch {}
 }
 
 export async function getTelemetryCounters() {
   if (!redis || !isConnected) return {};
   try {
-    const keys = await redis.keys(`${TELEMETRY_PREFIX}*`);
     const result = {};
-    for (const key of keys) {
-      const val = await redis.get(key);
-      const parts = key.replace(TELEMETRY_PREFIX, '').split(':');
-      const counter = parts[0];
-      const tenantId = parts.slice(1).join(':');
-      if (!result[counter]) result[counter] = {};
-      result[counter][tenantId] = parseInt(val, 10) || 0;
-    }
+    let cursor = '0';
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', `${TELEMETRY_PREFIX}*`, 'COUNT', 100);
+      cursor = nextCursor;
+      for (const key of keys) {
+        const val = await redis.get(key);
+        const parts = key.replace(TELEMETRY_PREFIX, '').split(':');
+        const counter = parts[0];
+        const tenantId = parts.slice(1).join(':');
+        if (!result[counter]) result[counter] = {};
+        result[counter][tenantId] = parseInt(val, 10) || 0;
+      }
+    } while (cursor !== '0');
     return result;
   } catch {
     return {};

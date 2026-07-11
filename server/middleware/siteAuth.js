@@ -1,4 +1,4 @@
-import SiteAdmin from "../models/SiteAdmin.js";
+import SiteAdmin from "../modules/site/admin/admin.model.js";
 import ApiError from "../utils/ApiError.js";
 import { verifyAccessToken } from "../utils/jwt.js";
 
@@ -35,6 +35,11 @@ export async function protectSite(req, _res, next) {
 
     if (!admin.isActive) {
       throw ApiError.forbidden("Account is disabled");
+    }
+
+    // Reject revoked tokens (password change, admin-initiated rotation).
+    if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== admin.tokenVersion) {
+      throw ApiError.unauthorized("Token revoked — please log in again");
     }
 
     req.siteAdmin = admin;

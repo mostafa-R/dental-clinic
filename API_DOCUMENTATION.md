@@ -66,6 +66,13 @@ Development: http://localhost:5000/api
 Production:  https://<your-domain>/api
 ```
 
+### Architecture
+
+This is a **multi-tenant SaaS dental clinic management platform** with:
+- **Clinic Frontend** (`dental os/`) — React SPA for clinic staff (doctors, receptionists, admins)
+- **Admin Dashboard** (`dashboard/`) — React SPA for platform administrators (manages tenants, plans, billing)
+- **API Server** (`server/`) — Express.js REST API with Socket.IO real-time events
+
 ### Technology Stack
 
 | Layer | Technology |
@@ -78,6 +85,47 @@ Production:  https://<your-domain>/api
 | Real-time | Socket.IO 4.x |
 | Validation | Zod |
 | Rate-limit | express-rate-limit (in-memory, upgrades to Redis) |
+
+### Server Architecture (Modular Monolith)
+
+```
+server/
+  app.js                    Express app setup (middleware, CORS, routes)
+  server.js                 HTTP server + Socket.IO + cron jobs
+  core/                     Shared primitives (transaction.js, counters.js)
+  middleware/                Auth, validation, audit, error handling
+  config/                   Database (MongoDB), Redis, env vars
+  socket/                   Socket.IO connection + room management
+  utils/                    ApiError, asyncHandler, JWT helpers, branch scoping
+  constants/                Permission definitions, role defaults
+  services/                 Cron jobs (suspension, backups, WhatsApp reminders)
+  modules/                  14 domain modules — each self-contained:
+    auth/                     Clinic login, token refresh, preferences
+    users/                    User, Role, Branch models + controllers
+    patients/                 Patient, Wallet, InstallmentPlan
+    appointments/             Appointment scheduling
+    billing/                  Invoice, Commission
+    emr/                      DentalChart, TreatmentPlan, Prescription, ClinicalNote
+    inventory/                InventoryItem + stock management
+    accounting/               Expense, OwnerDrawing
+    chat/                     Internal messaging (DM + channels)
+    dashboard/                Stats aggregation
+    search/                   Global search
+    platform/                 Plan, PlatformSetting (SaaS config)
+    whatsapp/                 WhatsApp integration
+    site/                     Admin dashboard domain:
+      tenant/                   Tenant CRUD, provisioning, stats
+      auth/                     Site admin auth, 2FA, impersonation
+      subscription/             Billing, revenue stats, payment processing
+      analytics/                Platform-wide analytics & growth
+      audit/                    Audit log queries
+      backup/                   Backup management
+      errorLog/                 Error log queries
+      featureFlag/              Module toggling with Redis caching
+      quarantine/               Abuse detection & quarantine
+```
+
+Each module follows the pattern: **Model** → **Service** (business logic) → **Controller** (HTTP adapter) → **Routes** (middleware + wiring) → **Validator** (Zod schemas).
 
 ### Two separate auth domains
 
@@ -266,6 +314,19 @@ Platform ── owns ──> Tenants (clinics)
 5. **EMR sub-routes** (`/patients/:patientId/clinical-notes`, `treatment-plans`, `prescriptions`) scope through the patient — first loads the patient via `loadScopedPatient(req, patientId)`, then operates on child resources under that patient.
 6. **Admin routes** scope via `:tenantId` in the URL path.
 
+### PHI restriction (phiRestrict)
+
+When a site admin impersonates a clinic user, GET endpoints for patient-sensitive resources automatically strip Protected Health Information (PHI) from responses. This is handled by the `phiRestrict` middleware:
+
+**Affected endpoints:** All GET operations on:
+- `/api/patients` and `/api/patients/:id`
+- `/api/patients/:patientId/dental-chart`
+- `/api/patients/:patientId/treatment-plans` and `/:planId`
+- `/api/patients/:patientId/prescriptions` and `/:rxId`
+- `/api/patients/:patientId/clinical-notes` and `/:noteId`
+
+**Behavior:** When `req.isImpersonation === true`, the response data is passed through `stripPHI()` which redacts sensitive fields. The frontend should handle this gracefully — the data shape is the same, but certain fields may be masked.
+
 ### Frontend guidelines
 
 - **DO** let the server determine branch/tenant scope automatically.
@@ -355,11 +416,9 @@ Emitted by `emitToBranch(branchId, event, payload)`.
 
 | Event | Payload | Triggered by |
 |-------|---------|-------------|
-| `patient:created` | `{ patient }` | `POST /api/patients` |
-| `patient:updated` | `{ patient }` | `PATCH /api/patients/:id` |
 | `appointment:created` | `{ appointment }` | `POST /api/appointments` |
 | `appointment:updated` | `{ appointment }` | `PATCH /api/appointments/:id` |
-| `appointment:deleted` | `{ id }` | `DELETE /api/appointments/:id` |
+| `appointment:statusChanged` | `{ appointment }` | `PATCH /api/appointments/:id/status`, `DELETE /api/appointments/:id` (cancel) |
 | `invoice:created` | `{ invoice }` | `POST /api/billing` |
 | `invoice:updated` | `{ invoice }` | `PATCH /api/billing/:id` or `POST /api/billing/:id/payments` |
 | `clinical-note:created` | `{ note }` | `POST /patients/:pid/clinical-notes` |
@@ -367,8 +426,12 @@ Emitted by `emitToBranch(branchId, event, payload)`.
 | `clinical-note:deleted` | `{ _id }` | `DELETE /patients/:pid/clinical-notes/:nid` |
 | `treatment-plan:created` | `{ plan }` | `POST /patients/:pid/treatment-plans` |
 | `treatment-plan:updated` | `{ plan }` | PATCH / DELETE / POST invoice on treatment plan |
-| `inventory:updated` | `{ item }` | Stock adjustment or item update |
+| `chart:updated` | `{ dentalChart }` | `PATCH /patients/:pid/dental-chart` or `/teeth/:number` |
+| `prescription:created` | `{ prescription }` | `POST /patients/:pid/prescriptions` |
+| `prescription:updated` | `{ prescription }` | `PATCH /patients/:pid/prescriptions/:rxId` |
+| `prescription:deleted` | `{ _id }` | `DELETE /patients/:pid/prescriptions/:rxId` |
 | `chat:message` | `{ message }` | New chat message (to recipient room or channel room) |
+| `chat:read` | `{ messageIds, readerId }` | `PATCH /api/chat/read` (emitted to message senders) |
 
 ### Chat event flow
 
@@ -444,8 +507,9 @@ Response: { "user": {
   "role": "receptionist|doctor|clinic_admin|accountant|site_admin",
   "roleId": "ObjectId|null",
   "phone": "string",
+  "commissionRate": number,
   "branch": { "_id": "ObjectId", "name": "string", "address": "string", "phone": "string", "isActive": boolean },
-  "tenant": { "_id": "ObjectId", "plan": "string", "planModules": ["string"], "planId": "ObjectId", "status": "active|trial|suspended|cancelled", "name": "string", "isActive": boolean },
+  "tenant": { "_id": "ObjectId", "plan": "string", "planModules": ["string"], "planId": "ObjectId", "status": "active|trial|suspended|cancelled|archived", "name": "string", "isActive": boolean },
   "isActive": boolean,
   "isDoctor": boolean,
   "preferences": { "language": "en|ar", "theme": "light|dark" }
@@ -455,7 +519,7 @@ Response: { "user": {
 ```
 GET /api/auth/my-permissions
 Auth: protect
-Response: { "permissions": { "moduleName": ["action", ...], ... } }
+Response: { "isSystemAdmin": boolean, "permissions": { "moduleName": ["action", ...], ... } }
 ```
 
 ```
@@ -500,6 +564,7 @@ Body: {
   "email": string (required, valid email — unique across ALL tenants),
   "password": string (required, min 8),
   "role": "receptionist" | "doctor" | "clinic_admin" | "accountant" | "site_admin",
+  "roleId": ObjectId (optional — references a Role document; validated to belong to same tenant),
   "phone": string (optional),
   "branch": ObjectId (required unless role is site_admin/clinic_admin),
   "isDoctor": boolean (optional),
@@ -512,7 +577,7 @@ Response: { "user": UserObject }
 ```
 PATCH /api/users/:id
 Auth: protect, checkPermission('users', 'update')
-Body: { "name"?, "email"?, "password"?, "role"?, "phone"?, "branch"?, "isDoctor"?, "commissionRate"? }
+Body: { "name"?, "email"?, "password"?, "role"?, "roleId"?, "phone"?, "branch"?, "isDoctor"?, "commissionRate"? }
 Response: { "user": UserObject }
 ```
 
@@ -541,7 +606,7 @@ Query: {
   "page": 1,
   "limit": 20,
   "search": "string" (searches firstName, lastName, phone, patientId),
-  "status": "active" (only active shown by default)
+  "isActive": "true" | "false" (filter by active status, default shows active only)
 }
 Response: { "patients": [PatientObject], "pagination": {...} }
 ```
@@ -561,11 +626,11 @@ Body: {
   "phone": string (required),
   "email": string (optional, valid email),
   "dateOfBirth": string (ISO date, optional),
-  "gender": "male" | "female" (optional),
+  "gender": "male" | "female" | "other" | "unknown" (optional),
   "address": string (optional),
   "medicalHistory": {
-    "chronicConditions": ["string"],
-    "allergies": ["string"],
+    "chronicConditions": [{ "name": string, "notes": string }],
+    "allergies": [{ "name": string, "notes": string }],
     "notes": "string"
   } (optional),
   "branch": ObjectId (optional — defaults to user's branch)
@@ -599,11 +664,11 @@ Success: 200 (sets isActive=false — archive)
   "phone": "string",
   "email": "string | null",
   "dateOfBirth": "ISO date | null",
-  "gender": "male" | "female" | null,
+  "gender": "male" | "female" | "other" | "unknown",
   "address": "string",
   "medicalHistory": {
-    "chronicConditions": ["string"],
-    "allergies": ["string"],
+    "chronicConditions": [{ "name": "string", "notes": "string" }],
+    "allergies": [{ "name": "string", "notes": "string" }],
     "notes": "string"
   },
   "branch": "ObjectId",
@@ -624,7 +689,8 @@ Auth: protect, checkPermission('appointments', 'read')
 Query: {
   "page": 1,
   "limit": 20,
-  "start", "end": ISO dates (date range filter, optional),
+  "from", "to": ISO dates (date range filter, optional),
+  "date": ISO date (filter to a single day, optional),
   "doctor": ObjectId (optional),
   "status": "scheduled|confirmed|checked_in|in_progress|completed|cancelled|no_show" (optional),
   "patient": ObjectId (optional),
@@ -674,6 +740,7 @@ Response: { "appointment": AppointmentObject }
 DELETE /api/appointments/:id
 Auth: protect, checkPermission('appointments', 'delete')
 Success: 200 (sets status='cancelled')
+Note: Returns 409 if status transition is invalid (e.g., can't cancel an in_progress appointment).
 ```
 
 **AppointmentObject shape:**
@@ -824,7 +891,7 @@ POST /api/billing/:id/payments
 Auth: protect, checkPermission('billing', 'update')
 Body: {
   "amount": number ≥0.01 (required),
-  "method": "cash|card|transfer|cheque|wallet|other" (required),
+    "method": "cash|card|transfer|wallet" (required),
   "reference": string (optional, max 200),
   "date": ISO date (optional),
   "notes": string (optional, max 300)
@@ -885,7 +952,7 @@ Response: { "invoice": InvoiceObject } (status → 'void')
   "status": "unpaid" | "partial" | "paid" | "void",
   "payments": [{
     "amount": number,
-    "method": "cash|card|transfer|cheque|wallet|other",
+    "method": "cash|card|transfer|wallet",
     "reference": "string",
     "date": "ISO date",
     "notes": "string",
@@ -894,6 +961,7 @@ Response: { "invoice": InvoiceObject } (status → 'void')
     "idempotencyKey": "string"
   }],
   "notes": "string",
+  "changelog": [{ "field": "string", "oldValue": "any", "newValue": "any", "changedBy": "ObjectId", "changedAt": "ISO date" }],
   "createdBy": { "_id": "ObjectId", "name": "string" },
   "createdAt": "ISO date",
   "updatedAt": "ISO date"
@@ -917,11 +985,11 @@ Response: { "expenses": [ExpenseObject], "pagination": {...} }
 POST /api/accounting/expenses
 Auth: protect, checkPermission('accounting', 'create')
 Body: {
-  "category": "rent|utilities|salaries|supplies|equipment|marketing|maintenance|other",
+  "category": "salary|rent|utilities|supplies|maintenance|marketing|other",
   "description": string (required),
   "amount": number ≥0.01 (required),
   "date": ISO date (optional — defaults to now),
-  "paymentMethod": "cash|card|transfer" (optional)
+  "paymentMethod": "cash|bank|card" (optional)
 }
 Success: 201
 Response: { "expense": ExpenseObject }
@@ -932,6 +1000,45 @@ expenseNo auto-generated: EXP-XXXXX
 DELETE /api/accounting/expenses/:id
 Auth: protect, checkPermission('accounting', 'delete')
 Success: 200
+```
+
+**ExpenseObject shape:**
+
+```typescript
+{
+  "_id": "ObjectId",
+  "expenseNo": "EXP-00001",
+  "tenant": "ObjectId",
+  "branch": "ObjectId",
+  "category": "salary|rent|utilities|supplies|maintenance|marketing|other",
+  "description": "string",
+  "amount": number,
+  "date": "ISO date",
+  "paymentMethod": "cash|bank|card",
+  "recordedBy": { "_id": "ObjectId", "name": "string" },
+  "isActive": boolean,
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date"
+}
+```
+
+**DrawingObject shape:**
+
+```typescript
+{
+  "_id": "ObjectId",
+  "drawingNo": "DRW-00001",
+  "tenant": "ObjectId",
+  "branch": "ObjectId",
+  "owner": { "_id": "ObjectId", "name": "string" },
+  "amount": number,
+  "description": "string",
+  "date": "ISO date",
+  "recordedBy": { "_id": "ObjectId", "name": "string" },
+  "isActive": boolean,
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date"
+}
 ```
 
 ```
@@ -980,14 +1087,19 @@ GET /api/accounting/summary
 Auth: protect, checkPermission('accounting', 'read')
 Query: { "startDate"?, "endDate"? }
 Response: {
-  "totalRevenue": number,
-  "totalExpenses": number,
-  "totalDrawings": number,
-  "totalCommissions": number,
-  "pendingCommissions": number,
-  "netProfit": number,
-  "periodStart": "ISO date",
-  "periodEnd": "ISO date"
+  "summary": {
+    "totalBilled": number,
+    "totalCollected": number,
+    "totalExpenses": number,
+    "totalDrawings": number,
+    "pendingCommissions": number,
+    "paidCommissions": number,
+    "netProfit": number
+  },
+  "expenseByCategory": [{ "category": "string", "total": number }],
+  "revenueByMethod": [{ "method": "string", "total": number }],
+  "monthlyRevenue": [{ "month": "YYYY-MM", "revenue": number }],
+  "commissions": [{ "status": "string", "count": number, "total": number }]
 }
 ```
 
@@ -1007,7 +1119,7 @@ Response: {
   "baseAmount": number,
   "rate": number,
   "amount": number,  // = baseAmount * rate / 100
-  "status": "pending" | "paid" | "cancelled",
+  "status": "pending" | "paid",
   "paidDate": "ISO date | null",
   "createdBy": "ObjectId",
   "createdAt": "ISO date"
@@ -1036,7 +1148,7 @@ Response: { "dentalChart": DentalChartObject }
 ```
 PATCH /api/patients/:patientId/dental-chart/teeth/:number
 Auth: protect, checkPermission('emr', 'update')
-Body: { "state": string, "surfaces"?: { "mesial"?, "distal"?, "occlusal"?, "buccal"?, "lingual"? }, "notes"?: string }
+Body: { "state": string, "surfaces"?: { "mesial"?: "sound|caries|restored", "distal"?: "sound|caries|restored", "occlusal"?: "sound|caries|restored", "buccal"?: "sound|caries|restored", "lingual"?: "sound|caries|restored" }, "notes"?: string }
 Response: { "dentalChart": DentalChartObject }
 ```
 
@@ -1051,8 +1163,8 @@ Response: { "dentalChart": DentalChartObject }
   "dentitionType": "primary" | "permanent" | "mixed",
   "teeth": [{
     "number": 1-32,
-    "state": "healthy|carious|filled|missing|crown|bridge|implant|root_canal|fractured|etc",
-    "surfaces": { "mesial"?: boolean, "distal"?: boolean, "occlusal"?: boolean, "buccal"?: boolean, "lingual"?: boolean },
+    "state": "sound|caries|filled|crown|root_canal|implant|missing|bridge|extraction_scheduled|fractured",
+    "surfaces": { "mesial"?: "sound|caries|restored", "distal"?: "sound|caries|restored", "occlusal"?: "sound|caries|restored", "buccal"?: "sound|caries|restored", "lingual"?: "sound|caries|restored" },
     "notes": "string",
     "updatedAt": "ISO date",
     "updatedBy": "ObjectId"
@@ -1064,7 +1176,7 @@ Response: { "dentalChart": DentalChartObject }
 }
 ```
 
-All 32 teeth are pre-populated with `state: "healthy"`. This is enforced on every save.
+All 32 teeth are pre-populated with `state: "sound"`. This is enforced on every save.
 
 ---
 
@@ -1085,15 +1197,15 @@ Auth: protect, checkPermission('emr', 'create')
 Body: {
   "title": string (required),
   "diagnosis": string (optional),
-  "status": "active" | "completed" | "cancelled" | "on_hold" (optional, default "active"),
+  "status": "active" | "completed" | "archived" (optional, default "active"),
   "items": [{
     "tooth": number 1-32 | null,
-    "surfaces": "string",
+    "surfaces": ["mesial"|"distal"|"buccal"|"lingual"|"occlusal"],
     "procedureCode": "string",
     "procedureName": "string",
     "description": "string",
     "estimatedCost": number≥0,
-    "status": "planned" | "pending" | "completed" | "cancelled",
+    "status": "pending" | "in_progress" | "completed" | "cancelled",
     "notes": "string"
   }],
   "nextAppointment": ISO date (optional — auto-creates an Appointment),
@@ -1182,16 +1294,16 @@ Behavior:
   "patient": { "_id": "ObjectId", "patientId": "string", "firstName": "string", "lastName": "string" },
   "title": "string",
   "diagnosis": "string",
-  "status": "active|completed|cancelled|on_hold|archived",
+  "status": "active|completed|archived",
   "items": [{
     "_id": "ObjectId",
     "tooth": number | null,
-    "surfaces": "string",
+    "surfaces": ["mesial"|"distal"|"buccal"|"lingual"|"occlusal"],
     "procedureCode": "string",
     "procedureName": "string",
     "description": "string",
     "estimatedCost": number,
-    "status": "planned|pending|completed|cancelled",
+    "status": "pending|in_progress|completed|cancelled",
     "completedDate": "ISO date | null",
     "appointment": "ObjectId | null",
     "invoice": "ObjectId | null",  // ← set when invoice is generated from plan
@@ -1226,16 +1338,18 @@ Response: { "prescriptions": [PrescriptionObject], "pagination": {...} }
 POST /api/patients/:patientId/prescriptions
 Auth: protect, checkPermission('prescriptions', 'create')
 Body: {
+  "doctor": ObjectId (required — must belong to same branch),
   "diagnosis": string (optional),
   "medications": [{
     "name": string (required),
-    "dosage": string (required),
-    "frequency": string (required),
-    "duration": string (required),
+    "dosage": string (optional),
+    "frequency": string (optional),
+    "duration": string (optional),
     "instructions": string (optional)
   }],
   "notes": string (optional),
-  "appointment": ObjectId (optional)
+  "appointment": ObjectId (optional),
+  "issuedAt": ISO date (optional — defaults to now)
 }
 Success: 201
 Response: { "prescription": PrescriptionObject }
@@ -1260,6 +1374,37 @@ DELETE /api/patients/:patientId/prescriptions/:rxId
 Auth: protect, checkPermission('prescriptions', 'delete')
 Success: 200
 ```
+
+**PrescriptionObject shape:**
+
+```typescript
+{
+  "_id": "ObjectId",
+  "rxNo": "RX-00001",
+  "tenant": "ObjectId | null",
+  "branch": "ObjectId",
+  "patient": "ObjectId",
+  "doctor": { "_id": "ObjectId", "name": "string" },
+  "appointment": "ObjectId | null",
+  "diagnosis": "string",
+  "medications": [{
+    "_id": "ObjectId",
+    "name": "string",
+    "dosage": "string",
+    "frequency": "string",
+    "duration": "string",
+    "instructions": "string"
+  }],
+  "notes": "string",
+  "issuedAt": "ISO date",
+  "createdBy": "ObjectId | null",
+  "isActive": boolean,
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date"
+}
+```
+
+**Virtual fields:** `medicationCount`
 
 ---
 
@@ -1353,7 +1498,7 @@ Auth: protect, checkPermission('inventory', 'read')
 Query: {
   "page"?, "limit"?,
   "search"? (searches name, sku, supplier),
-  "category"?: "consumable|medication|instrument|equipment|other",
+  "category"?: "anesthetic|filling_material|consumable|instrument|medication|hygiene|other",
   "lowStock"? "true" (filters items where quantity ≤ reorderPoint)
 }
 Response: { "items": [InventoryItemObject], "pagination": {...}, "stats": { "lowStockCount": number } }
@@ -1371,8 +1516,8 @@ Auth: protect, checkPermission('inventory', 'create')
 Body: {
   "name": string (required),
   "sku": string,
-  "category": "consumable|medication|instrument|equipment|other",
-  "unit": "unit|piece|box|pack|bottle|ml|g",
+  "category": "anesthetic|filling_material|consumable|instrument|medication|hygiene|other",
+  "unit": "unit|box|pack|bottle|tube|set|ml|g",
   "quantity": number≥0,
   "reorderPoint": number (default 5),
   "costPerUnit": number≥0,
@@ -1422,8 +1567,8 @@ Rejects if resulting quantity < 0.
   "branch": "ObjectId",
   "name": "string",
   "sku": "string",
-  "category": "consumable|medication|instrument|equipment|other",
-  "unit": "unit|piece|box|pack|bottle|ml|g",
+  "category": "anesthetic|filling_material|consumable|instrument|medication|hygiene|other",
+  "unit": "unit|box|pack|bottle|tube|set|ml|g",
   "quantity": number,
   "reorderPoint": number,
   "costPerUnit": number,
@@ -1451,15 +1596,14 @@ Rejects if resulting quantity < 0.
 ```
 GET /api/roles/modules/list
 Auth: protect, checkPermission('roles', 'read')
-Response: { "modules": ["dashboard", "patients", "appointments", "billing", ...] }
+Response: { "modules": ["dashboard", "patients", "appointments", "billing", ...], "actions": ["create", "read", "update", "delete"] }
 ```
 
 ```
 GET /api/roles
 Auth: protect, checkPermission('roles', 'read')
-Query: { "page"?, "limit"? }
-Response: { "roles": [RoleObject], "pagination": {...} }
-(Includes both tenant-specific and built-in roles with tenant=null)
+Response: { "roles": [RoleObject], "modules": ["dashboard", ...], "actions": ["create", "read", "update", "delete"] }
+(Includes both tenant-specific and built-in roles with tenant=null; NOT paginated)
 ```
 
 ```
@@ -1522,8 +1666,8 @@ POST /api/chat
 Auth: protect
 Body: {
   "recipient": ObjectId (optional — for DMs),
-  "channel": "doctors" | "accounting" | "general" (optional — for channel messages),
-  "message": string (required, max 1000)
+  "channel": string (optional — for channel messages),
+  "content": string (required, max 2000)
 }
 Success: 201
 Response: { "message": MessageObject }
@@ -1534,7 +1678,7 @@ GET /api/chat
 Auth: protect
 Query: {
   "page"?, "limit"?,
-  "channel"?: "doctors"|"accounting"|"general",
+  "channel"?: string (channel name),
   "recipient"?: ObjectId (for DMs)
 }
 Response: { "messages": [MessageObject], "pagination": {...} }
@@ -1544,7 +1688,7 @@ Response: { "messages": [MessageObject], "pagination": {...} }
 PATCH /api/chat/read
 Auth: protect
 Body: { "messageIds": ["ObjectId", ...] }
-Response: { "success": true }
+Response: { "updated": <count> }
 ```
 
 ```
@@ -1639,7 +1783,8 @@ PUT /api/whatsapp/settings
 Auth: protect, checkPermission('settings', 'update')
 Body: {
   "enabled": boolean,
-  "provider": "whatsapp_web" | "cloud_api" | "twilio",
+  "provider": "whatsapp_web" | "twilio" | "cloud_api",
+  "config": { ... } (provider-specific configuration, optional),
   "settings": {
     "appointmentReminder": boolean,
     "appointmentConfirm": boolean,
@@ -1677,8 +1822,8 @@ Response: { "status": "disconnected|connecting|connected|error" }
 ```
 POST /api/whatsapp/test
 Auth: protect, checkPermission('settings', 'update')
-Body: { "phone": string (phone number), "message": string }
-Response: { "success": boolean, "message": "string" }
+Body: { "to": string (phone number), "message": string }
+Response: { "sent": true, "to": "string", "message": "string" }
 ```
 
 **WhatsAppSettingsObject shape:**
@@ -1688,7 +1833,7 @@ Response: { "success": boolean, "message": "string" }
   "_id": "ObjectId",
   "tenant": "ObjectId",
   "enabled": boolean,
-  "provider": "whatsapp_web" | "cloud_api" | "twilio",
+  "provider": "whatsapp_web" | "twilio" | "cloud_api",
   "config": { "phoneNumber": "string" },  // sensitive fields excluded
   "settings": {
     "appointmentReminder": boolean,
@@ -1704,7 +1849,7 @@ Response: { "success": boolean, "message": "string" }
 
 ---
 
-### 8.19 Wallet & Installments
+### 8.19 Wallet
 
 All mounted under `/api/patients/:patientId/wallet`
 
@@ -1728,20 +1873,24 @@ Response: { "wallet": WalletObject }
 Note: Debit is rejected if balance < amount. This is a standalone wallet — does NOT auto-update invoice status.
 ```
 
+### 8.20 Installment Plans
+
+All mounted under `/api/patients/:patientId/installments`
+
 ```
-GET /api/patients/:patientId/wallet/installments
+GET /api/patients/:patientId/installments
 Auth: protect, checkPermission('billing', 'read')
 Query: { "page"?, "limit"?, "status"? }
 Response: { "installmentPlans": [InstallmentPlanObject], "pagination": {...} }
 ```
 
 ```
-POST /api/patients/:patientId/wallet/installments
+POST /api/patients/:patientId/installments
 Auth: protect, checkPermission('billing', 'create')
 Body: {
   "title": string (required),
   "totalAmount": number>0 (required),
-  "frequency": "weekly" | "biweekly" | "monthly" | "quarterly",
+  "frequency": "weekly" | "biweekly" | "monthly" | "custom",
   "installments": [{
     "dueDate": ISO date (required),
     "amount": number>0 (required)
@@ -1754,22 +1903,23 @@ Response: { "installmentPlan": InstallmentPlanObject }
 ```
 
 ```
-PATCH /api/patients/:patientId/wallet/installments/:planId
+PATCH /api/patients/:patientId/installments/:planId
 Auth: protect, checkPermission('billing', 'update')
 Body: { "title"?, "notes"? }
 Response: { "installmentPlan": InstallmentPlanObject }
 ```
 
 ```
-POST /api/patients/:patientId/wallet/installments/:planId/pay
+POST /api/patients/:patientId/installments/:planId/pay
 Auth: protect, checkPermission('billing', 'update')
 Body: {
   "amount": number>0 (required),
-  "paymentMethod": "cash|card|transfer|cheque" (optional)
+  "paymentMethod": "cash|card|transfer|wallet" (optional),
+  "paymentRef": string (optional),
+  "notes": string (optional)
 }
-Response: { "installmentPlan": InstallmentPlanObject }
-Note: No transaction isolation — concurrent payments on same installment can race.
-Does NOT integrate with wallet or invoice.
+Response: { "installmentPlan": InstallmentPlanObject, "installment": InstallmentItemObject }
+Note: Uses MongoDB transaction. Auto-marks installment paid when fully paid. Auto-marks plan completed when all installments paid. If paying via wallet, debits wallet atomically.
 ```
 
 **WalletObject:**
@@ -1818,12 +1968,12 @@ Does NOT integrate with wallet or invoice.
     "paidAmount": number,
     "paidDate": "ISO date | null",
     "status": "pending|paid|overdue",
-    "paymentMethod": "string",
+    "paymentMethod": "string|null",
     "paymentRef": "string",
     "notes": "string"
   }],
-  "frequency": "weekly|biweekly|monthly|quarterly",
-  "status": "active|completed|cancelled",
+  "frequency": "weekly|biweekly|monthly|custom",
+  "status": "active|completed|defaulted",
   "notes": "string",
   "createdBy": "ObjectId",
   "createdAt": "ISO date",
@@ -1859,6 +2009,24 @@ Body: { "name": string, "email": string, "password": string, "role": "super_admi
 Response: { "admin": SiteAdminObject }
 ```
 
+**SiteAdminObject shape:**
+
+```typescript
+{
+  "_id": "ObjectId",
+  "name": "string",
+  "email": "string",
+  "role": "super_admin|site_admin|admin|support",
+  "permissions": ["string"],
+  "isActive": boolean,
+  "lastLogin": "ISO date | null",
+  "twoFactorEnabled": boolean,
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date"
+}
+// Note: password, twoFactorSecret, twoFactorBackupCodes are never returned
+```
+
 ### 9.2 Site 2FA
 
 ```http
@@ -1878,7 +2046,7 @@ Response: { "enabled": boolean, "method": "totp" | null }
 
 POST /api/site/2fa/setup
 Auth: protectSite
-Response: { "secret": string, "qrCode": string (data:image/png;base64) }
+Response: { "secret": string, "qrCode": string (data:image/png;base64), "backupCodes": ["string"] }
 
 POST /api/site/2fa/verify
 Auth: protectSite
@@ -1904,7 +2072,7 @@ Response: { "tenant": TenantObject }
 
 GET /api/site/tenants/:id/stats
 Auth: same
-Response: { "stats": { "totalUsers": n, "totalPatients": n, "totalAppointments": n, "totalRevenue": n, ... } }
+Response: { "stats": { "branchesCount": n, "usersCount": n, "doctorsCount": n, "patientsCount": n, "appointmentsCount": n, "totalRevenue": n, "planLimits": {...} } }
 
 POST /api/site/tenants
 Auth: authorizeSite('super_admin', 'admin')
@@ -1916,12 +2084,13 @@ Body: {
   "address": string,
   "city": string,
   "country": string,
-  "trialDays": number (default 14)
+  "adminPassword": string (optional — auto-generated if not provided)
 }
 Audit: ✅
 Success: 201
-Response: {"tenant":TenantObject,"branch":BranchObject,"user":UserObject,"subscription":SubscriptionObject}
+Response: { ...TenantObject, "adminCredentials": { "email", "password", "loginUrl" }, "encryptionKey": string }
 Note: Creates Tenant + default Branch + clinic_admin User + Subscription in one request.
+Returns encryptionKey and adminPassword ONCE — never retrievable again.
 
 PUT /api/site/tenants/:id
 Auth: authorizeSite('super_admin', 'admin')
@@ -1947,7 +2116,38 @@ Response: { "tenant": TenantObject }
 DELETE /api/site/tenants/:id
 Auth: authorizeSite('super_admin')
 Audit: ✅
-Response: { "message": "Tenant and all associated data deleted" }
+Response: { "message": "Tenant permanently deleted" }
+Note: Cascade-deletes all Users, Branches, Patients, Appointments, Invoices, Subscriptions.
+```
+
+**TenantObject shape:**
+
+```typescript
+{
+  "_id": "ObjectId",
+  "name": "string",
+  "slug": "string",
+  "email": "string",
+  "phone": "string",
+  "plan": "string",            // e.g. "starter", "professional", "enterprise"
+  "planId": "ObjectId | null",
+  "planModules": ["string"],   // e.g. ["dashboard","patients","appointments","billing"]
+  "status": "active|trial|suspended|cancelled|archived",
+  "trialEndsAt": "ISO date | null",
+  "subscriptionEndsAt": "ISO date | null",
+  "address": "string",
+  "city": "string",
+  "country": "string",
+  "settings": {
+    "maxBranches": number,     // default 1
+    "maxDoctors": number,      // default 3
+    "maxPatients": number,     // default 500
+    "storageLimit": number     // default 5120 (MB)
+  },
+  "isActive": boolean,
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date"
+}
 ```
 
 ### 9.4 Site Admins
@@ -1955,13 +2155,16 @@ Response: { "message": "Tenant and all associated data deleted" }
 ```http
 GET /api/site/admins
 Auth: protectSite, authorizeSite('super_admin', 'admin')
+Response: { "admins": [SiteAdminObject], "pagination": {...} }
 
 GET /api/site/admins/:id
 Auth: same
+Response: { "admin": SiteAdminObject }
 
 POST /api/site/admins
 Auth: authorizeSite('super_admin')
-Body: { "name": string, "email": string, "password": string, "role": "super_admin|admin|support" }
+Body: { "name": string, "email": string, "password": string, "role": "super_admin|admin|support", "permissions": ["string"] }
+Response: { "admin": SiteAdminObject }
 
 PUT /api/site/admins/:id
 Auth: authorizeSite('super_admin')
@@ -2041,13 +2244,11 @@ Response: { "settings": PlatformSettingsObject }
 PUT /api/site/platform
 Auth: authorizeSite('super_admin')
 Body: {
+  "siteName": "string",
+  "supportEmail": "string",
   "autoSuspendDays": number,
-  "emailNotifications": boolean,
   "maintenanceMode": boolean,
-  "allowedDomains": ["string"],
   "maxTenants": number,
-  "defaultPlan": "string",
-  "trialDays": number,
   "backupEnabled": boolean,
   "backupRetentionDays": number,
   "backupTime": "string" (HH:MM format)
@@ -2115,6 +2316,27 @@ Body: { "amount": number, "paymentMethod": "cash|card|transfer|other" }
 Response: { "message": "Payment processed successfully", "subscription": SubscriptionObject }
 ```
 
+**SubscriptionObject shape:**
+
+```typescript
+{
+  "_id": "ObjectId",
+  "tenant": "ObjectId",
+  "plan": "string",
+  "status": "active|pending|past_due|cancelled",
+  "billingCycle": "monthly|yearly",
+  "amount": number,
+  "currency": "string",         // default "USD"
+  "currentPeriodStart": "ISO date | null",
+  "currentPeriodEnd": "ISO date | null",
+  "cancelAtPeriodEnd": boolean,
+  "lastPaymentAt": "ISO date | null",
+  "nextPaymentAt": "ISO date | null",
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date"
+}
+```
+
 ### 9.10 Analytics
 
 ```http
@@ -2152,6 +2374,29 @@ Auth: same
 Response: { "actions": ["tenant.create", "tenant.update", "plan.update", "2fa.enable", ...] }
 ```
 
+**AuditLogObject shape:**
+
+```typescript
+{
+  "_id": "ObjectId",
+  "admin": "ObjectId",
+  "adminEmail": "string",
+  "adminRole": "string",
+  "action": "string",           // e.g. "tenant.create", "tenant.update", "tenant.suspend", "tenant.activate", "tenant.archive", "tenant.delete", "branch.create", "admin.create", "admin.update", "admin.delete", "admin.update_permissions", "subscription.update", "plan.create", "plan.update", "plan.delete", "platform.update", "feature.toggle", "2fa.enable", "2fa.disable", "quarantine.set", "quarantine.remove", "impersonation.start", "impersonation.end"
+  "target": {
+    "type": "string",           // "tenant" | "branch" | "admin" | "plan" | "platform"
+    "id": "ObjectId",
+    "name": "string"
+  },
+  "details": { ... },           // action-specific metadata
+  "requestId": "string | null",
+  "ip": "string",
+  "userAgent": "string",
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date"
+}
+```
+
 ### 9.12 Feature Flags
 
 ```http
@@ -2183,6 +2428,26 @@ Auth: same
 Response: { "totalErrors": number, "byStatusCode": { "400": n, "500": n, ... }, "byTenant": { "tenantId": n } }
 ```
 
+**ErrorLogObject shape:**
+
+```typescript
+{
+  "_id": "ObjectId",
+  "tenant": "ObjectId | null",
+  "method": "string",           // "GET", "POST", etc.
+  "url": "string",
+  "statusCode": number,         // 400, 401, 404, 500, etc.
+  "message": "string",
+  "stack": "string",
+  "requestId": "string | null",
+  "ip": "string",
+  "userAgent": "string",
+  "resolved": boolean,
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date"
+}
+```
+
 ### 9.14 Impersonation
 
 ```http
@@ -2190,8 +2455,8 @@ POST /api/site/impersonation/start
 Auth: protectSite, authorizeSite('super_admin', 'admin')
 Body: { "userId": ObjectId, "tenantId": ObjectId }
 Audit: ✅
-Response: { "token": "jwt-impersonation-token", "user": UserObject }
-→ Client sets this token as the access_token cookie
+Response: { "impersonationToken": "jwt-string", "expiresIn": "30m", "user": { "_id", "name", "email", "role", "branch", "tenant" }, "warning": "string" }
+→ Client sets impersonationToken as the access_token cookie
 
 POST /api/site/impersonation/end
 Auth: protectSite, authorizeSite('super_admin', 'admin')
@@ -2203,7 +2468,7 @@ Response: { "message": "Impersonation ended" }
 ```http
 PUT /api/site/quarantine/:tenantId
 Auth: protectSite, authorizeSite('super_admin')
-Body: { "reason": string }
+Body: { "reason": string (optional) }
 Audit: ✅
 → Sets tenant isActive=false
 
@@ -2258,10 +2523,14 @@ GET /api/site/health
 Auth: protectSite
 Response: {
   "status": "healthy",
+  "timestamp": "ISO date",
   "uptime": number (seconds),
   "mongodb": "connected" | "disconnected",
   "redis": "connected" | "disconnected",
-  "memory": { "usageMB": number, "heapTotalMB": number, "heapUsedMB": number }
+  "node": "string",
+  "platform": "string",
+  "memory": { "rss": number, "heapTotal": number, "heapUsed": number },
+  "telemetry": { ... }
 }
 ```
 
@@ -2271,11 +2540,11 @@ Response: {
 
 These run automatically on the server. No frontend interaction needed, but good to know:
 
-| Job | Schedule | What it does |
+| Job | Schedule | Source file |
 |-----|----------|-------------|
-| **Tenant suspension** | Daily 00:00 | Suspends tenants past due > autoSuspendDays (PlatformSetting) |
-| **Abuse detection** | Every 60s | Checks per-tenant request rates; auto-quarantines at >2000 req/min |
-| **WhatsApp reminders** | Every 30min | Sends appointment reminders + confirmations via WhatsApp for tenants with enabled settings |
-| **Database backup** | Daily 02:00 | Runs mongodump, gzips, retains per PlatformSetting.backupRetentionDays |
-| **Abuse flush** | Every 60s | Cleans stale in-memory request counters |
-```
+| **Tenant suspension** | Daily 00:00 | `services/suspensionCron.js` |
+| **Abuse detection** | Every 60s | `services/abuseDetection.js` |
+| **WhatsApp reminders** | Every 30min | `services/whatsappReminderCron.js` |
+| **Database backup** | Daily 02:00 | `services/backup.js` + `services/backupCron.js` |
+| **Installment reminders** | Daily 09:00 | `services/installmentCron.js` |
+| **Abuse flush** | Every 60s | `services/abuseDetection.js` |

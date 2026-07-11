@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 import ApiError from './ApiError.js';
-import Patient from '../models/Patient.js';
+import Patient from '../modules/patients/patient.model.js';
 
 function toObjectId(value) {
   if (value && typeof value === 'object' && value._id) value = value._id;
@@ -93,7 +93,7 @@ export async function resolveBranchForCreate(req, bodyBranch) {
   // Tenant isolation: when the caller has a tenant, the target branch must
   // belong to the same tenant.
   if (req.user.tenant) {
-    const Branch = (await import('../models/Branch.js')).default;
+    const { default: Branch } = await import('../modules/users/branch.model.js');
     const branch = await Branch.findOne({ _id: branchId, tenant: toObjectId(req.user.tenant) }).lean();
     if (!branch) {
       throw ApiError.badRequest('The selected branch does not belong to your clinic', { branch: 'not found' });

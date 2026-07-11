@@ -1,0 +1,137 @@
+import mongoose from 'mongoose';
+
+import Role from './role.model.js';
+import User from './user.model.js';
+import { currentTenant, filterByBranch } from '../../utils/branchScope.js';
+import { MODULES, CRUD_ACTIONS } from '../../constants/permissions.js';
+import ApiError from '../../utils/ApiError.js';
+import asyncHandler from '../../utils/asyncHandler.js';
+import { sendSuccess } from '../../utils/sendSuccess.js';
+
+/**
+ * GET /api/roles
+ * List all roles for the current tenant (or platform-level if no tenant).
+ */
+export const listRoles = asyncHandler(async (req, res) => {
+  const tenant = currentTenant(req);
+
+  const filter = tenant ? { $or: [{ tenant }, { tenant: null }] } : { tenant: null };
+  const roles = await Role.find(filter).sort('isBuiltIn -createdAt');
+
+  return sendSuccess(res, { roles, modules: MODULES, actions: CRUD_ACTIONS });
+});
+
+/**
+ * GET /api/roles/:id
+ */
+export const getRole = asyncHandler(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    throw ApiError.badRequest('Invalid role id');
+  }
+  const tenant = currentTenant(req);
+  const filter = { _id: req.params.id };
+  if (tenant) filter.tenant = tenant;
+  const role = await Role.findOne(filter);
+  if (!role) {
+    throw ApiError.notFound('Role not found');
+  }
+  return sendSuccess(res, { role });
+});
+
+/**
+ * POST /api/roles
+ * Create a custom role with a permission matrix.
+ */
+export const createRole = asyncHandler(async (req, res) => {
+  const tenant = currentTenant(req);
+  const { name, description, permissions } = req.validatedBody;
+
+  // Check name uniqueness within the tenant scope.
+  const existingQuery = tenant ? { tenant, name } : { tenant: null, name };
+  const existing = await Role.findOne(existingQuery);
+  if (existing) {
+    throw ApiError.conflict('A role with this name already exists');
+  }
+
+  const role = await Role.create({
+    tenant,
+    name,
+    description: description || '',
+    permissions: permissions || [],
+    isBuiltIn: false,
+    isSystemAdmin: false,
+  });
+
+  return sendSuccess(res, { role }, 201);
+});
+
+/**
+ * PATCH /api/roles/:id
+ * Update a role's name, description, or permission matrix.
+ * Built-in roles cannot be renamed or deleted, but their permissions CAN be
+ * edited (clinic admin customizes what each built-in role can do).
+ */
+export const updateRole = asyncHandler(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    throw ApiError.badRequest('Invalid role id');
+  }
+  const data = req.validatedBody;
+  const tenant = currentTenant(req);
+
+  const filter = { _id: req.params.id };
+  if (tenant) filter.tenant = tenant;
+  const role = await Role.findOne(filter);
+  if (!role) {
+    throw ApiError.notFound('Role not found');
+  }
+
+  // Built-in roles can have their permissions edited but not renamed.
+  if (role.isBuiltIn && data.name && data.name !== role.name) {
+    throw ApiError.conflict('Built-in role names cannot be changed');
+  }
+
+  if (data.name !== undefined && !role.isBuiltIn) role.name = data.name;
+  if (data.description !== undefined) role.description = data.description;
+  if (data.permissions !== undefined) role.permissions = data.permissions;
+  if (data.isActive !== undefined) role.isActive = data.isActive;
+
+  await role.save();
+
+  return sendSuccess(res, { role });
+});
+
+/**
+ * DELETE /api/roles/:id
+ * Only custom (non-built-in) roles can be deleted. Users assigned to a deleted
+ * role keep their role key string on the User document but will fall back to
+ * built-in default permissions.
+ */
+export const deleteRole = asyncHandler(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    throw ApiError.badRequest('Invalid role id');
+  }
+  const tenant = currentTenant(req);
+  const filter = { _id: req.params.id };
+  if (tenant) filter.tenant = tenant;
+  const role = await Role.findOne(filter);
+  if (!role) {
+    throw ApiError.notFound('Role not found');
+  }
+  if (role.isBuiltIn) {
+    throw ApiError.conflict('Built-in roles cannot be deleted');
+  }
+
+  // Clear roleId on any users that reference this role.
+  await User.updateMany({ roleId: role._id }, { $set: { roleId: null } });
+
+  await role.deleteOne();
+  return sendSuccess(res, { message: 'Role deleted' });
+});
+
+/**
+ * GET /api/roles/modules/list
+ * Returns the full module + action catalog for the permission matrix UI.
+ */
+export const getModules = asyncHandler(async (_req, res) => {
+  return sendSuccess(res, { modules: MODULES, actions: CRUD_ACTIONS });
+});
