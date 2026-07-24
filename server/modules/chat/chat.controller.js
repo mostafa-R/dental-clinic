@@ -53,7 +53,8 @@ export const markMessagesRead = asyncHandler(async (req, res) => {
 export const getUnreadCounts = asyncHandler(async (req, res) => {
   const branch = req.user.branch;
   if (!branch) throw ApiError.forbidden('Your account is not assigned to a branch');
-  const unread = await chatService.getUnreadCounts(branch, req.user._id);
+  const tenant = currentTenant(req);
+  const unread = await chatService.getUnreadCounts(branch, req.user._id, tenant);
   return sendSuccess(res, { unread });
 });
 
@@ -61,6 +62,14 @@ export const listStaffForChat = asyncHandler(async (req, res) => {
   const branch = req.user.branch;
   const tenant = currentTenant(req);
   if (!branch) throw ApiError.forbidden('Your account is not assigned to a branch');
-  const staff = await chatService.listStaff(branch, tenant);
+  const staff = await chatService.listStaff(branch, tenant, req.user._id);
   return sendSuccess(res, { staff });
+});
+
+export const markChannelRead = asyncHandler(async (req, res) => {
+  const branch = req.user.branch;
+  if (!branch) throw ApiError.forbidden('Your account is not assigned to a branch');
+  const tenant = currentTenant(req);
+  await chatService.markChannelViewed(branch, req.user._id, req.validatedBody.channel, tenant);
+  return sendSuccess(res, { ok: true });
 });

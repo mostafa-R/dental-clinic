@@ -5,6 +5,7 @@ import { currentTenant, filterByBranch, resolveBranchForCreate } from '../../uti
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
+import { emitToBranch } from '../../socket/index.js';
 
 export const listItems = asyncHandler(async (req, res) => {
   const branchFilter = filterByBranch(req);
@@ -26,16 +27,19 @@ export const createItem = asyncHandler(async (req, res) => {
   const item = await inventoryService.createItem({
     tenant, branch, data: req.validatedBody, userId: req.user._id,
   });
+  emitToBranch(String(branch), 'inventory:created', { item });
   return sendSuccess(res, { item }, 201);
 });
 
 export const updateItem = asyncHandler(async (req, res) => {
   const item = await inventoryService.updateItem(req.params.id, filterByBranch(req), req.validatedBody);
+  emitToBranch(String(item.branch), 'inventory:updated', { item });
   return sendSuccess(res, { item });
 });
 
 export const deleteItem = asyncHandler(async (req, res) => {
   await inventoryService.deleteItem(req.params.id, filterByBranch(req));
+  emitToBranch(String(filterByBranch(req).branch || ''), 'inventory:deleted', { _id: req.params.id });
   return sendSuccess(res, { message: 'Item deleted' });
 });
 
@@ -44,6 +48,7 @@ export const adjustStock = asyncHandler(async (req, res) => {
     ...req.validatedBody,
     userId: req.user._id,
   });
+  emitToBranch(String(item.branch), 'inventory:updated', { item });
   return sendSuccess(res, { item });
 });
 

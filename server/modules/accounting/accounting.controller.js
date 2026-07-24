@@ -5,11 +5,15 @@ import Commission from "../billing/commission.model.js";
 import Expense from "./expense.model.js";
 import Invoice from "../billing/invoice.model.js";
 import OwnerDrawing from "./ownerDrawing.model.js";
+import Patient from "../patients/patient.model.js";
 import User from "../users/user.model.js";
+import { addTransaction } from "../patients/wallet.service.js";
 import ApiError from "../../utils/ApiError.js";
 import asyncHandler from "../../utils/asyncHandler.js";
 import { currentTenant, filterByBranch, resolveBranchForCreate, toObjectId } from "../../utils/branchScope.js";
 import { sendSuccess } from "../../utils/sendSuccess.js";
+import { withTransaction } from "../../core/transaction.js";
+import { emitToBranch } from '../../socket/index.js';
 
 /* ----------------------------------------------------------------- Expenses */
 
@@ -61,6 +65,7 @@ export const createExpense = asyncHandler(async (req, res) => {
 
   await expense.populate("recordedBy", "name");
 
+  emitToBranch(String(branch), 'expense:created', { expense });
   return sendSuccess(res, { expense }, 201);
 });
 
@@ -76,6 +81,7 @@ export const deleteExpense = asyncHandler(async (req, res) => {
   if (!expense) {
     throw ApiError.notFound("Expense not found");
   }
+  emitToBranch(String(expense.branch), 'expense:deleted', { _id: expense._id });
   return sendSuccess(res, { message: "Expense deleted" });
 });
 
@@ -116,37 +122,62 @@ export const createDrawing = asyncHandler(async (req, res) => {
   const data = req.validatedBody;
   const tenant = currentTenant(req);
 
-  const owner = await User.findById(data.owner);
+  const branch = await resolveBranchForCreate(req, data.branch);
+
+  const owner = await User.findOne({ _id: data.owner, ...(tenant ? { tenant } : {}), ...(branch ? { branch } : {}) });
   if (!owner) {
-    throw ApiError.badRequest("Referenced owner does not exist", {
+    throw ApiError.badRequest("Referenced owner does not exist in this branch/tenant", {
       owner: "not found",
     });
   }
 
-  // Only clinic_admin or system admins can be listed as owners for drawings.
-  if (owner.role !== 'clinic_admin') {
-    throw ApiError.badRequest("Referenced user must be a clinic owner (clinic_admin)");
+  // The referenced user must have an active role document with isSystemAdmin flag,
+  // or be a clinic-level admin. This avoids hardcoded role string checks.
+  if (owner.roleId) {
+    const { default: Role } = await import('../users/role.model.js');
+    const roleDoc = await Role.findById(owner.roleId).lean();
+    if (!roleDoc || (!roleDoc.isSystemAdmin && !roleDoc.isBuiltIn)) {
+      throw ApiError.badRequest("Referenced user must have an admin or system role");
+    }
+  } else if (!owner.isDoctor) {
+    throw ApiError.badRequest("Referenced user must be a clinic admin or doctor");
   }
 
-  // Verify the owner belongs to the same tenant.
-  if (tenant && String(owner.tenant || '') !== String(tenant)) {
-    throw ApiError.badRequest("Referenced owner does not belong to your clinic");
-  }
+  const drawing = await withTransaction(async (session) => {
+    const drawingDoc = await OwnerDrawing.create([{
+      branch,
+      tenant: currentTenant(req),
+      owner: toObjectId(data.owner),
+      patient: data.patient ? toObjectId(data.patient) : null,
+      amount: data.amount,
+      paymentMethod: data.paymentMethod || 'cash',
+      description: data.description || "",
+      date: data.date ? new Date(data.date) : new Date(),
+      recordedBy: req.user._id,
+    }], { session });
 
-  const branch = await resolveBranchForCreate(req, data.branch);
+    const drawing = drawingDoc[0];
 
-  const drawing = await OwnerDrawing.create({
-    branch,
-    tenant: currentTenant(req),
-    owner: toObjectId(data.owner),
-    amount: data.amount,
-    description: data.description || "",
-    date: data.date ? new Date(data.date) : new Date(),
-    recordedBy: req.user._id,
+    // If drawing is from a patient's wallet, debit atomically
+    if (data.paymentMethod === 'wallet' && data.patient) {
+      const patient = await Patient.findOne({ _id: data.patient, ...(tenant ? { tenant } : {}) }).session(session);
+      if (!patient) {
+        throw ApiError.badRequest("Referenced patient does not exist", { patient: 'not found' });
+      }
+
+      await addTransaction(patient, {
+        type: 'debit',
+        amount: data.amount,
+        reference: drawing.drawingNo,
+        description: data.description || `Owner drawing ${drawing.drawingNo}`,
+      }, req.user._id, session);
+    }
+
+    await drawing.populate("owner", "name");
+    return drawing;
   });
 
-  await drawing.populate("owner", "name");
-
+  emitToBranch(String(branch), 'drawing:created', { drawing });
   return sendSuccess(res, { drawing }, 201);
 });
 
@@ -154,14 +185,38 @@ export const deleteDrawing = asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     throw ApiError.badRequest("Invalid drawing id");
   }
-  const drawing = await OwnerDrawing.findOneAndUpdate(
-    { _id: req.params.id, ...filterByBranch(req), isActive: true },
-    { $set: { isActive: false } },
-    { new: true },
-  );
-  if (!drawing) {
-    throw ApiError.notFound("Drawing not found");
-  }
+
+  const result = await withTransaction(async (session) => {
+    const drawing = await OwnerDrawing.findOne({
+      _id: req.params.id,
+      ...filterByBranch(req),
+      isActive: true,
+    }).session(session);
+
+    if (!drawing) {
+      throw ApiError.notFound("Drawing not found");
+    }
+
+    drawing.isActive = false;
+    await drawing.save({ session });
+
+    // If the drawing was from a patient's wallet, credit the wallet back
+    if (drawing.paymentMethod === 'wallet' && drawing.patient) {
+      const patient = await Patient.findOne({ _id: drawing.patient }).session(session);
+      if (patient) {
+        await addTransaction(patient, {
+          type: 'credit',
+          amount: drawing.amount,
+          reference: drawing.drawingNo,
+          description: `Reversal for voided drawing ${drawing.drawingNo}`,
+        }, req.user._id, session);
+      }
+    }
+
+    return drawing;
+  });
+
+  emitToBranch(String(result.branch || ''), 'drawing:deleted', { _id: req.params.id });
   return sendSuccess(res, { message: "Drawing deleted" });
 });
 
@@ -217,6 +272,7 @@ export const updateCommissionStatus = asyncHandler(async (req, res) => {
   await commission.save();
   await commission.populate("doctor", "name commissionRate");
 
+  emitToBranch(String(commission.branch || ''), 'commission:updated', { commission });
   return sendSuccess(res, { commission });
 });
 

@@ -139,7 +139,11 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
     } else {
       discount = round2(Math.min(Number(form.discount) || 0, subtotal));
     }
-    const tax = round2(Math.max(Number(form.tax) || 0, 0));
+    let tax = round2(Math.max(Number(form.tax) || 0, 0));
+    if (tax === 0 && form.taxRate) {
+      const taxRate = Math.min(Math.max(Number(form.taxRate) || 0, 0), 100);
+      tax = round2((subtotal - discount) * taxRate / 100);
+    }
     const total = round2(subtotal - discount + tax);
     return { subtotal, discount, tax, total };
   }, [form]);

@@ -3,7 +3,9 @@ import { useState } from 'react';
 import {
   PERMANENT_TEETH,
   TOOTH_STATE_STYLES,
-} from '../../lib/dental';
+  SURFACE_CONDITIONS,
+  SURFACE_CONDITION_LABELS,
+} from './dental';
 import { useT } from '../../lib/i18n';
 
 const SLOT_W = 44;
@@ -13,8 +15,14 @@ const PAD_X = 16;
 const TOP_Y = 44;
 const BOTTOM_Y = 124;
 
-const UPPER_TEETH = PERMANENT_TEETH.filter((t) => t.arch === 'upper'); // 1..16
-const LOWER_TEETH = PERMANENT_TEETH.filter((t) => t.arch === 'lower'); // 17..32
+const UPPER_TEETH = PERMANENT_TEETH.filter((t) => t.arch === 'upper');
+const LOWER_TEETH = PERMANENT_TEETH.filter((t) => t.arch === 'lower');
+
+const SURFACE_CONDITION_HEX = {
+  sound: 'transparent',
+  caries: '#fb7185',
+  restored: '#38bdf8',
+};
 
 function notationLabel(meta, numbering) {
   if (!meta) return '';
@@ -33,19 +41,25 @@ const PROCEDURE_DOT_COLORS = {
   completed: '#22c55e',
 };
 
-function surfaceDot(surface) {
-  const colors = { caries: '#fb7185', restored: '#38bdf8' };
-  const color = colors[surface];
-  if (!color || surface === 'sound') return null;
-  return color;
+function surfaceFill(condition) {
+  if (!condition || condition === 'sound') return 'transparent';
+  return SURFACE_CONDITION_HEX[condition] || 'transparent';
 }
 
-function ToothCrown({ tooth, meta, numbering, selected, onSelect, isUpper, planItems }) {
+function ToothCrown({ tooth, meta, numbering, selected, onSelect, onSurfaceClick, isUpper, planItems }) {
   const x = meta.x;
   const y = isUpper ? TOP_Y : BOTTOM_Y;
   const state = tooth?.state || 'sound';
   const isMissing = state === 'missing';
   const labelY = isUpper ? TOP_Y - 10 : BOTTOM_Y + CROWN_H + 16;
+  const surfaces = tooth?.surfaces || {};
+
+  const handleClick = (e, surface) => {
+    e.stopPropagation();
+    if (onSurfaceClick && surface) {
+      onSurfaceClick(meta.universal, surface);
+    }
+  };
 
   return (
     <g className="cursor-pointer" onClick={() => onSelect(meta.universal)}>
@@ -70,25 +84,65 @@ function ToothCrown({ tooth, meta, numbering, selected, onSelect, isUpper, planI
             strokeOpacity={0.6}
             strokeWidth={2}
           />
-          {tooth?.surfaces && (
-            <>
-              {surfaceDot(tooth.surfaces.mesial) && (
-                <circle cx={x + 4} cy={y + CROWN_H / 2} r={3} fill={surfaceDot(tooth.surfaces.mesial)} />
-              )}
-              {surfaceDot(tooth.surfaces.distal) && (
-                <circle cx={x + CROWN_W - 4} cy={y + CROWN_H / 2} r={3} fill={surfaceDot(tooth.surfaces.distal)} />
-              )}
-              {surfaceDot(tooth.surfaces.buccal) && (
-                <circle cx={x + CROWN_W / 2} cy={y + 10} r={3} fill={surfaceDot(tooth.surfaces.buccal)} />
-              )}
-              {surfaceDot(tooth.surfaces.lingual) && (
-                <circle cx={x + CROWN_W / 2} cy={y + CROWN_H - 10} r={3} fill={surfaceDot(tooth.surfaces.lingual)} />
-              )}
-              {surfaceDot(tooth.surfaces.occlusal) && (
-                <circle cx={x + CROWN_W / 2} cy={y + CROWN_H / 2} r={3} fill={surfaceDot(tooth.surfaces.occlusal)} />
-              )}
-            </>
-          )}
+
+          {/* Surface paths — clickable regions */}
+          {/* Buccal — top band */}
+          <path
+            d={`M${x + 6} ${y + 2} L${x + CROWN_W - 6} ${y + 2} Q${x + CROWN_W - 2} ${y + 2} ${x + CROWN_W - 2} ${y + 6} L${x + CROWN_W - 2} ${y + 16} L${x + 2} ${y + 16} L${x + 2} ${y + 6} Q${x + 2} ${y + 2} ${x + 6} ${y + 2} Z`}
+            fill={surfaceFill(surfaces.buccal)}
+            fillOpacity={0.7}
+            stroke={surfaces.buccal && surfaces.buccal !== 'sound' ? surfaces.buccal === 'caries' ? '#fb7185' : '#38bdf8' : 'transparent'}
+            strokeWidth={surfaces.buccal && surfaces.buccal !== 'sound' ? 1 : 0}
+            onClick={(e) => handleClick(e, 'buccal')}
+            className="cursor-pointer transition-opacity hover:fill-opacity-100"
+          />
+          {/* Lingual — bottom band */}
+          <path
+            d={`M${x + 2} ${y + CROWN_H - 16} L${x + CROWN_W - 2} ${y + CROWN_H - 16} L${x + CROWN_W - 2} ${y + CROWN_H - 6} Q${x + CROWN_W - 2} ${y + CROWN_H - 2} ${x + CROWN_W - 6} ${y + CROWN_H - 2} L${x + 6} ${y + CROWN_H - 2} Q${x + 2} ${y + CROWN_H - 2} ${x + 2} ${y + CROWN_H - 6} Z`}
+            fill={surfaceFill(surfaces.lingual)}
+            fillOpacity={0.7}
+            stroke={surfaces.lingual && surfaces.lingual !== 'sound' ? surfaces.lingual === 'caries' ? '#fb7185' : '#38bdf8' : 'transparent'}
+            strokeWidth={surfaces.lingual && surfaces.lingual !== 'sound' ? 1 : 0}
+            onClick={(e) => handleClick(e, 'lingual')}
+            className="cursor-pointer transition-opacity hover:fill-opacity-100"
+          />
+          {/* Mesial — left strip */}
+          <path
+            d={`M${x + 2} ${y + 16} L${x + 14} ${y + 16} L${x + 14} ${y + CROWN_H - 16} L${x + 2} ${y + CROWN_H - 16} Z`}
+            fill={surfaceFill(surfaces.mesial)}
+            fillOpacity={0.7}
+            stroke={surfaces.mesial && surfaces.mesial !== 'sound' ? surfaces.mesial === 'caries' ? '#fb7185' : '#38bdf8' : 'transparent'}
+            strokeWidth={surfaces.mesial && surfaces.mesial !== 'sound' ? 1 : 0}
+            onClick={(e) => handleClick(e, 'mesial')}
+            className="cursor-pointer transition-opacity hover:fill-opacity-100"
+          />
+          {/* Distal — right strip */}
+          <path
+            d={`M${x + CROWN_W - 14} ${y + 16} L${x + CROWN_W - 2} ${y + 16} L${x + CROWN_W - 2} ${y + CROWN_H - 16} L${x + CROWN_W - 14} ${y + CROWN_H - 16} Z`}
+            fill={surfaceFill(surfaces.distal)}
+            fillOpacity={0.7}
+            stroke={surfaces.distal && surfaces.distal !== 'sound' ? surfaces.distal === 'caries' ? '#fb7185' : '#38bdf8' : 'transparent'}
+            strokeWidth={surfaces.distal && surfaces.distal !== 'sound' ? 1 : 0}
+            onClick={(e) => handleClick(e, 'distal')}
+            className="cursor-pointer transition-opacity hover:fill-opacity-100"
+          />
+          {/* Occlusal — center rectangle */}
+          <path
+            d={`M${x + 14} ${y + 16} L${x + CROWN_W - 14} ${y + 16} L${x + CROWN_W - 14} ${y + CROWN_H - 16} L${x + 14} ${y + CROWN_H - 16} Z`}
+            fill={surfaceFill(surfaces.occlusal)}
+            fillOpacity={0.7}
+            stroke={surfaces.occlusal && surfaces.occlusal !== 'sound' ? surfaces.occlusal === 'caries' ? '#fb7185' : '#38bdf8' : 'transparent'}
+            strokeWidth={surfaces.occlusal && surfaces.occlusal !== 'sound' ? 1 : 0}
+            onClick={(e) => handleClick(e, 'occlusal')}
+            className="cursor-pointer transition-opacity hover:fill-opacity-100"
+          />
+
+          {/* Surface border lines for visual clarity */}
+          <line x1={x + 14} y1={y + 16} x2={x + 14} y2={y + CROWN_H - 16} stroke="#fff" strokeOpacity={0.4} strokeWidth={0.5} />
+          <line x1={x + CROWN_W - 14} y1={y + 16} x2={x + CROWN_W - 14} y2={y + CROWN_H - 16} stroke="#fff" strokeOpacity={0.4} strokeWidth={0.5} />
+          <line x1={x + 2} y1={y + 16} x2={x + CROWN_W - 2} y2={y + 16} stroke="#fff" strokeOpacity={0.4} strokeWidth={0.5} />
+          <line x1={x + 2} y1={y + CROWN_H - 16} x2={x + CROWN_W - 2} y2={y + CROWN_H - 16} stroke="#fff" strokeOpacity={0.4} strokeWidth={0.5} />
+
           {planItems && planItems.length > 0 && (
             <g>
               {planItems.map((item, i) => (
@@ -160,7 +214,7 @@ function Legend({ t }) {
   );
 }
 
-export default function DentalChart({ teeth, selectedNumber, onSelect, planItemsByTooth }) {
+export default function DentalChart({ teeth, selectedNumber, onSelect, onSurfaceClick, planItemsByTooth }) {
   const { t } = useT();
   const [numbering, setNumbering] = useState('universal');
 
@@ -202,9 +256,7 @@ export default function DentalChart({ teeth, selectedNumber, onSelect, planItems
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900">
         <svg viewBox={viewBox} className="h-auto w-full min-w-[680px]" role="img" aria-label={t('emr.chart.aria')}>
-          {/* Midline */}
           <line x1={PAD_X} y1={(TOP_Y + CROWN_H + BOTTOM_Y) / 2} x2={width - PAD_X} y2={(TOP_Y + CROWN_H + BOTTOM_Y) / 2} stroke="#e2e8f0" strokeWidth={1.5} strokeDasharray="2 4" />
-          {/* Quadrant labels */}
           <text x={PAD_X + 4} y={34} className="fill-slate-300 dark:fill-slate-600" style={{ fontSize: 9, fontWeight: 700 }}>{t('emr.quadrant.ur')}</text>
           <text x={width - PAD_X - 4} y={34} textAnchor="end" className="fill-slate-300 dark:fill-slate-600" style={{ fontSize: 9, fontWeight: 700 }}>{t('emr.quadrant.ul')}</text>
           <text x={PAD_X + 4} y={212} className="fill-slate-300 dark:fill-slate-600" style={{ fontSize: 9, fontWeight: 700 }}>{t('emr.quadrant.lr')}</text>
@@ -219,6 +271,7 @@ export default function DentalChart({ teeth, selectedNumber, onSelect, planItems
               isUpper={isUpper}
               selected={selectedNumber === meta.universal}
               onSelect={onSelect}
+              onSurfaceClick={onSurfaceClick}
               planItems={planItemsByTooth?.[meta.universal]}
             />
           ))}
@@ -231,6 +284,7 @@ export default function DentalChart({ teeth, selectedNumber, onSelect, planItems
               isUpper={isUpper}
               selected={selectedNumber === meta.universal}
               onSelect={onSelect}
+              onSurfaceClick={onSurfaceClick}
               planItems={planItemsByTooth?.[meta.universal]}
             />
           ))}

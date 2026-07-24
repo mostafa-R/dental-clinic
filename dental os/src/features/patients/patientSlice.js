@@ -103,8 +103,7 @@ const patientsSlice = createSlice({
         state.formStatus = 'loading';
         state.formError = null;
       })
-      .addCase(createPatient.fulfilled, (state, action) => {
-        state.items.unshift(action.payload);
+      .addCase(createPatient.fulfilled, (state) => {
         state.formStatus = 'succeeded';
         state.formError = null;
       })
@@ -127,7 +126,8 @@ const patientsSlice = createSlice({
         state.formError = action.payload;
       })
       .addCase(archivePatient.fulfilled, (state, action) => {
-        state.items = state.items.filter((p) => p._id !== action.payload);
+        const patient = state.items.find((p) => p._id === action.payload);
+        if (patient) patient.isActive = false;
       });
   },
 });

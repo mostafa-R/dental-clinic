@@ -1,7 +1,11 @@
-import mongoose from 'mongoose';
 import Wallet from './wallet.model.js';
 import ApiError from '../../utils/ApiError.js';
+import { withTransaction } from '../../core/transaction.js';
 
+/**
+ * Find or create a wallet for a patient.
+ * Uses upsert with duplicate-key race handling.
+ */
 export async function getOrCreateWallet(patient) {
   let wallet = await Wallet.findOne({ patient: patient._id });
   if (!wallet) {
@@ -18,7 +22,6 @@ export async function getOrCreateWallet(patient) {
         { upsert: true, new: true, runValidators: true },
       );
     } catch (err) {
-      // Duplicate key race — another request created it first.
       if (err.code === 11000) {
         wallet = await Wallet.findOne({ patient: patient._id });
       } else {
@@ -29,16 +32,22 @@ export async function getOrCreateWallet(patient) {
   return wallet;
 }
 
-export async function addTransaction(patient, data, userId) {
-  const session = await mongoose.startSession();
-  let wallet;
-  try {
-    session.startTransaction();
-
-    wallet = await Wallet.findOne({ patient: patient._id }).session(session);
+/**
+ * Add a wallet transaction. Uses atomic $inc for balance updates to prevent
+ * race conditions. Optionally reuses an external session (for callers already
+ * inside a withTransaction block).
+ *
+ * @param {Object} patient - Patient document (must have _id, branch, tenant)
+ * @param {Object} data - { type, amount, reference, description, invoice, installment }
+ * @param {string} userId - User performing the action
+ * @param {ClientSession} [externalSession] - Optional external session to reuse
+ */
+export async function addTransaction(patient, data, userId, externalSession = null) {
+  const fn = async (session) => {
+    let wallet = await Wallet.findOne({ patient: patient._id }).session(session);
     if (!wallet) {
       try {
-        [wallet] = await Wallet.findOneAndUpdate(
+        wallet = await Wallet.findOneAndUpdate(
           { patient: patient._id },
           {
             $setOnInsert: {
@@ -58,28 +67,59 @@ export async function addTransaction(patient, data, userId) {
       }
     }
 
-    if (data.type === 'debit' && wallet.balance < data.amount) {
-      throw ApiError.badRequest('Insufficient wallet balance');
+    // Atomic balance check + update using $inc
+    if (data.type === 'debit') {
+      const updated = await Wallet.findOneAndUpdate(
+        { _id: wallet._id, balance: { $gte: data.amount } },
+        { $inc: { balance: -Math.abs(data.amount) } },
+        { new: true, session },
+      );
+      if (!updated) {
+        throw ApiError.badRequest('Insufficient wallet balance');
+      }
+      wallet = updated;
+    } else {
+      // Credit: atomic increment
+      wallet = await Wallet.findOneAndUpdate(
+        { _id: wallet._id },
+        { $inc: { balance: Math.abs(data.amount) } },
+        { new: true, session },
+      );
     }
 
-    wallet.addTransaction({
-      type: data.type,
-      amount: data.amount,
-      reference: data.reference,
-      description: data.description,
-      invoice: data.invoice,
-      installment: data.installment,
-      userId,
-    });
+    // Record the transaction in the embedded array
+    const balanceBefore = data.type === 'credit'
+      ? wallet.balance - Math.abs(data.amount)
+      : wallet.balance + Math.abs(data.amount);
 
-    await wallet.save({ session });
-    await session.commitTransaction();
-  } catch (err) {
-    await session.abortTransaction();
-    throw err;
-  } finally {
-    session.endSession();
+    await Wallet.updateOne(
+      { _id: wallet._id },
+      {
+        $push: {
+          transactions: {
+            $each: [{
+              type: data.type,
+              amount: Math.abs(data.amount),
+              balanceBefore,
+              balanceAfter: wallet.balance,
+              reference: data.reference || '',
+              description: data.description || '',
+              invoice: data.invoice || null,
+              installment: data.installment || null,
+              createdBy: userId || null,
+            }],
+            $slice: -1000,
+          },
+        },
+      },
+      { session },
+    );
+
+    return wallet;
+  };
+
+  if (externalSession) {
+    return fn(externalSession);
   }
-
-  return wallet;
+  return withTransaction(fn);
 }

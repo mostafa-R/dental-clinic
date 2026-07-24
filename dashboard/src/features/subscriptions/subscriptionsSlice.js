@@ -89,7 +89,7 @@ const subscriptionsSlice = createSlice({
       })
       .addCase(fetchSubscriptions.fulfilled, (state, action) => {
         state.loading = false;
-        state.items = action.payload;
+        state.items = Array.isArray(action.payload) ? action.payload : [];
       })
       .addCase(fetchSubscriptions.rejected, (state, action) => {
         state.loading = false;
@@ -112,6 +112,13 @@ const subscriptionsSlice = createSlice({
         );
         if (index !== -1) {
           state.items[index] = action.payload;
+        }
+      })
+      .addCase(processPayment.fulfilled, (state, action) => {
+        const updated = action.payload.subscription;
+        const index = state.items.findIndex((s) => s._id === updated?._id);
+        if (index !== -1 && updated) {
+          state.items[index] = updated;
         }
       });
   },

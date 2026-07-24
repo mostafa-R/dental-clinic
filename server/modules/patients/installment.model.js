@@ -8,7 +8,7 @@ const installmentSchema = new mongoose.Schema(
     number: { type: Number, required: true },
     dueDate: { type: Date, required: true },
     amount: { type: Number, required: true, min: 0.01 },
-    paidAmount: { type: Number, default: 0 },
+    paidAmount: { type: Number, default: 0, min: 0 },
     paidDate: { type: Date, default: null },
     status: { type: String, enum: INSTALLMENT_STATUS, default: 'pending' },
     paymentMethod: { type: String, default: null },
@@ -26,7 +26,7 @@ const installmentPlanSchema = new mongoose.Schema(
     invoice: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', default: null },
     title: { type: String, required: true, trim: true, maxlength: 200 },
     totalAmount: { type: Number, required: true, min: 0.01 },
-    paidAmount: { type: Number, default: 0 },
+    paidAmount: { type: Number, default: 0, min: 0 },
     installments: { type: [installmentSchema], default: [] },
     frequency: { type: String, enum: INSTALLMENT_FREQUENCIES, default: 'monthly' },
     status: { type: String, enum: INSTALLMENT_PLAN_STATUS, default: 'active' },
@@ -51,6 +51,12 @@ installmentPlanSchema.virtual('balance').get(function () {
 installmentPlanSchema.virtual('progress').get(function () {
   if (this.installments.length === 0) return 0;
   return Math.round((this.paidInstallments / this.installments.length) * 100);
+});
+
+installmentPlanSchema.pre('save', function recomputePaidAmount() {
+  this.paidAmount = round2(
+    this.installments.reduce((s, inst) => s + (inst.paidAmount || 0), 0),
+  );
 });
 
 installmentPlanSchema.set('toJSON', { virtuals: true });

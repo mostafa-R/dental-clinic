@@ -41,7 +41,7 @@ export const removeQuarantine = asyncHandler(async (req, res) => {
   if (!tenant) throw ApiError.notFound('Tenant not found');
 
   tenant.status = tenant.quarantinePreviousStatus || 'active';
-  tenant.isActive = true;
+  tenant.isActive = tenant.status === 'active' || tenant.status === 'trial';
   tenant.quarantineReason = null;
   tenant.quarantinePreviousStatus = null;
   await tenant.save();

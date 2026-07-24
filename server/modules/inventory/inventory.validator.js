@@ -41,8 +41,8 @@ export const updateItemSchema = z
 
 export const listItemsQuerySchema = z.object({
   search: z.string().max(100).optional(),
-  category: z.enum(INVENTORY_CATEGORIES).optional(),
-  lowStock: z.enum(['true', 'false']).optional(),
+  category: z.enum(INVENTORY_CATEGORIES).optional().or(z.literal('')),
+  lowStock: z.enum(['true', 'false']).optional().or(z.literal('')),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });

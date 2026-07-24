@@ -10,18 +10,18 @@ const router = Router();
 router.use(protectSite);
 
 router.put(
+  '/:tenantId/remove',
+  authorizeSite('super_admin'),
+  audit('quarantine.remove', 'tenant'),
+  removeQuarantine,
+);
+
+router.put(
   '/:tenantId',
   authorizeSite('super_admin'),
   audit('quarantine.set', 'tenant'),
   validate(z.object({ reason: z.string().optional() })),
   setQuarantine,
-);
-
-router.put(
-  '/:tenantId/remove',
-  authorizeSite('super_admin'),
-  audit('quarantine.remove', 'tenant'),
-  removeQuarantine,
 );
 
 router.get(

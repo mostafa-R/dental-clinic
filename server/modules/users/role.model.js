@@ -90,11 +90,11 @@ const roleSchema = new mongoose.Schema(
 );
 
 /**
- * Compound unique index: one role per name per tenant.
+ * Compound unique index: one role per name per tenant per branch.
  * For platform-level roles (tenant: null), name must be globally unique.
  */
 roleSchema.index(
-  { tenant: 1, name: 1 },
+  { tenant: 1, branch: 1, name: 1 },
   {
     unique: true,
     partialFilterExpression: { tenant: { $type: 'objectId' } },

@@ -1,9 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import AppLayout from "../components/layout/AppLayout";
 import Topbar from "../components/layout/Topbar";
 import Badge from "../components/ui/Badge";
+import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
+import Modal from "../components/ui/Modal";
 import { PageLoader } from "../components/ui/Spinner";
 import StatCard from "../components/ui/StatCard";
 import {
@@ -11,18 +13,32 @@ import {
   CreditCardIcon,
   ExclamationTriangleIcon,
 } from "../components/ui/icons";
-import { fetchRevenueStats, fetchSubscriptions } from "../features/subscriptions/subscriptionsSlice";
+import {
+  fetchRevenueStats,
+  fetchSubscriptions,
+  updateSubscription,
+  processPayment,
+} from "../features/subscriptions/subscriptionsSlice";
+import { fetchPlans } from "../features/plans/plansSlice";
 import { formatCurrency, formatDate } from "../lib/format";
 import { t } from "../lib/i18n";
 
 export default function Billing() {
   const dispatch = useDispatch();
   const { items, revenueStats, loading } = useSelector((state) => state.subscriptions);
+  const { items: plans } = useSelector((state) => state.plans);
   const { language } = useSelector((state) => state.ui);
+  const [paymentModal, setPaymentModal] = useState(null);
+  const [editModal, setEditModal] = useState(null);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [editPlan, setEditPlan] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     dispatch(fetchRevenueStats());
     dispatch(fetchSubscriptions());
+    dispatch(fetchPlans());
   }, [dispatch]);
 
   if (loading && !revenueStats.totalRevenue) {
@@ -146,6 +162,7 @@ export default function Billing() {
                     <th className="text-start px-4 py-3 font-medium text-slate-500">{t("subscriptionStatus", language)}</th>
                     <th className="text-start px-4 py-3 font-medium text-slate-500">{t("amount", language)}</th>
                     <th className="text-start px-4 py-3 font-medium text-slate-500">{t("subscriptionEndDate", language)}</th>
+                    <th className="text-start px-4 py-3 font-medium text-slate-500">{t("actions", language)}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -160,6 +177,24 @@ export default function Billing() {
                       </td>
                       <td className="px-4 py-3">{formatCurrency(sub.amount, 'USD', language)}</td>
                       <td className="px-4 py-3 text-slate-500">{sub.nextPaymentAt ? formatDate(sub.nextPaymentAt, language) : "—"}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => { setEditModal(sub); setEditPlan(sub.plan); }}
+                            className="text-xs text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+                          >
+                            {t("edit", language)}
+                          </button>
+                          {sub.status === 'past_due' && (
+                            <button
+                              onClick={() => { setPaymentModal(sub); setPaymentAmount(String(sub.amount || "")); }}
+                              className="text-xs text-emerald-600 hover:text-emerald-500 dark:text-emerald-400"
+                            >
+                              {t("processPayment", language)}
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -167,6 +202,130 @@ export default function Billing() {
             </div>
           )}
         </Card>
+
+        <Modal
+          isOpen={!!editModal}
+          onClose={() => {
+            setEditModal(null);
+            setEditPlan("");
+          }}
+          title={t("edit", language)}
+          size="sm"
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                {t("plan", language)}
+              </label>
+              <select
+                value={editPlan}
+                onChange={(e) => setEditPlan(e.target.value)}
+                className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+              >
+                {plans.map((plan) => (
+                  <option key={plan._id} value={plan.key}>
+                    {plan.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setEditModal(null)}>
+                {t("cancel", language)}
+              </Button>
+              <Button
+                loading={actionLoading}
+                onClick={async () => {
+                  if (!editModal) return;
+                  setActionLoading(true);
+                  try {
+                    await dispatch(updateSubscription({
+                      id: editModal._id,
+                      data: {
+                        plan: editPlan,
+                        status: editModal.status,
+                        amount: editModal.amount,
+                        currentPeriodEnd: editModal.currentPeriodEnd,
+                      },
+                    }));
+                    setEditModal(null);
+                  } finally {
+                    setActionLoading(false);
+                  }
+                }}
+              >
+                {t("save", language)}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        <Modal
+          isOpen={!!paymentModal}
+          onClose={() => {
+            setPaymentModal(null);
+            setPaymentAmount("");
+            setPaymentMethod("cash");
+          }}
+          title={t("processPayment", language)}
+          size="sm"
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                {t("amount", language)}
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                {t("paymentMethod", language)}
+              </label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+              >
+                <option value="cash">Cash</option>
+                <option value="card">Card</option>
+                <option value="bank_transfer">Bank transfer</option>
+              </select>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setPaymentModal(null)}>
+                {t("cancel", language)}
+              </Button>
+              <Button
+                loading={actionLoading}
+                onClick={async () => {
+                  if (!paymentModal) return;
+                  setActionLoading(true);
+                  try {
+                    await dispatch(processPayment({
+                      tenantId: paymentModal.tenant?._id || paymentModal.tenant,
+                      data: {
+                        amount: Number(paymentAmount || paymentModal.amount || 0),
+                        method: paymentMethod,
+                      },
+                    }));
+                    setPaymentModal(null);
+                  } finally {
+                    setActionLoading(false);
+                  }
+                }}
+              >
+                {t("processPayment", language)}
+              </Button>
+            </div>
+          </div>
+        </Modal>
       </div>
     </AppLayout>
   );

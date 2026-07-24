@@ -40,6 +40,7 @@ const patientSchema = new mongoose.Schema(
       type: String,
       required: true,
       index: true,
+      maxlength: 20,
     },
     firstName: {
       type: String,
@@ -58,12 +59,14 @@ const patientSchema = new mongoose.Schema(
       required: true,
       trim: true,
       index: true,
+      maxlength: 30,
     },
     email: {
       type: String,
       trim: true,
       lowercase: true,
       default: "",
+      maxlength: 254,
     },
     dateOfBirth: {
       type: Date,
@@ -78,6 +81,7 @@ const patientSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: "",
+      maxlength: 500,
     },
     medicalHistory: {
       type: medicalHistorySchema,

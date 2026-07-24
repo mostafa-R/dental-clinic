@@ -1,34 +1,23 @@
 import { useEffect } from 'react';
 import { Navigate, Outlet, useSearchParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { loadCurrentUser, setCredentials } from '../features/auth/authSlice';
+import { loadCurrentUser, verifyImpersonation } from '../features/auth/authSlice';
+import { fetchMyPermissions } from '../features/users/userSlice';
+import { subscribeBranch, disconnectSocket } from '../lib/socket';
 import SuspendedScreen from './SuspendedScreen';
 
 export default function ProtectedRoute() {
   const dispatch = useDispatch();
   const { user, status } = useSelector((s) => s.auth);
+  const permissionsStatus = useSelector((s) => s.users.permissionsStatus);
   const [searchParams] = useSearchParams();
 
-  // Handle impersonation token from URL query param
+  // Handle impersonation token from URL query param — verify server-side
   useEffect(() => {
     const token = searchParams.get('impersonation');
-    if (token) {
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        dispatch(setCredentials({
-          _id: payload.sub,
-          role: payload.role,
-          branch: payload.branch ? { _id: payload.branch } : null,
-          tenant: { _id: payload.tenant },
-          _impersonating: true,
-          _impersonator: payload.impersonatorName || 'Admin',
-        }));
-        // Clean URL without reload
-        window.history.replaceState({}, '', window.location.pathname);
-      } catch {
-        // Invalid token — ignore
-      }
-    }
+    if (!token) return;
+    dispatch(verifyImpersonation(token));
+    window.history.replaceState({}, '', window.location.pathname);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -36,6 +25,19 @@ export default function ProtectedRoute() {
       dispatch(loadCurrentUser());
     }
   }, [dispatch, user, status]);
+
+  useEffect(() => {
+    if (user && permissionsStatus === 'idle') {
+      dispatch(fetchMyPermissions());
+    }
+  }, [dispatch, user, permissionsStatus]);
+
+  useEffect(() => {
+    if (user?.branch?._id) {
+      subscribeBranch(user.branch._id);
+    }
+    return () => { disconnectSocket(); };
+  }, [user?.branch?._id]);
 
   if (!user && (status === 'loading' || status === 'idle')) {
     return (

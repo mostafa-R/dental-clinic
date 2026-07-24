@@ -26,7 +26,6 @@ export default function Settings() {
   const { user } = useSelector((state) => state.auth);
   const { settings, loading } = useSelector((state) => state.platform);
   const [saving, setSaving] = useState(false);
-  const [show2faModal, setShow2faModal] = useState(false);
   const [showDisableModal, setShowDisableModal] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
   const twofa = useSelector((state) => state.twofa);
@@ -72,16 +71,16 @@ export default function Settings() {
   };
 
   const handleVerify2fa = async () => {
-    await dispatch(verify2fa(tokenInput));
-    if (!twofa.error) {
+    const result = await dispatch(verify2fa(tokenInput));
+    if (!result.error) {
       setShow2faModal(false);
       setTokenInput("");
     }
   };
 
   const handleDisable2fa = async () => {
-    await dispatch(disable2fa(tokenInput));
-    if (!twofa.error) {
+    const result = await dispatch(disable2fa(tokenInput));
+    if (!result.error) {
       setShowDisableModal(false);
       setTokenInput("");
     }
@@ -210,9 +209,9 @@ export default function Settings() {
               {twofa.error && (
                 <p className="text-sm text-red-500">{twofa.error}</p>
               )}
-              <Button onClick={handleVerify2fa} loading={twofa.verifying} className="w-full">
-                {t("verifyToken", language)}
-              </Button>
+                 <Button onClick={handleVerify2fa} loading={twofa.verifying} className="w-full">
+                   {t("verifyToken", language)}
+                 </Button>
             </div>
           </Modal>
         )}

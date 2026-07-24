@@ -13,7 +13,7 @@ import {
   suspendTenant,
   updateTenant,
 } from "./site.controller.js";
-import { tenantSchema } from "./site.validator.js";
+import { tenantSchema, tenantUpdateSchema } from "./site.validator.js";
 
 const router = Router();
 
@@ -23,13 +23,13 @@ router.use(protectSite);
 // Tenant routes
 router.get("/", authorizeSite("super_admin", "admin", "support"), getTenants);
 
-router.get("/:id", authorizeSite("super_admin", "admin", "support"), getTenant);
-
 router.get(
   "/:id/stats",
   authorizeSite("super_admin", "admin", "support"),
   getTenantStats,
 );
+
+router.get("/:id", authorizeSite("super_admin", "admin", "support"), getTenant);
 
 router.post(
   "/",
@@ -42,7 +42,7 @@ router.post(
 router.put(
   "/:id",
   authorizeSite("super_admin", "admin"),
-  validate(tenantSchema),
+  validate(tenantUpdateSchema),
   audit('tenant.update', 'tenant'),
   updateTenant,
 );

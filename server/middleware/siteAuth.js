@@ -42,7 +42,13 @@ export async function protectSite(req, _res, next) {
       throw ApiError.unauthorized("Token revoked — please log in again");
     }
 
-    req.siteAdmin = admin;
+    const safe = admin.toObject();
+    delete safe.password;
+    delete safe.twoFactorSecret;
+    delete safe.twoFactorBackupCodes;
+    delete safe.tokenVersion;
+    delete safe.__v;
+    req.siteAdmin = safe;
     return next();
   } catch (err) {
     return next(err);

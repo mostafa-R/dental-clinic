@@ -1,29 +1,37 @@
-import { fileURLToPath } from "node:url";
-import path from "node:path";
-import crypto from "node:crypto";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
-import { errorHandler, notFound } from "./middleware/error.js";
-import { logError } from "./middleware/logError.js";
+import crypto from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { abuseMonitor } from "./middleware/abuseMonitor.js";
+import { errorHandler, notFound } from "./middleware/error.js";
+import { httpLogger } from "./middleware/httpLogger.js";
+import { logError } from "./middleware/logError.js";
 import { requestId } from "./middleware/requestId.js";
-import { perfMiddleware } from "./utils/perfMonitor.js";
+import { userRateLimit } from "./middleware/userRateLimit.js";
+import { sanitizeBody } from "./utils/sanitize.js";
 import apiRouter from "./routes/routes.js";
+import { perfMiddleware } from "./utils/perfMonitor.js";
+import { setupSwagger } from "./swagger.js";
 
-dotenv.config({ path: path.join(__dirname, ".env") });
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+dotenv.config({ path: path.join(__dirname, ".env"), quiet: true });
 
 const app = express();
 const isProd = process.env.NODE_ENV === "production";
 
 const allowedOrigins = process.env.CLIENT_URL
-  ? process.env.CLIENT_URL.split(",").map((url) => url.trim())
+  ? process.env.CLIENT_URL.split(",").map((url) => url.trim()).filter(Boolean)
   : ["http://localhost:5173"];
+
+if (isProd && !process.env.CLIENT_URL) {
+  throw new Error("CLIENT_URL is required in production");
+}
 
 app.use((_req, res, next) => {
   res.locals.nonce = crypto.randomBytes(16).toString("base64url");
@@ -67,10 +75,17 @@ app.use(
   }),
 );
 
+app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
+app.use(sanitizeBody);
+
+setupSwagger(app);
 
 app.set("trust proxy", 1);
+
+app.use(httpLogger);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -88,6 +103,7 @@ app.use("/api/auth/refresh", authLimiter);
 app.use("/api/site/auth/login", authLimiter);
 app.use("/api/site/auth/refresh", authLimiter);
 app.use("/api/site/auth/create", authLimiter);
+app.use("/api/site/2fa/verify-login", authLimiter);
 
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -97,7 +113,7 @@ const generalLimiter = rateLimit({
   message: { success: false, message: "Too many requests, please slow down" },
 });
 
-app.use("/api", requestId, generalLimiter, perfMiddleware, abuseMonitor, apiRouter);
+app.use("/api", requestId, generalLimiter, perfMiddleware, abuseMonitor, userRateLimit({ windowMs: 60000, max: 200 }), apiRouter);
 
 app.use(logError);
 app.use(notFound);
@@ -107,8 +123,8 @@ export async function upgradeRateLimitStore() {
   try {
     const { getRedis } = await import("./config/redis.js");
     const redisClient = getRedis();
-    if (!redisClient || redisClient.status !== 'ready') {
-      console.warn("[RateLimit] Redis not connected — using in-memory store");
+    if (!redisClient || redisClient.status !== "ready") {
+      console.warn("[RateLimit] Redis not connected - using in-memory store");
       return false;
     }
 
@@ -121,7 +137,7 @@ export async function upgradeRateLimitStore() {
     console.log("[RateLimit] Upgraded auth + general limiters to Redis store");
     return true;
   } catch {
-    console.warn("[RateLimit] Redis not available — using in-memory store");
+    console.warn("[RateLimit] Redis not available - using in-memory store");
     return false;
   }
 }

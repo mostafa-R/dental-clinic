@@ -13,33 +13,30 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      maxlength: 100,
     },
     email: {
       type: String,
       required: true,
-      unique: true,
       lowercase: true,
       trim: true,
+      maxlength: 254,
     },
     password: {
       type: String,
       required: true,
       select: false,
     },
-    role: {
-      type: String,
-      required: true,
-      default: "receptionist",
-    },
     roleId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Role",
-      default: null,
+      required: true,
     },
     phone: {
       type: String,
       trim: true,
       default: "",
+      maxlength: 30,
     },
     commissionRate: {
       type: Number,
@@ -50,9 +47,6 @@ const userSchema = new mongoose.Schema(
     branch: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Branch",
-      required() {
-        return this.role !== "site_admin" && this.role !== "clinic_admin";
-      },
       default: null,
     },
     isDoctor: {
@@ -96,8 +90,12 @@ userSchema.methods.comparePassword = function comparePassword(plain) {
 userSchema.methods.toSafeObject = function toSafeObject() {
   const obj = this.toObject();
   delete obj.password;
+  delete obj.tokenVersion;
+  delete obj.__v;
   return obj;
 };
+
+userSchema.index({ tenant: 1, email: 1 }, { unique: true });
 
 const User = mongoose.model("User", userSchema);
 

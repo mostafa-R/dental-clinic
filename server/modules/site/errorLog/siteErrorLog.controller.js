@@ -1,5 +1,6 @@
 import ErrorLog from "./errorLog.model.js";
 import asyncHandler from "../../../utils/asyncHandler.js";
+import ApiError from "../../../utils/ApiError.js";
 import { sendSuccess } from "../../../utils/sendSuccess.js";
 
 export const getErrorLogs = asyncHandler(async (req, res) => {
@@ -36,7 +37,18 @@ export const getErrorLogs = asyncHandler(async (req, res) => {
 });
 
 export const getErrorLogStats = asyncHandler(async (req, res) => {
+  const { tenantId, startDate, endDate } = req.query;
+  const match = {};
+  if (tenantId) match.tenant = tenantId;
+  if (startDate || endDate) {
+    match.createdAt = {};
+    if (startDate) match.createdAt.$gte = new Date(startDate);
+    if (endDate) match.createdAt.$lte = new Date(endDate);
+  }
+  const matchStage = Object.keys(match).length ? [{ $match: match }] : [];
+
   const stats = await ErrorLog.aggregate([
+    ...matchStage,
     {
       $group: {
         _id: null,
@@ -49,6 +61,7 @@ export const getErrorLogStats = asyncHandler(async (req, res) => {
   ]);
 
   const byStatus = await ErrorLog.aggregate([
+    ...matchStage,
     { $group: { _id: '$statusCode', count: { $sum: 1 } } },
     { $sort: { count: -1 } },
     { $limit: 10 },
@@ -58,4 +71,14 @@ export const getErrorLogStats = asyncHandler(async (req, res) => {
     stats: stats[0] || { total: 0, '4xx': 0, '5xx': 0, byTenant: [] },
     byStatus,
   });
+});
+
+export const resolveErrorLog = asyncHandler(async (req, res) => {
+  const log = await ErrorLog.findByIdAndUpdate(
+    req.params.id,
+    { resolved: true, resolvedAt: new Date(), resolvedBy: req.user?._id || null },
+    { new: true },
+  );
+  if (!log) throw ApiError.notFound('Error log not found');
+  return sendSuccess(res, { log });
 });

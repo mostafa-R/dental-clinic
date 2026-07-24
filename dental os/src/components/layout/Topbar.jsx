@@ -4,10 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { authApi } from '../../features/auth/authApi';
 import { logout } from '../../features/auth/authSlice';
 import { toggleMobileSidebar } from '../../features/ui/uiSlice';
+import { disconnectSocket } from '../../lib/socket';
 import { roleLabel } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
 import api from '../../lib/axios';
-import PreferencesControls from '../PreferencesControls';
+import PreferencesControls from '../../features/preferences/PreferencesControls';
 
 function SearchIcon() {
   return (
@@ -81,7 +82,22 @@ export default function Topbar() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState({ patients: [], appointments: [], invoices: [] });
+  const [searchResults, setSearchResults] = useState({
+    patients: [],
+    appointments: [],
+    invoices: [],
+    branches: [],
+    users: [],
+    roles: [],
+    inventory: [],
+    expenses: [],
+    drawings: [],
+    treatmentPlans: [],
+    prescriptions: [],
+    clinicalNotes: [],
+    wallets: [],
+    installments: [],
+  });
   const [searchLoading, setSearchLoading] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const menuRef = useRef(null);
@@ -104,7 +120,13 @@ export default function Topbar() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const q = searchQuery.trim();
     if (q.length < 2) {
-      setSearchResults({ patients: [], appointments: [], invoices: [] });
+      setSearchResults({
+        patients: [], appointments: [], invoices: [],
+        branches: [], users: [], roles: [],
+        inventory: [], expenses: [], drawings: [],
+        treatmentPlans: [], prescriptions: [], clinicalNotes: [],
+        wallets: [], installments: [],
+      });
       setSearchLoading(false);
       return;
     }
@@ -140,6 +162,7 @@ export default function Topbar() {
   const onLogout = async () => {
     try { await authApi.logout(); } catch { /* ignore */ }
     dispatch(logout());
+    disconnectSocket();
     navigate('/login', { replace: true });
   };
 
@@ -278,8 +301,261 @@ export default function Topbar() {
                   </div>
                 )}
 
+                {/* Branches */}
+                {searchResults.branches.length > 0 && (
+                  <div>
+                    <p className="border-t border-slate-100 px-4 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-slate-700">{t('nav.branches')}</p>
+                    {searchResults.branches.map((b) => (
+                      <button
+                        key={b._id}
+                        type="button"
+                        onClick={() => { navigate(`/branches?id=${b._id}`); setShowSearch(false); setSearchQuery(''); }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-start text-sm transition hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300">
+                          {b.name?.[0]?.toUpperCase() || '?'}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-slate-800 dark:text-slate-100">{b.name}</p>
+                          <p className="truncate text-xs text-slate-400">{b.address || b.phone}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Users */}
+                {searchResults.users.length > 0 && (
+                  <div>
+                    <p className="border-t border-slate-100 px-4 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-slate-700">{t('nav.users')}</p>
+                    {searchResults.users.map((u) => (
+                      <button
+                        key={u._id}
+                        type="button"
+                        onClick={() => { navigate(`/users?id=${u._id}`); setShowSearch(false); setSearchQuery(''); }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-start text-sm transition hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-100 text-[10px] font-bold text-purple-600 dark:bg-purple-500/20 dark:text-purple-300">
+                          {u.name?.split(' ').map(s => s[0]).join('').toUpperCase().slice(0, 2) || '?'}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-slate-800 dark:text-slate-100">{u.name}</p>
+                          <p className="truncate text-xs text-slate-400">{u.email} • {u.role}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Roles */}
+                {searchResults.roles.length > 0 && (
+                  <div>
+                    <p className="border-t border-slate-100 px-4 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-slate-700">{t('nav.roles')}</p>
+                    {searchResults.roles.map((r) => (
+                      <button
+                        key={r._id}
+                        type="button"
+                        onClick={() => { navigate(`/roles?id=${r._id}`); setShowSearch(false); setSearchQuery(''); }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-start text-sm transition hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[10px] font-bold text-orange-600 dark:bg-orange-500/20 dark:text-orange-300">
+                          {r.name?.[0]?.toUpperCase() || '?'}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-slate-800 dark:text-slate-100">{r.name}</p>
+                          <p className="truncate text-xs text-slate-400">{r.description || ''}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Inventory */}
+                {searchResults.inventory.length > 0 && (
+                  <div>
+                    <p className="border-t border-slate-100 px-4 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-slate-700">{t('nav.inventory')}</p>
+                    {searchResults.inventory.map((item) => (
+                      <button
+                        key={item._id}
+                        type="button"
+                        onClick={() => { navigate(`/inventory?id=${item._id}`); setShowSearch(false); setSearchQuery(''); }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-start text-sm transition hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-[10px] font-bold text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-300">
+                          {item.name?.[0]?.toUpperCase() || '?'}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-slate-800 dark:text-slate-100">{item.name}</p>
+                          <p className="truncate text-xs text-slate-400">{item.sku || item.category} • Qty: {item.quantity}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Expenses */}
+                {searchResults.expenses.length > 0 && (
+                  <div>
+                    <p className="border-t border-slate-100 px-4 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-slate-700">{t('nav.accounting')}</p>
+                    {searchResults.expenses.map((e) => (
+                      <button
+                        key={e._id}
+                        type="button"
+                        onClick={() => { navigate(`/accounting?expense=${e._id}`); setShowSearch(false); setSearchQuery(''); }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-start text-sm transition hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-100 text-[10px] font-bold text-red-600 dark:bg-red-500/20 dark:text-red-300">
+                          {e.expenseNo?.[0]?.toUpperCase() || 'E'}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-slate-800 dark:text-slate-100">{e.expenseNo} - {e.description}</p>
+                          <p className="truncate text-xs text-slate-400">{e.category} • {e.amount}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Drawings */}
+                {searchResults.drawings.length > 0 && (
+                  <div>
+                    <p className="border-t border-slate-100 px-4 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-slate-700">{t('nav.accounting')}</p>
+                    {searchResults.drawings.map((d) => (
+                      <button
+                        key={d._id}
+                        type="button"
+                        onClick={() => { navigate(`/accounting?drawing=${d._id}`); setShowSearch(false); setSearchQuery(''); }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-start text-sm transition hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[10px] font-bold text-amber-600 dark:bg-amber-500/20 dark:text-amber-300">
+                          {d.drawingNo?.[0]?.toUpperCase() || 'D'}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-slate-800 dark:text-slate-100">{d.drawingNo} - {d.description || 'Owner Drawing'}</p>
+                          <p className="truncate text-xs text-slate-400">{d.owner?.name || ''} • {d.amount}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Treatment Plans */}
+                {searchResults.treatmentPlans.length > 0 && (
+                  <div>
+                    <p className="border-t border-slate-100 px-4 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-slate-700">{t('nav.emr')}</p>
+                    {searchResults.treatmentPlans.map((tp) => (
+                      <button
+                        key={tp._id}
+                        type="button"
+                        onClick={() => { navigate(`/patients/${tp.patient?._id}/emr?plan=${tp._id}`); setShowSearch(false); setSearchQuery(''); }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-start text-sm transition hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-100 text-[10px] font-bold text-teal-600 dark:bg-teal-500/20 dark:text-teal-300">
+                          {tp.title?.[0]?.toUpperCase() || 'T'}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-slate-800 dark:text-slate-100">{tp.title}</p>
+                          <p className="truncate text-xs text-slate-400">{tp.patient ? `${tp.patient.firstName} ${tp.patient.lastName}` : '—'} • {tp.status}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Prescriptions */}
+                {searchResults.prescriptions.length > 0 && (
+                  <div>
+                    <p className="border-t border-slate-100 px-4 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-slate-700">{t('nav.emr')}</p>
+                    {searchResults.prescriptions.map((rx) => (
+                      <button
+                        key={rx._id}
+                        type="button"
+                        onClick={() => { navigate(`/patients/${rx.patient?._id}/emr?rx=${rx._id}`); setShowSearch(false); setSearchQuery(''); }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-start text-sm transition hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-300">
+                          Rx
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-slate-800 dark:text-slate-100">{rx.diagnosis || 'Prescription'}</p>
+                          <p className="truncate text-xs text-slate-400">{rx.patient ? `${rx.patient.firstName} ${rx.patient.lastName}` : '—'} • Dr. {rx.doctor?.name || ''}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Clinical Notes */}
+                {searchResults.clinicalNotes.length > 0 && (
+                  <div>
+                    <p className="border-t border-slate-100 px-4 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-slate-700">{t('nav.emr')}</p>
+                    {searchResults.clinicalNotes.map((note) => (
+                      <button
+                        key={note._id}
+                        type="button"
+                        onClick={() => { navigate(`/patients/${note.patient?._id}/emr?note=${note._id}`); setShowSearch(false); setSearchQuery(''); }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-start text-sm transition hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                          📝
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-slate-800 dark:text-slate-100">{note.chiefComplaint || 'Clinical Note'}</p>
+                          <p className="truncate text-xs text-slate-400">{note.patient ? `${note.patient.firstName} ${note.patient.lastName}` : '—'} • {new Date(note.visitDate).toLocaleDateString()}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Wallets */}
+                {searchResults.wallets.length > 0 && (
+                  <div>
+                    <p className="border-t border-slate-100 px-4 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-slate-700">{t('nav.wallet') || 'Wallet'}</p>
+                    {searchResults.wallets.map((w) => (
+                      <button
+                        key={w._id}
+                        type="button"
+                        onClick={() => { navigate(`/patients/${w.patient._id}/emr?wallet=1`); setShowSearch(false); setSearchQuery(''); }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-start text-sm transition hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-yellow-100 text-[10px] font-bold text-yellow-600 dark:bg-yellow-500/20 dark:text-yellow-300">
+                          💰
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-slate-800 dark:text-slate-100">{w.patient.firstName} {w.patient.lastName}</p>
+                          <p className="truncate text-xs text-slate-400">Balance: {w.balance}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Installments */}
+                {searchResults.installments.length > 0 && (
+                  <div>
+                    <p className="border-t border-slate-100 px-4 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-slate-700">{t('nav.wallet') || 'Installments'}</p>
+                    {searchResults.installments.map((inst) => (
+                      <button
+                        key={inst._id}
+                        type="button"
+                        onClick={() => { navigate(`/patients/${inst.patient._id}/emr?installment=1`); setShowSearch(false); setSearchQuery(''); }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-start text-sm transition hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-pink-100 text-[10px] font-bold text-pink-600 dark:bg-pink-500/20 dark:text-pink-300">
+                          📅
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-slate-800 dark:text-slate-100">{inst.planNo} - {inst.patient.firstName} {inst.patient.lastName}</p>
+                          <p className="truncate text-xs text-slate-400">{inst.paidAmount} / {inst.totalAmount} • {inst.status}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* Empty */}
-                {!searchResults.patients.length && !searchResults.appointments.length && !searchResults.invoices.length && (
+                {Object.values(searchResults).every((arr) => arr.length === 0) && (
                   <p className="px-4 py-6 text-center text-sm text-slate-400">{t('common.noResults')}</p>
                 )}
               </>

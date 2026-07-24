@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { loginUser, setCredentials } from './authSlice';
+import { loginUser, verifyImpersonation } from './authSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { defaultRouteFor } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
-import PreferencesControls from '../../components/PreferencesControls';
+import PreferencesControls from '../preferences/PreferencesControls';
 
 export default function Login() {
   const dispatch = useDispatch();
@@ -17,31 +17,16 @@ export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
   const isLoading = status === 'loading';
 
-  // Handle impersonation token from URL
+  // Handle impersonation token from URL — verify server-side
   useEffect(() => {
     const token = searchParams.get('impersonation');
     if (!token) return;
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      if (payload.type === 'impersonation' && payload.sub) {
-        dispatch(setCredentials({
-          _id: payload.sub,
-          role: payload.role,
-          branch: payload.branch ? { _id: payload.branch } : null,
-          tenant: { _id: payload.tenant, status: 'active', isActive: true },
-          _impersonating: true,
-          _impersonator: payload.impersonatorName || 'Admin',
-        }));
-        navigate(defaultRouteFor(payload.role), { replace: true });
-      }
-    } catch {
-      // Invalid token — ignore
-    }
+    dispatch(verifyImpersonation(token));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (user && !searchParams.get('impersonation')) {
+    if (user) {
       navigate(defaultRouteFor(user.role), { replace: true });
     }
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps

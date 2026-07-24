@@ -19,10 +19,12 @@ const Health = lazy(() => import("./pages/Health"));
 const Plans = lazy(() => import("./pages/Plans"));
 const Quarantine = lazy(() => import("./pages/Quarantine"));
 const Settings = lazy(() => import("./pages/Settings"));
+const Backups = lazy(() => import("./pages/Backups"));
+const Performance = lazy(() => import("./pages/Performance"));
 
 function App() {
   const dispatch = useDispatch();
-  const { _initialized, user, loading, isAuthenticated } = useSelector((state) => state.auth);
+  const { _initialized, loading } = useSelector((state) => state.auth);
   const { theme, language } = useSelector((state) => state.ui);
 
   useEffect(() => {
@@ -66,6 +68,8 @@ function App() {
           <Route path="/health" element={<Health />} />
           <Route path="/plans" element={<Plans />} />
           <Route path="/quarantine" element={<Quarantine />} />
+          <Route path="/backups" element={<Backups />} />
+          <Route path="/performance" element={<Performance />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
 

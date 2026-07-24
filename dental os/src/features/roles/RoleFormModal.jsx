@@ -2,15 +2,18 @@ import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Modal from '../../components/ui/Modal';
-import { createRole, resetFormState, updateRole } from './rolesSlice';
+import { createRole, resetFormState, updateRole, fetchModules } from './rolesSlice';
 import { showErrorDialog } from '../ui/uiSlice';
-import { CRUD_ACTIONS, CRUD_SHORT, MODULES } from '../../lib/permissions';
+import { CRUD_ACTIONS, CRUD_SHORT, MODULES as LOCAL_MODULES } from './permissions';
 import { useT } from '../../lib/i18n';
 
 export default function RoleFormModal({ open, onClose, role }) {
   const dispatch = useDispatch();
   const { t } = useT();
   const formStatus = useSelector((s) => s.roles.formStatus);
+  const serverModules = useSelector((s) => s.roles.modules);
+
+  const MODULES = serverModules?.modules || LOCAL_MODULES;
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -20,6 +23,7 @@ export default function RoleFormModal({ open, onClose, role }) {
   useEffect(() => {
     if (!open) return;
     dispatch(resetFormState());
+    dispatch(fetchModules());
     if (role) {
       setName(role.name);
       setDescription(role.description || '');

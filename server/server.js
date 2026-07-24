@@ -10,8 +10,9 @@ import { startWhatsAppReminderCron, stopWhatsAppReminderCron } from "./services/
 import { startBackupCron, stopBackupCron } from "./services/backupCron.js";
 import { startInstallmentCron, stopInstallmentCron } from "./services/installmentCron.js";
 import { disconnectAllWhatsAppClients } from "./services/whatsapp.js";
+import { runMigrations } from "./migrations/runner.js";
 
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT || 5000);
 
 function validateEnv() {
   const required = [
@@ -22,7 +23,17 @@ function validateEnv() {
   const missing = required.filter(([key]) => !process.env[key]);
   if (missing.length > 0) {
     console.error("Missing required environment variables:");
-    missing.forEach(([key, desc]) => console.error(`  ${key} — ${desc}`));
+    missing.forEach(([key, desc]) => console.error(`  ${key} - ${desc}`));
+    process.exit(1);
+  }
+
+  if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
+    console.error("PORT must be a number between 1 and 65535");
+    process.exit(1);
+  }
+
+  if (process.env.NODE_ENV === "production" && !process.env.CLIENT_URL) {
+    console.error("CLIENT_URL is required in production");
     process.exit(1);
   }
 }
@@ -31,6 +42,9 @@ async function start() {
   validateEnv();
 
   await connectDB();
+  await runMigrations().catch((err) => {
+    console.error('[Migrations] Migration failed:', err.message);
+  });
   await connectRedis();
   await upgradeRateLimitStore();
 
@@ -72,7 +86,7 @@ async function start() {
     setTimeout(() => {
       console.error("Forced shutdown after timeout");
       process.exit(0);
-    }, 15000);
+    }, 15000).unref();
   };
 
   process.on("SIGTERM", () => shutdown("SIGTERM"));
@@ -93,5 +107,3 @@ process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] Unhandled Rejection:", reason);
   process.exit(1);
 });
-
-export default app;

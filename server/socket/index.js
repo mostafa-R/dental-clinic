@@ -1,9 +1,9 @@
-import mongoose from 'mongoose';
 import { Server } from 'socket.io';
 
-import User from '../modules/users/user.model.js';
 import Branch from '../modules/users/branch.model.js';
-import { ACCESS_COOKIE, verifyAccessToken } from '../utils/jwt.js';
+import Role from '../modules/users/role.model.js';
+import User from '../modules/users/user.model.js';
+import { verifyAccessToken } from '../utils/jwt.js';
 
 let io = null;
 
@@ -33,12 +33,13 @@ export function initSocket(httpServer) {
   });
 
   io.use((socket, next) => {
-    const token = socket.handshake.auth?.token || socket.handshake.headers?.cookie;
-    let raw = token;
+    const token = socket.handshake.auth?.token;
+    const cookie = socket.handshake.headers?.cookie;
 
-    if (token && typeof token === 'string' && token.includes('access_token=')) {
-      const match = token.match(/access_token=([^;]+)/);
-      raw = match ? match[1] : token;
+    let raw = token;
+    if (!raw && cookie && typeof cookie === 'string') {
+      const match = cookie.match(/access_token=([^;]+)/);
+      raw = match ? match[1] : null;
     }
 
     if (!raw) {
@@ -54,19 +55,27 @@ export function initSocket(httpServer) {
 
     User.findById(decoded.sub)
       .populate('branch', 'name')
-      .then((user) => {
+      .then(async (user) => {
         if (!user || !user.isActive) {
           return next(new Error('User no longer valid'));
         }
         if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== user.tokenVersion) {
           return next(new Error('Token revoked — please log in again'));
         }
+
+        // Resolve system admin status from Role document
+        let isSystemAdmin = false;
+        if (user.roleId) {
+          const roleDoc = await Role.findById(user.roleId).select('isSystemAdmin').lean();
+          isSystemAdmin = !!roleDoc?.isSystemAdmin;
+        }
+
         socket.user = {
           _id: user._id.toString(),
           name: user.name,
-          role: user.role,
           branch: user.branch ? user.branch._id.toString() : null,
           tenant: user.tenant ? user.tenant.toString() : null,
+          isSystemAdmin,
         };
         next();
       })
@@ -74,7 +83,7 @@ export function initSocket(httpServer) {
   });
 
   io.on('connection', (socket) => {
-    if (['site_admin', 'super_admin'].includes(socket.user.role)) {
+    if (socket.user.isSystemAdmin) {
       socket.join(ADMIN_ROOM);
     }
     if (socket.user.branch) {
@@ -90,8 +99,8 @@ export function initSocket(httpServer) {
     socket.on('subscribe:branch', async (branchId) => {
       try {
         if (!branchId) return;
-        // site_admin and super_admin can subscribe to any branch.
-        if (['site_admin', 'super_admin'].includes(socket.user.role)) {
+        // System admins can subscribe to any branch.
+        if (socket.user.isSystemAdmin) {
           socket.join(branchRoom(branchId));
           return;
         }
@@ -109,7 +118,9 @@ export function initSocket(httpServer) {
     });
 
     socket.on('unsubscribe:branch', (branchId) => {
-      socket.leave(branchRoom(branchId));
+      if (branchId && typeof branchId === 'string') {
+        socket.leave(branchRoom(branchId));
+      }
     });
   });
 

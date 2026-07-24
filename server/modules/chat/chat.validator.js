@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
+const CHANNEL_NAMES = ['doctors', 'accounting', 'general'];
+
 export const sendMessageSchema = z
   .object({
     recipient: z.string().length(24, 'Invalid recipient id').optional(),
-    channel: z.string().max(50, 'Channel name too long').optional(),
+    channel: z.enum(CHANNEL_NAMES).optional(),
     content: z.string().min(1, 'Message content is required').max(2000, 'Message too long'),
   })
   .superRefine((data, ctx) => {
@@ -33,4 +35,8 @@ export const listMessagesSchema = z.object({
 
 export const markReadSchema = z.object({
   messageIds: z.array(z.string().length(24)).min(1).max(100),
+});
+
+export const markChannelReadSchema = z.object({
+  channel: z.string().max(50).min(1),
 });

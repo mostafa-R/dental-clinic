@@ -1,13 +1,13 @@
-import mongoose from 'mongoose';
-
-import InstallmentPlan from './installment.model.js';
-import Invoice from '../billing/invoice.model.js';
-import Wallet from './wallet.model.js';
-import { loadScopedPatient } from '../../utils/branchScope.js';
+import { round2 } from '../../constants/accounting.js';
+import { withTransaction } from '../../core/transaction.js';
+import { emitToBranch } from '../../socket/index.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
+import { loadScopedPatient } from '../../utils/branchScope.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
-import { round2 } from '../../constants/accounting.js';
+import Invoice from '../billing/invoice.model.js';
+import InstallmentPlan from './installment.model.js';
+import { addTransaction } from './wallet.service.js';
 
 /**
  * GET /patients/:patientId/installments
@@ -48,7 +48,7 @@ export const createInstallmentPlan = asyncHandler(async (req, res) => {
   }
 
   if (data.invoice) {
-    const invoice = await Invoice.findById(data.invoice);
+    const invoice = await Invoice.findOne({ _id: data.invoice, branch: patient.branch, tenant: patient.tenant });
     if (!invoice) throw ApiError.notFound('Invoice not found');
     if (String(invoice.patient) !== String(patient._id)) {
       throw ApiError.badRequest('Invoice does not belong to this patient');
@@ -56,6 +56,8 @@ export const createInstallmentPlan = asyncHandler(async (req, res) => {
 
     const existingPlan = await InstallmentPlan.findOne({
       invoice: data.invoice,
+      branch: patient.branch,
+      tenant: patient.tenant,
       status: { $in: ['active', 'overdue'] },
     });
     if (existingPlan) {
@@ -80,6 +82,7 @@ export const createInstallmentPlan = asyncHandler(async (req, res) => {
     createdBy: req.user._id,
   });
 
+  emitToBranch(String(patient.branch), 'installment:created', { installmentPlan: plan });
   return sendSuccess(res, { installmentPlan: plan }, 201);
 });
 
@@ -107,6 +110,7 @@ export const updateInstallmentPlan = asyncHandler(async (req, res) => {
   }
 
   await plan.save();
+  emitToBranch(String(patient.branch), 'installment:updated', { installmentPlan: plan });
   return sendSuccess(res, { installmentPlan: plan });
 });
 
@@ -118,25 +122,34 @@ export const payInstallment = asyncHandler(async (req, res) => {
   const patient = await loadScopedPatient(req, req.params.patientId);
   const data = req.validatedBody;
 
-  const session = await mongoose.startSession();
-  let result;
-  try {
-    session.startTransaction();
-
-    const plan = await InstallmentPlan.findOne({ _id: req.params.planId, patient: patient._id })
+  const result = await withTransaction(async (session) => {
+    const plan = await InstallmentPlan.findOne({ _id: req.params.planId, patient: patient._id, branch: patient.branch, tenant: patient.tenant })
       .session(session);
     if (!plan) throw ApiError.notFound('Installment plan not found');
     if (plan.status === 'completed') throw ApiError.badRequest('Plan is already completed');
     if (plan.status === 'defaulted') throw ApiError.badRequest('Cannot pay on a defaulted plan');
 
-    const installment = plan.installments.find(
-      (inst) => inst.status === 'pending' || inst.status === 'overdue',
-    );
-    if (!installment) throw ApiError.badRequest('No pending installments to pay');
+    // Require explicit installment ID to prevent race conditions
+    const installmentId = data.installmentId;
+    if (!installmentId) {
+      throw ApiError.badRequest('Installment ID is required');
+    }
+    const installment = plan.installments.id(installmentId);
+    if (!installment) throw ApiError.notFound('Installment not found');
+    if (installment.status !== 'pending' && installment.status !== 'overdue') {
+      throw ApiError.conflict('This installment has already been paid');
+    }
 
     const remaining = round2(installment.amount - installment.paidAmount);
     if (data.amount > remaining) {
       throw ApiError.badRequest(`Payment exceeds remaining balance of ${remaining}`);
+    }
+
+    // Overpayment guard: ensure total paid doesn't exceed plan total
+    const totalPaidBefore = round2(plan.installments.reduce((s, inst) => s + inst.paidAmount, 0));
+    const newTotalPaid = round2(totalPaidBefore + data.amount);
+    if (newTotalPaid > plan.totalAmount) {
+      throw ApiError.badRequest(`Payment would exceed plan total of ${plan.totalAmount} (currently paid: ${totalPaidBefore})`);
     }
 
     installment.paidAmount = round2(installment.paidAmount + data.amount);
@@ -146,20 +159,18 @@ export const payInstallment = asyncHandler(async (req, res) => {
 
     // Debit wallet when paying via wallet — inside the same transaction.
     if (installment.paymentMethod === 'wallet') {
-      const wallet = await Wallet.findOne({ patient: patient._id }).session(session);
-      if (!wallet) throw ApiError.badRequest('Patient has no wallet');
-      if (wallet.balance < data.amount) {
-        throw ApiError.badRequest('Insufficient wallet balance');
-      }
-      wallet.addTransaction({
-        type: 'debit',
-        amount: data.amount,
-        reference: `Installment #${installment.number} payment`,
-        description: `Installment plan payment — ${plan.title}`,
-        installment: plan._id,
-        userId: req.user._id,
-      });
-      await wallet.save({ session });
+      await addTransaction(
+        patient,
+        {
+          type: 'debit',
+          amount: data.amount,
+          reference: `Installment #${installment.number} payment`,
+          description: `Installment plan payment — ${plan.title}`,
+          installment: plan._id,
+        },
+        req.user._id,
+        session,
+      );
     }
 
     if (installment.paidAmount >= installment.amount) {
@@ -173,15 +184,10 @@ export const payInstallment = asyncHandler(async (req, res) => {
     if (allPaid) plan.status = 'completed';
 
     await plan.save({ session });
-    await session.commitTransaction();
 
-    result = { installmentPlan: plan, installment };
-  } catch (err) {
-    await session.abortTransaction();
-    throw err;
-  } finally {
-    session.endSession();
-  }
+    return { installmentPlan: plan, installment };
+  });
 
+  emitToBranch(String(patient.branch), 'installment:paid', result);
   return sendSuccess(res, result);
 });

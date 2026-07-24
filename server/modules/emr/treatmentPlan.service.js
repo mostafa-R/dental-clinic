@@ -48,7 +48,7 @@ export async function generateInvoiceFromPlan(plan, patient, { itemIds, discount
   }));
 
   // Fetch dental chart once (avoid N+1 per-item queries).
-  const dentalChart = await DentalChart.findOne({ patient: patient._id }).lean();
+  const dentalChart = await DentalChart.findOne({ patient: patient._id, branch: patient.branch }).lean();
 
   const result = await withTransaction(async (session) => {
     const invoice = await Invoice.create([{
@@ -66,8 +66,8 @@ export async function generateInvoiceFromPlan(plan, patient, { itemIds, discount
     for (const item of selectedItems) {
       item.invoice = invoice._id;
       if (item.status === 'pending') {
-        item.status = 'completed';
-        item.completedDate = new Date();
+        item.status = 'in_progress';
+        item.completedDate = null;
       }
       if (item.tooth) {
         const tooth = dentalChart?.teeth?.find((t) => t.number === item.tooth);

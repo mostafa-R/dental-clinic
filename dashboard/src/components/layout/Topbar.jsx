@@ -59,9 +59,9 @@ export default function Topbar({ title }) {
               <p className="font-medium text-slate-900 dark:text-white">
                 {user?.name || "Admin"}
               </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {t("superAdmin", language)}
-                </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">
+                {user?.role ? user.role.replace(/_/g, " ") : t("superAdmin", language)}
+              </p>
             </div>
             <button
               onClick={handleLogout}

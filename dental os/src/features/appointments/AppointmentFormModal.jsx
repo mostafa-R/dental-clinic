@@ -46,7 +46,7 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
   const [showInvoiceSection, setShowInvoiceSection] = useState(false);
 
   const inputCls =
-    'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500';
+    'w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 sm:py-2';
 
   useEffect(() => {
     if (open) {
@@ -71,11 +71,11 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
       });
       setPatientSearch('');
     } else {
-      setForm({ ...EMPTY, start: defaultStart ? toLocalInput(defaultStart) : '', branch: branches[0]?._id || '' });
+      setForm((prev) => ({ ...EMPTY, start: defaultStart ? toLocalInput(defaultStart) : '', branch: prev.branch || branches[0]?._id || '' }));
       setPatientSearch('');
     }
     dispatch(resetFormState());
-  }, [open, appointment, defaultStart, branches, dispatch]);
+  }, [open, appointment, defaultStart, dispatch]);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -161,12 +161,13 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
       title={isEdit ? t('appointments.form.edit') : t('appointments.form.new')}
       onClose={onClose}
       size="xl"
+      fullScreenMobile
       footer={
         <>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 sm:flex-none"
           >
             {t('common.cancel')}
           </button>
@@ -174,7 +175,7 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
             type="submit"
             form="appointment-form"
             disabled={submitting}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+            className="flex-1 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-400 sm:flex-none"
           >
             {submitting ? t('common.saving') : isEdit ? t('common.save') : t('appointments.form.book')}
           </button>
@@ -185,8 +186,8 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
         <div className="mb-3"><Spinner label={t('common.saving')} /></div>
       )}
 
-      <form id="appointment-form" onSubmit={onSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <form id="appointment-form" onSubmit={onSubmit} className="space-y-3 sm:space-y-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           <label className="block">
             <span className={labelCls}>{t('appointments.form.patient')} <span className="text-red-500">*</span></span>
             <input

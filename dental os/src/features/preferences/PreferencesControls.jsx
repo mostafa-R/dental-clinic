@@ -1,5 +1,5 @@
-import { useT } from '../lib/i18n';
-import { usePreferences } from '../features/preferences/usePreferences';
+import { useT } from '../../lib/i18n';
+import { usePreferences } from './usePreferences';
 
 function SunIcon() {
   return (

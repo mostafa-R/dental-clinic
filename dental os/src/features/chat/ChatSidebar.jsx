@@ -121,7 +121,7 @@ export default function ChatSidebar({ activeChat, onSelectChat, onClose }) {
               <span className="flex-1 text-start">
                 <span className="block">{user.name}</span>
                 <span className="block text-xs capitalize text-slate-400">
-                  {user.role.replace("_", " ")}
+                  {user.role || ""}
                 </span>
               </span>
               {unreadCount > 0 && (

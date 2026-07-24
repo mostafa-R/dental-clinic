@@ -74,7 +74,10 @@ export const updateAdmin = asyncHandler(async (req, res) => {
 
   if (name) admin.name = name;
   if (email) admin.email = email;
-  if (password) admin.password = password;
+  if (password) {
+    admin.password = password;
+    admin.tokenVersion = (admin.tokenVersion || 0) + 1;
+  }
   if (role) admin.role = role;
   if (permissions) admin.permissions = permissions;
 

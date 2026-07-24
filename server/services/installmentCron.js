@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import InstallmentPlan from '../modules/patients/installment.model.js';
+import { withTransaction } from '../core/transaction.js';
 
 async function markOverdue() {
   try {
@@ -15,29 +16,25 @@ async function markOverdue() {
 
       if (overdueIds.length === 0) continue;
 
-      const allInstallments = plan.installments;
-      const updatedInstallments = allInstallments.map((inst) =>
-        overdueIds.some((id) => String(id) === String(inst._id))
-          ? { ...inst, status: 'overdue' }
-          : inst,
-      );
+      await withTransaction(async (session) => {
+        const livePlan = await InstallmentPlan.findOne({ _id: plan._id, status: 'active' }).session(session);
+        if (!livePlan) return;
 
-      const allOverdue = updatedInstallments.every((i) => i.status === 'overdue');
-      const allPaid = updatedInstallments.every((i) => i.status === 'paid');
+        for (const inst of livePlan.installments) {
+          if (overdueIds.some((id) => String(id) === String(inst._id)) && inst.status === 'pending') {
+            inst.status = 'overdue';
+          }
+        }
 
-      let newStatus = plan.status;
-      if (allPaid) newStatus = 'completed';
-      else if (allOverdue) newStatus = 'defaulted';
+        const allOverdue = livePlan.installments.every((i) => i.status === 'overdue');
+        const allPaid = livePlan.installments.every((i) => i.status === 'paid');
 
-      await InstallmentPlan.findOneAndUpdate(
-        { _id: plan._id, status: plan.status },
-        {
-          $set: {
-            installments: updatedInstallments,
-            status: newStatus,
-          },
-        },
-      );
+        if (allPaid) livePlan.status = 'completed';
+        else if (allOverdue) livePlan.status = 'defaulted';
+
+        await livePlan.save({ session });
+      });
+
       changed++;
     }
 

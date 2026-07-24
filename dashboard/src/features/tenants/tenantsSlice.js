@@ -157,7 +157,7 @@ const tenantsSlice = createSlice({
       })
       .addCase(fetchTenants.fulfilled, (state, action) => {
         state.loading = false;
-        state.items = action.payload.tenants;
+        state.items = action.payload.tenants || [];
         state.pagination = {
           ...state.pagination,
           ...action.payload.pagination,
@@ -185,7 +185,7 @@ const tenantsSlice = createSlice({
       })
       .addCase(createTenant.fulfilled, (state, action) => {
         state.loading = false;
-        const { adminCredentials, ...tenantData } = action.payload;
+        const { adminCredentials: _adminCredentials, encryptionKey: _encryptionKey, ...tenantData } = action.payload;
         state.items.unshift(tenantData);
       })
       .addCase(createTenant.rejected, (state, action) => {

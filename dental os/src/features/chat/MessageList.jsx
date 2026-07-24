@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
 import { formatTime } from '../../lib/format';
 import { useT } from '../../lib/i18n';
-import Spinner from '../ui/Spinner';
+import Spinner from '../../components/ui/Spinner';
 
 export default function MessageList() {
   const { t } = useT();

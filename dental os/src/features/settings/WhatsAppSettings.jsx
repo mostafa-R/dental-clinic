@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
-import { useSelector } from "react-redux";
-import Spinner from "../../components/ui/Spinner";
-import api from "../../lib/axios";
-import { t } from "../../lib/i18n";
+import { useCallback, useEffect, useState } from 'react';
+import Spinner from '../../components/ui/Spinner';
+import Card from '../../components/ui/Card';
+import { settingsApi } from './settingsApi';
+import { useT } from '../../lib/i18n';
 
 function Toast({ message, type, onClose }) {
   useEffect(() => {
@@ -11,10 +11,10 @@ function Toast({ message, type, onClose }) {
   }, [onClose]);
   return (
     <div
-      className={`fixed top-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-sm font-medium transition-all ${
-        type === "success"
-          ? "bg-emerald-600 text-white"
-          : "bg-red-600 text-white"
+      className={`fixed top-4 right-4 z-50 rounded-lg px-4 py-2 text-sm font-medium shadow-lg transition-all ${
+        type === 'success'
+          ? 'bg-emerald-600 text-white'
+          : 'bg-red-600 text-white'
       }`}
     >
       {message}
@@ -26,26 +26,26 @@ function Toast({ message, type, onClose }) {
 }
 
 export default function WhatsAppSettings() {
-  const { language } = useSelector((state) => state.ui);
+  const { t } = useT();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [msg, setMsg] = useState(null);
   const [settings, setSettings] = useState({
     enabled: false,
-    provider: "whatsapp_web",
+    provider: 'whatsapp_web',
     settings: {
       appointmentReminder: false,
       appointmentConfirm: false,
       reminderHours: 2,
     },
-    status: "disconnected",
+    status: 'disconnected',
   });
   const [qrCode, setQrCode] = useState(null);
-  const [testForm, setTestForm] = useState({ to: "", message: "" });
+  const [testForm, setTestForm] = useState({ to: '', message: '' });
   const [sendingTest, setSendingTest] = useState(false);
 
-  const toast = useCallback((message, type = "success") => {
+  const toast = useCallback((message, type = 'success') => {
     setMsg({ message, type });
   }, []);
 
@@ -56,10 +56,10 @@ export default function WhatsAppSettings() {
   async function loadSettings() {
     setLoading(true);
     try {
-      const { data } = await api.get("/whatsapp/settings");
-      setSettings(data.data);
+      const data = await settingsApi.getWhatsAppSettings();
+      setSettings(data);
     } catch {
-      toast(t("whatsapp.failed", language), "error");
+      toast(t('whatsapp.failed'), 'error');
     } finally {
       setLoading(false);
     }
@@ -68,11 +68,11 @@ export default function WhatsAppSettings() {
   async function handleSave() {
     setSaving(true);
     try {
-      const { data } = await api.put("/whatsapp/settings", settings);
-      setSettings(data.data);
-      toast(t("whatsapp.saved", language));
+      const data = await settingsApi.updateWhatsAppSettings(settings);
+      setSettings(data);
+      toast(t('whatsapp.saved'));
     } catch {
-      toast(t("whatsapp.failed", language), "error");
+      toast(t('whatsapp.failed'), 'error');
     } finally {
       setSaving(false);
     }
@@ -82,15 +82,15 @@ export default function WhatsAppSettings() {
     setConnecting(true);
     setQrCode(null);
     try {
-      await api.post("/whatsapp/connect");
-      const qrRes = await api.get("/whatsapp/qr");
-      if (qrRes.data.data?.qrCode) {
-        setQrCode(qrRes.data.data.qrCode);
+      await settingsApi.connectWhatsApp();
+      const qrRes = await settingsApi.getWhatsAppQr();
+      if (qrRes?.qrCode) {
+        setQrCode(qrRes.qrCode);
       }
-      const statusRes = await api.get("/whatsapp/status");
-      setSettings((prev) => ({ ...prev, status: statusRes.data.data.status }));
+      const statusRes = await settingsApi.getWhatsAppStatus();
+      setSettings((prev) => ({ ...prev, status: statusRes?.status }));
     } catch {
-      toast(t("whatsapp.failed", language), "error");
+      toast(t('whatsapp.failed'), 'error');
     } finally {
       setConnecting(false);
     }
@@ -98,12 +98,12 @@ export default function WhatsAppSettings() {
 
   async function handleDisconnect() {
     try {
-      await api.post("/whatsapp/disconnect");
-      setSettings((prev) => ({ ...prev, status: "disconnected" }));
+      await settingsApi.disconnectWhatsApp();
+      setSettings((prev) => ({ ...prev, status: 'disconnected' }));
       setQrCode(null);
-      toast(t("whatsapp.disconnected", language));
+      toast(t('whatsapp.disconnected'));
     } catch {
-      toast(t("whatsapp.failed", language), "error");
+      toast(t('whatsapp.failed'), 'error');
     }
   }
 
@@ -112,31 +112,27 @@ export default function WhatsAppSettings() {
     if (!testForm.to || !testForm.message) return;
     setSendingTest(true);
     try {
-      await api.post("/whatsapp/test", testForm);
-      toast(t("whatsapp.sent", language));
-      setTestForm({ to: "", message: "" });
+      await settingsApi.sendTestWhatsApp(testForm);
+      toast(t('whatsapp.sent'));
+      setTestForm({ to: '', message: '' });
     } catch {
-      toast(t("whatsapp.failed", language), "error");
+      toast(t('whatsapp.failed'), 'error');
     } finally {
       setSendingTest(false);
     }
   }
 
   useEffect(() => {
-    if (settings.status === "connected" || settings.status !== "connecting")
-      return;
+    if (settings.status === 'connected' || settings.status !== 'connecting') return;
     const interval = setInterval(async () => {
       try {
-        const qrRes = await api.get("/whatsapp/qr");
-        if (qrRes.data.data?.qrCode) {
-          setQrCode(qrRes.data.data.qrCode);
+        const qrRes = await settingsApi.getWhatsAppQr();
+        if (qrRes?.qrCode) {
+          setQrCode(qrRes.qrCode);
         }
-        const statusRes = await api.get("/whatsapp/status");
-        setSettings((prev) => ({
-          ...prev,
-          status: statusRes.data.data.status,
-        }));
-        if (statusRes.data.data.status === "connected") {
+        const statusRes = await settingsApi.getWhatsAppStatus();
+        setSettings((prev) => ({ ...prev, status: statusRes?.status }));
+        if (statusRes?.status === 'connected') {
           clearInterval(interval);
         }
       } catch {}
@@ -144,53 +140,49 @@ export default function WhatsAppSettings() {
     return () => clearInterval(interval);
   }, [settings.status]);
 
-  if (loading)
+  if (loading) {
     return (
       <div className="flex justify-center py-8">
         <Spinner />
       </div>
     );
+  }
 
-  const isConnected = settings.status === "connected";
+  const isConnected = settings.status === 'connected';
+
+  const inputCls =
+    'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white';
 
   return (
     <div className="space-y-6">
       {msg && (
-        <Toast
-          message={msg.message}
-          type={msg.type}
-          onClose={() => setMsg(null)}
-        />
+        <Toast message={msg.message} type={msg.type} onClose={() => setMsg(null)} />
       )}
 
-      <div className="text-center py-8 text-slate-500 dark:text-slate-400">
-        Underwork
-      </div>
-
-      {/* <Card>
-        <div className="flex items-center justify-between mb-4">
+      <Card>
+        <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-              {t("whatsapp.title", language)}
+              {t('whatsapp.title')}
             </h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {t("whatsapp.desc", language)}
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {t('whatsapp.desc')}
             </p>
           </div>
           <span
-            className={`px-3 py-1 rounded-full text-xs font-medium ${
+            className={`rounded-full px-3 py-1 text-xs font-medium ${
               isConnected
-                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                : settings.status === "connecting"
-                  ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                  : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                : settings.status === 'connecting'
+                  ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                  : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
             }`}
           >
             {isConnected
-              ? t("whatsapp.connected", language)
-              : settings.status === "connecting"
-                ? t("whatsapp.connecting", language)
-                : t("whatsapp.disconnected", language)}
+              ? t('whatsapp.connected')
+              : settings.status === 'connecting'
+                ? t('whatsapp.connecting')
+                : t('whatsapp.disconnected')}
           </span>
         </div>
 
@@ -200,39 +192,26 @@ export default function WhatsAppSettings() {
               type="checkbox"
               id="whatsappEnabled"
               checked={settings.enabled}
-              onChange={(e) =>
-                setSettings((prev) => ({ ...prev, enabled: e.target.checked }))
-              }
+              onChange={(e) => setSettings((prev) => ({ ...prev, enabled: e.target.checked }))}
               className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
             />
-            <label
-              htmlFor="whatsappEnabled"
-              className="text-sm font-medium text-slate-700 dark:text-slate-200"
-            >
-              {t("whatsapp.enabled", language)}
+            <label htmlFor="whatsappEnabled" className="text-sm font-medium text-slate-700 dark:text-slate-200">
+              {t('whatsapp.enabled')}
             </label>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              {t("whatsapp.provider", language)}
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+              {t('whatsapp.provider')}
             </label>
             <select
               value={settings.provider}
-              onChange={(e) =>
-                setSettings((prev) => ({ ...prev, provider: e.target.value }))
-              }
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+              onChange={(e) => setSettings((prev) => ({ ...prev, provider: e.target.value }))}
+              className={inputCls}
             >
-              <option value="whatsapp_web">
-                {t("whatsapp.provider.whatsapp_web", language)}
-              </option>
-              <option value="cloud_api">
-                {t("whatsapp.provider.cloud_api", language)}
-              </option>
-              <option value="twilio">
-                {t("whatsapp.provider.twilio", language)}
-              </option>
+              <option value="whatsapp_web">{t('whatsapp.provider.whatsapp_web')}</option>
+              <option value="cloud_api">{t('whatsapp.provider.cloud_api')}</option>
+              <option value="twilio">{t('whatsapp.provider.twilio')}</option>
             </select>
           </div>
         </div>
@@ -244,43 +223,43 @@ export default function WhatsAppSettings() {
               disabled={connecting}
               className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
             >
-              {connecting ? "..." : t("whatsapp.connect", language)}
+              {connecting ? '...' : t('whatsapp.connect')}
             </button>
           ) : (
             <button
               onClick={handleDisconnect}
               className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
             >
-              {t("whatsapp.disconnect", language)}
+              {t('whatsapp.disconnect')}
             </button>
           )}
           <button
             onClick={handleSave}
             disabled={saving}
-            className="rounded-lg border border-slate-300 dark:border-slate-600 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
           >
-            {saving ? "..." : t("common.save", language)}
+            {saving ? '...' : t('common.save')}
           </button>
         </div>
       </Card>
 
       {qrCode && (
         <Card>
-          <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-            {t("whatsapp.scanQr", language)}
+          <h4 className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+            {t('whatsapp.scanQr')}
           </h4>
-          <p className="text-xs text-slate-500 mb-4">
-            {t("whatsapp.qrExpires", language)}
+          <p className="mb-4 text-xs text-slate-500">
+            {t('whatsapp.qrExpires')}
           </p>
           <div className="flex justify-center">
-            <img src={qrCode} alt="WhatsApp QR Code" className="w-48 h-48" />
+            <img src={qrCode} alt="WhatsApp QR Code" className="h-48 w-48" />
           </div>
         </Card>
       )}
 
       <Card>
-        <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">
-          {t("whatsapp.settings.notifications", language)}
+        <h4 className="mb-4 text-sm font-semibold text-slate-900 dark:text-white">
+          {t('whatsapp.settings.notifications')}
         </h4>
         <div className="space-y-4">
           <div className="flex items-center gap-3">
@@ -291,19 +270,13 @@ export default function WhatsAppSettings() {
               onChange={(e) =>
                 setSettings((prev) => ({
                   ...prev,
-                  settings: {
-                    ...prev.settings,
-                    appointmentReminder: e.target.checked,
-                  },
+                  settings: { ...prev.settings, appointmentReminder: e.target.checked },
                 }))
               }
               className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
             />
-            <label
-              htmlFor="waReminder"
-              className="text-sm text-slate-700 dark:text-slate-200"
-            >
-              {t("whatsapp.settings.reminder", language)}
+            <label htmlFor="waReminder" className="text-sm text-slate-700 dark:text-slate-200">
+              {t('whatsapp.settings.reminder')}
             </label>
           </div>
           <div className="flex items-center gap-3">
@@ -314,24 +287,18 @@ export default function WhatsAppSettings() {
               onChange={(e) =>
                 setSettings((prev) => ({
                   ...prev,
-                  settings: {
-                    ...prev.settings,
-                    appointmentConfirm: e.target.checked,
-                  },
+                  settings: { ...prev.settings, appointmentConfirm: e.target.checked },
                 }))
               }
               className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
             />
-            <label
-              htmlFor="waConfirm"
-              className="text-sm text-slate-700 dark:text-slate-200"
-            >
-              {t("whatsapp.settings.confirm", language)}
+            <label htmlFor="waConfirm" className="text-sm text-slate-700 dark:text-slate-200">
+              {t('whatsapp.settings.confirm')}
             </label>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              {t("whatsapp.settings.reminderHours", language)}
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+              {t('whatsapp.settings.reminderHours')}
             </label>
             <input
               type="number"
@@ -341,48 +308,41 @@ export default function WhatsAppSettings() {
               onChange={(e) =>
                 setSettings((prev) => ({
                   ...prev,
-                  settings: {
-                    ...prev.settings,
-                    reminderHours: parseInt(e.target.value) || 2,
-                  },
+                  settings: { ...prev.settings, reminderHours: parseInt(e.target.value) || 2 },
                 }))
               }
-              className="w-24 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+              className="w-24 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
             />
           </div>
         </div>
       </Card>
 
       <Card>
-        <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">
-          {t("whatsapp.test", language)}
+        <h4 className="mb-4 text-sm font-semibold text-slate-900 dark:text-white">
+          {t('whatsapp.test')}
         </h4>
         <form onSubmit={handleTestSend} className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              {t("whatsapp.testPhone", language)}
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+              {t('whatsapp.testPhone')}
             </label>
             <input
               type="text"
               value={testForm.to}
-              onChange={(e) =>
-                setTestForm((prev) => ({ ...prev, to: e.target.value }))
-              }
+              onChange={(e) => setTestForm((prev) => ({ ...prev, to: e.target.value }))}
               placeholder="+201234567890"
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+              className={inputCls}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              {t("whatsapp.testMessage", language)}
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+              {t('whatsapp.testMessage')}
             </label>
             <textarea
               value={testForm.message}
-              onChange={(e) =>
-                setTestForm((prev) => ({ ...prev, message: e.target.value }))
-              }
+              onChange={(e) => setTestForm((prev) => ({ ...prev, message: e.target.value }))}
               rows={3}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+              className={inputCls}
             />
           </div>
           <button
@@ -390,10 +350,10 @@ export default function WhatsAppSettings() {
             disabled={sendingTest || !isConnected}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
           >
-            {sendingTest ? "..." : t("whatsapp.send", language)}
+            {sendingTest ? '...' : t('whatsapp.send')}
           </button>
         </form>
-      </Card> */}
+      </Card>
     </div>
   );
 }

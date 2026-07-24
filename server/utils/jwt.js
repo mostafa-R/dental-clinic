@@ -32,7 +32,7 @@ export const cookieOptions = {
 function buildPayload(user, type = "clinic") {
   return {
     sub: user._id.toString(),
-    role: user.role,
+    roleId: user.roleId ? user.roleId.toString() : null,
     branch: user.branch ? user.branch.toString() : null,
     tokenVersion: user.tokenVersion ?? 0,
     type,
@@ -107,10 +107,10 @@ export function clearAuthCookies(res, type = "clinic") {
 
 function msFromExpiry(expiry) {
   if (typeof expiry !== "string") return 86400000;
-  const match = expiry.match(/^(\d+)([smhd])$/);
+  const match = expiry.match(/^(\d+)([smhdw])$/);
   if (!match) return 86400000;
   const value = Number(match[1]);
   const unit = match[2];
-  const multipliers = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
+  const multipliers = { s: 1000, m: 60000, h: 3600000, d: 86400000, w: 604800000 };
   return value * multipliers[unit];
 }

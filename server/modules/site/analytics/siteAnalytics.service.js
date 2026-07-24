@@ -33,7 +33,16 @@ export async function getGlobalStats() {
     ]),
     Subscription.aggregate([
       { $match: { status: 'active' } },
-      { $group: { _id: null, mrr: { $sum: '$amount' } } },
+      { $addFields: {
+          monthlyAmount: {
+            $cond: {
+              if: { $eq: ['$billingCycle', 'yearly'] },
+              then: { $divide: ['$amount', 12] },
+              else: '$amount',
+            },
+          },
+      } },
+      { $group: { _id: null, mrr: { $sum: '$monthlyAmount' } } },
     ]),
   ]);
 
@@ -113,7 +122,7 @@ export async function getTenantUsage(tenantId) {
   const [branches, users, doctors, patients, chartEntries, clinicalNotes] = await Promise.all([
     Branch.countDocuments({ tenant: tenantId }),
     User.countDocuments({ tenant: tenantId }),
-    User.countDocuments({ tenant: tenantId, $or: [{ isDoctor: true }, { role: 'doctor' }] }),
+    User.countDocuments({ tenant: tenantId, isDoctor: true }),
     Patient.countDocuments({ tenant: tenantId }),
     DentalChart.countDocuments({ tenant: tenantId }),
     ClinicalNote.countDocuments({ tenant: tenantId }),

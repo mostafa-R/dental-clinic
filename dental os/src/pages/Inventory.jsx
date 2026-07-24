@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Card from '../components/ui/Card';
@@ -18,9 +18,10 @@ import {
 } from '../features/inventory/inventorySlice';
 import { showErrorDialog } from '../features/ui/uiSlice';
 import { deleteItem } from '../features/inventory/inventorySlice';
-import { INVENTORY_CATEGORIES } from '../lib/inventory';
+import { INVENTORY_CATEGORIES } from '../features/inventory/inventory';
 import { formatDate, formatMoney } from '../lib/format';
 import { useT } from '../lib/i18n';
+import { useSocketEvent } from '../lib/socket';
 import { canManageInventory } from '../lib/roles';
 
 export default function Inventory() {
@@ -38,6 +39,11 @@ export default function Inventory() {
   }, [dispatch, query]);
 
   useEffect(() => () => dispatch(resetInventory()), [dispatch]);
+
+  const refetch = useCallback(() => { dispatch(fetchItems(query)); }, [dispatch, query]);
+  useSocketEvent('inventory:created', refetch);
+  useSocketEvent('inventory:updated', refetch);
+  useSocketEvent('inventory:deleted', refetch);
 
   const openCreate = () => { setEditing(null); setFormOpen(true); };
   const openEdit = (item) => { setEditing(item); setFormOpen(true); };
@@ -71,7 +77,7 @@ export default function Inventory() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <StatCard label={t('inventory.stats.totalItems')} value={pagination.total} />
         <StatCard label={t('inventory.stats.lowStock')} value={stats.lowStockCount} accent="amber" />
-        <StatCard label={t('inventory.stats.stockValue')} value={formatMoney(items.reduce((sum, i) => sum + (i.quantity * i.costPerUnit), 0))} accent="emerald" />
+        <StatCard label={t('inventory.stats.stockValue')} value={formatMoney(stats.totalStockValue)} accent="emerald" />
       </div>
 
       <Card padded={false}>
@@ -173,6 +179,8 @@ export default function Inventory() {
             total={pagination.total}
             pageSize={pagination.limit}
             onChange={(p) => dispatch(setPage(p))}
+            prevLabel={t('common.prev')}
+            nextLabel={t('common.next')}
           />
         )}
       </Card>

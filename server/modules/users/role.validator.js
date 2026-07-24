@@ -13,6 +13,7 @@ export const createRoleSchema = z.object({
   name: z.string().min(1, 'Role name is required').max(60),
   description: z.string().max(300).optional(),
   permissions: z.array(permissionEntrySchema).max(20),
+  branch: z.string().length(24).optional(),
 });
 
 export const updateRoleSchema = z

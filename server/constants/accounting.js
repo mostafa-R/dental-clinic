@@ -12,9 +12,9 @@ export const EXPENSE_CATEGORIES = [
   'other',
 ];
 
-export const EXPENSE_PAYMENT_METHODS = ['cash', 'bank', 'card'];
+export const EXPENSE_PAYMENT_METHODS = ['cash', 'bank', 'card', 'wallet'];
 
-export const COMMISSION_STATUS = ['pending', 'paid'];
+export const COMMISSION_STATUS = ['pending', 'paid', 'void'];
 
 /**
  * Round to 2 decimals to avoid floating-point drift on money fields.

@@ -158,7 +158,7 @@ const adminsSlice = createSlice({
       })
       .addCase(createAdmin.fulfilled, (state, action) => {
         state.loading = false;
-        state.items.unshift(action.payload);
+        state.items.unshift(action.payload.admin || action.payload);
       })
       .addCase(createAdmin.rejected, (state, action) => {
         state.loading = false;

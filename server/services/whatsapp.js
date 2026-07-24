@@ -15,19 +15,22 @@ export async function getWhatsAppSettings(tenantId) {
   return settings;
 }
 
+const ALLOWED_CONFIG_KEYS = ['phoneNumber', 'phoneNumberId'];
+const ALLOWED_SETTINGS_KEYS = ['appointmentReminder', 'appointmentConfirm', 'reminderHours'];
+
 export async function updateWhatsAppSettings(tenantId, data) {
   const update = {};
   if (data.enabled !== undefined) update.enabled = data.enabled;
   if (data.provider) update.provider = data.provider;
   if (data.config) {
-    Object.entries(data.config).forEach(([k, v]) => {
-      if (v !== undefined) update[`config.${k}`] = v;
-    });
+    for (const [k, v] of Object.entries(data.config)) {
+      if (ALLOWED_CONFIG_KEYS.includes(k) && v !== undefined) update[`config.${k}`] = v;
+    }
   }
   if (data.settings) {
-    Object.entries(data.settings).forEach(([k, v]) => {
-      if (v !== undefined) update[`settings.${k}`] = v;
-    });
+    for (const [k, v] of Object.entries(data.settings)) {
+      if (ALLOWED_SETTINGS_KEYS.includes(k) && v !== undefined) update[`settings.${k}`] = v;
+    }
   }
 
   const settings = await WhatsAppSetting.findOneAndUpdate(
@@ -87,6 +90,7 @@ export async function connectWhatsApp(tenantId) {
         '--disable-gpu',
         '--disable-dev-shm-usage',
         '--no-zygote',
+        '--no-sandbox',
       ],
     },
   });

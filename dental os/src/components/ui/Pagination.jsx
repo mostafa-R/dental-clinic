@@ -1,4 +1,4 @@
-export default function Pagination({ page, pages, total, pageSize = 20, onChange }) {
+export default function Pagination({ page, pages, total, pageSize = 20, onChange, prevLabel = 'Prev', nextLabel = 'Next' }) {
   if (total === 0) return null;
 
   const from = (page - 1) * pageSize + 1;
@@ -23,7 +23,7 @@ export default function Pagination({ page, pages, total, pageSize = 20, onChange
           disabled={page <= 1}
           className="rounded-md border border-slate-200 px-2.5 py-1 text-sm text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
         >
-          Prev
+          {prevLabel}
         </button>
         <span className="px-2 text-sm text-slate-600 dark:text-slate-300">
           {page} / {pages}
@@ -34,7 +34,7 @@ export default function Pagination({ page, pages, total, pageSize = 20, onChange
           disabled={page >= pages}
           className="rounded-md border border-slate-200 px-2.5 py-1 text-sm text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
         >
-          Next
+          {nextLabel}
         </button>
       </div>
     </div>

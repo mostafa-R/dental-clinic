@@ -8,6 +8,7 @@ import { currentTenant, filterByBranch, resolveBranchForCreate, toObjectId } fro
 import { escapeRegex } from '../../utils/escapeRegex.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 import { stripPHI } from '../../middleware/phiRestrict.js';
+import { emitToBranch } from '../../socket/index.js';
 
 function buildSearchFilter(search) {
   if (!search?.trim()) return null;
@@ -33,9 +34,6 @@ function normalizePayload(data) {
     if (Number.isNaN(payload.dateOfBirth.getTime())) {
       throw ApiError.badRequest('Invalid date of birth');
     }
-  }
-  if (payload.email === '') {
-    payload.email = '';
   }
   return payload;
 }
@@ -106,6 +104,7 @@ export const createPatient = asyncHandler(async (req, res) => {
   const patient = await Patient.create({ ...payload, branch, tenant });
   await patient.populate('branch', 'name');
 
+  emitToBranch(String(branch), 'patient:created', { patient });
   return sendSuccess(res, { patient }, 201);
 });
 
@@ -119,7 +118,7 @@ export const updatePatient = asyncHandler(async (req, res) => {
   const payload = normalizePayload(req.validatedBody);
 
   // Only system admin may reassign a patient to another branch.
-  const canReassignBranch = req._roleResolved?.isSystemAdmin ?? ['site_admin', 'clinic_admin', 'super_admin'].includes(req.user.role);
+  const canReassignBranch = req._roleResolved?.isSystemAdmin;
   if (!canReassignBranch) {
     delete payload.branch;
   } else if (payload.branch) {
@@ -136,6 +135,7 @@ export const updatePatient = asyncHandler(async (req, res) => {
     throw ApiError.notFound('Patient not found');
   }
 
+  emitToBranch(String(patient.branch?._id ?? patient.branch), 'patient:updated', { patient });
   return sendSuccess(res, { patient });
 });
 
@@ -156,5 +156,6 @@ export const archivePatient = asyncHandler(async (req, res) => {
     throw ApiError.notFound('Patient not found');
   }
 
+  emitToBranch(String(patient.branch), 'patient:archived', { _id: patient._id });
   return sendSuccess(res, { message: 'Patient archived' });
 });

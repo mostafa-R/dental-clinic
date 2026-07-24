@@ -1,4 +1,9 @@
-// Site Admin Permissions (for Super Admin Dashboard)
+/**
+ * Site Admin permissions — for the super-admin / platform dashboard only.
+ * These are independent of the clinic RBAC modules defined in
+ * server/constants/permissions.js (which govern tenant-level access).
+ * This file is the source of truth for site-admin permission strings.
+ */
 export const SITE_PERMISSIONS = {
   // Tenant Management
   TENANTS_VIEW: "tenants:view",

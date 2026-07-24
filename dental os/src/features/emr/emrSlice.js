@@ -226,7 +226,8 @@ const initialState = {
   formError: null,
 };
 
-function replacePlan(state, plan) {
+function replacePlan(state, action) {
+  const plan = action.payload.plan;
   const idx = state.plans.items.findIndex((p) => p._id === plan._id);
   if (idx >= 0) state.plans.items[idx] = plan;
   else state.plans.items.unshift(plan);
@@ -304,6 +305,10 @@ const emrSlice = createSlice({
         state.plans.status = 'failed';
         state.plans.error = action.payload;
       })
+      .addCase(createPlan.pending, (state) => {
+        state.formStatus = 'loading';
+        state.formError = null;
+      })
       .addCase(createPlan.fulfilled, (state, action) => {
         state.plans.items.unshift(action.payload.plan);
         state.formStatus = 'succeeded';
@@ -312,9 +317,25 @@ const emrSlice = createSlice({
         state.formStatus = 'failed';
         state.formError = action.payload;
       })
+      .addCase(updatePlan.pending, (state) => {
+        state.formStatus = 'loading';
+        state.formError = null;
+      })
       .addCase(updatePlan.fulfilled, replacePlan)
+      .addCase(updatePlan.rejected, (state, action) => {
+        state.formStatus = 'failed';
+        state.formError = action.payload;
+      })
       .addCase(archivePlan.fulfilled, replacePlan)
+      .addCase(addPlanItem.pending, (state) => {
+        state.formStatus = 'loading';
+        state.formError = null;
+      })
       .addCase(addPlanItem.fulfilled, replacePlan)
+      .addCase(addPlanItem.rejected, (state, action) => {
+        state.formStatus = 'failed';
+        state.formError = action.payload;
+      })
       .addCase(updatePlanItem.fulfilled, replacePlan)
       .addCase(removePlanItem.fulfilled, replacePlan)
 
@@ -332,6 +353,10 @@ const emrSlice = createSlice({
         state.prescriptions.status = 'failed';
         state.prescriptions.error = action.payload;
       })
+      .addCase(createPrescription.pending, (state) => {
+        state.formStatus = 'loading';
+        state.formError = null;
+      })
       .addCase(createPrescription.fulfilled, (state, action) => {
         state.prescriptions.items.unshift(action.payload.prescription);
         state.formStatus = 'succeeded';
@@ -340,10 +365,19 @@ const emrSlice = createSlice({
         state.formStatus = 'failed';
         state.formError = action.payload;
       })
+      .addCase(updatePrescription.pending, (state) => {
+        state.formStatus = 'loading';
+        state.formError = null;
+      })
       .addCase(updatePrescription.fulfilled, (state, action) => {
         const rx = action.payload.prescription;
         const idx = state.prescriptions.items.findIndex((p) => p._id === rx._id);
         if (idx >= 0) state.prescriptions.items[idx] = rx;
+        state.formStatus = 'succeeded';
+      })
+      .addCase(updatePrescription.rejected, (state, action) => {
+        state.formStatus = 'failed';
+        state.formError = action.payload;
       })
       .addCase(deletePrescription.fulfilled, (state, action) => {
         state.prescriptions.items = state.prescriptions.items.filter((p) => p._id !== action.payload);
@@ -363,6 +397,10 @@ const emrSlice = createSlice({
         state.notes.status = 'failed';
         state.notes.error = action.payload;
       })
+      .addCase(createNote.pending, (state) => {
+        state.formStatus = 'loading';
+        state.formError = null;
+      })
       .addCase(createNote.fulfilled, (state, action) => {
         state.notes.items.unshift(action.payload.note);
         state.formStatus = 'succeeded';
@@ -371,10 +409,19 @@ const emrSlice = createSlice({
         state.formStatus = 'failed';
         state.formError = action.payload;
       })
+      .addCase(updateNote.pending, (state) => {
+        state.formStatus = 'loading';
+        state.formError = null;
+      })
       .addCase(updateNote.fulfilled, (state, action) => {
         const note = action.payload.note;
         const idx = state.notes.items.findIndex((n) => n._id === note._id);
         if (idx >= 0) state.notes.items[idx] = note;
+        state.formStatus = 'succeeded';
+      })
+      .addCase(updateNote.rejected, (state, action) => {
+        state.formStatus = 'failed';
+        state.formError = action.payload;
       })
       .addCase(deleteNote.fulfilled, (state, action) => {
         state.notes.items = state.notes.items.filter((n) => n._id !== action.payload);

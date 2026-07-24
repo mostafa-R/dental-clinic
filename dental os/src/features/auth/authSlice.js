@@ -38,6 +38,18 @@ export const refreshSession = createAsyncThunk(
   },
 );
 
+export const verifyImpersonation = createAsyncThunk(
+  'auth/verifyImpersonation',
+  async (token, { rejectWithValue }) => {
+    try {
+      const { user } = await authApi.verifyImpersonation(token);
+      return user;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || 'Invalid impersonation token');
+    }
+  },
+);
+
 const authSlice = createSlice({
   name: 'auth',
   initialState: {
@@ -101,6 +113,16 @@ const authSlice = createSlice({
       .addCase(refreshSession.rejected, (state) => {
         state.user = null;
         state.status = 'failed';
+      })
+      .addCase(verifyImpersonation.fulfilled, (state, action) => {
+        state.user = action.payload;
+        state.status = 'succeeded';
+        state.error = null;
+      })
+      .addCase(verifyImpersonation.rejected, (state, action) => {
+        state.user = null;
+        state.status = 'failed';
+        state.error = action.payload;
       });
   },
 });

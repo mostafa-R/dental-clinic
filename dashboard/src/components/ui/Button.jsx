@@ -26,6 +26,7 @@ export default function Button({
   loading = false,
   disabled = false,
   className = "",
+  icon: Icon,
   ...props
 }) {
   return (
@@ -35,6 +36,7 @@ export default function Button({
       {...props}
     >
       {loading && <Spinner size="sm" />}
+      {Icon && !loading && <Icon className="w-4 h-4" />}
       {children}
     </button>
   );

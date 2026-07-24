@@ -36,6 +36,7 @@ export const translations = {
     inactive: "Inactive",
     name: "Name",
     email: "Email",
+    password: "Password",
     phone: "Phone",
     address: "Address",
     city: "City",
@@ -97,6 +98,13 @@ export const translations = {
     clinicAdminDesc: "A clinic admin account is auto-provisioned using the tenant email. Set the admin password below.",
     adminPassword: "Admin Password",
     setAdminPassword: "Set admin password",
+    tenantStatusLabel: "Tenant Status",
+    subscriptionEnds: "Subscription Ends",
+    trialDescription: "14-day free trial. Upgrade to active after trial ends.",
+    activeDescription: "Full access immediately. Billing starts now.",
+    locationInfo: "Location",
+    locationOptional: "Optional — helps identify the clinic location.",
+    planDetails: "Plan Details",
     credentialsTitle: "Tenant created! Share these credentials with the clinic:",
     credentialsPassword: "Password:",
     credentialsLogin: "Login:",
@@ -335,6 +343,47 @@ export const translations = {
     suspendedTenants: "Suspended",
     activeSubscriptions: "Active Subscriptions",
     expiredSubscriptions: "Expired",
+
+    // Backups
+    backups: "Backups",
+    backupsDesc: "Database backup history and manual backup trigger",
+    triggerBackup: "Trigger Backup",
+    noBackups: "No backups found",
+    filename: "Filename",
+    size: "Size",
+    duration: "Duration",
+    type: "Type",
+
+    // Performance
+    performance: "Performance",
+    performanceDesc: "API route performance metrics and response times",
+    totalRequests: "Total Requests",
+    totalRoutes: "Total Routes",
+    avgResponseTime: "Avg Response Time",
+    errorRate: "Error Rate",
+    prdTarget: "PRD Target (<200ms)",
+    prdMet: "All routes under 200ms",
+    prdNotMet: "Some routes exceed 200ms",
+    routesUnder200ms: "Routes Under 200ms",
+    routesOver200ms: "Routes Over 200ms",
+    routePerformance: "Route Performance",
+    route: "Route",
+    hits: "Hits",
+    avgMs: "Avg (ms)",
+    minMs: "Min (ms)",
+    maxMs: "Max (ms)",
+    errorRateLabel: "Error Rate",
+    noPerfData: "No performance data yet. Routes will appear after API calls are made.",
+    resetStats: "Reset Stats",
+    resetPerfConfirm: "Reset all performance statistics? This cannot be undone.",
+    refresh: "Refresh",
+
+    // 2FA Login
+    twoFactorChallenge: "Two-Factor Verification",
+    twoFactorChallengeDesc: "Enter the 6-digit code from your authenticator app",
+    backupCodeOption: "Use a backup code instead",
+    enterBackupCode: "Enter backup code",
+    loginCode: "Login Code",
   },
   ar: {
     // Navigation
@@ -347,6 +396,10 @@ export const translations = {
     plans: "الخطط",
     settings: "الإعدادات",
     logout: "تسجيل الخروج",
+
+    // Navigation (continued)
+    backups: "النسخ الاحتياطي",
+    performance: "الأداء",
 
     // Common
     search: "بحث",
@@ -433,6 +486,13 @@ export const translations = {
     clinicAdminDesc: "يتم إنشاء حساب مدير العيادة تلقائياً باستخدام البريد الإلكتروني للمشترك. قم بتعيين كلمة المرور أدناه.",
     adminPassword: "كلمة مرور المدير",
     setAdminPassword: "تعيين كلمة مرور المدير",
+    tenantStatusLabel: "حالة المشترك",
+    subscriptionEnds: "انتهاء الاشتراك",
+    trialDescription: "تجربة مجانية لمدة 14 يوماً. قم بالترقية بعد انتهاء الفترة التجريبية.",
+    activeDescription: "وصول كامل فوراً. يبدأ الفوترة الآن.",
+    locationInfo: "الموقع",
+    locationOptional: "اختياري — يساعد في تحديد موقع العيادة.",
+    planDetails: "تفاصيل الخطة",
     credentialsTitle: "تم إنشاء المشترك! شارك بيانات الدخول هذه مع العيادة:",
     credentialsPassword: "كلمة المرور:",
     credentialsLogin: "الدخول:",
@@ -671,7 +731,48 @@ export const translations = {
     suspendedTenants: "موقوفين",
     activeSubscriptions: "اشتراكات نشطة",
     expiredSubscriptions: "منتهية",
-  },
+
+    // Backups
+    backups: "النسخ الاحتياطي",
+    backupsDesc: "سجل النسخ الاحتياطي لقاعدة البيانات وتشغيل نسخة احتياطية يدوية",
+    triggerBackup: "تشغيل نسخة احتياطية",
+    noBackups: "لا توجد نسخ احتياطية",
+    filename: "اسم الملف",
+    size: "الحجم",
+    duration: "المدة",
+    type: "النوع",
+
+    // Performance
+    performance: "الأداء",
+    performanceDesc: "مقاييس أداء مسارات API وأوقات الاستجابة",
+    totalRequests: "إجمالي الطلبات",
+    totalRoutes: "إجمالي المسارات",
+    avgResponseTime: "متوسط وقت الاستجابة",
+    errorRate: "معدل الخطأ",
+    prdTarget: "هدف PRD (أقل من 200 مللي ثانية)",
+    prdMet: "جميع المسارات تحت 200 مللي ثانية",
+    prdNotMet: "بعض المسارات تتجاوز 200 مللي ثانية",
+    routesUnder200ms: "مسارات تحت 200 مللي ثانية",
+    routesOver200ms: "مسارات فوق 200 مللي ثانية",
+    routePerformance: "أداء المسارات",
+    route: "المسار",
+    hits: "الطلبات",
+    avgMs: "المتوسط (مللي ثانية)",
+    minMs: "الحد الأدنى (مللي ثانية)",
+    maxMs: "الحد الأقصى (مللي ثانية)",
+    errorRateLabel: "معدل الخطأ",
+    noPerfData: "لا توجد بيانات أداء بعد. ستظهر المسارات بعد إجراء طلبات API.",
+    resetStats: "إعادة تعيين الإحصائيات",
+    resetPerfConfirm: "إعادة تعيين جميع إحصائيات الأداء؟ لا يمكن التراجع عن هذا.",
+    refresh: "تحديث",
+
+    // 2FA Login
+    twoFactorChallenge: "التحقق الثنائي",
+    twoFactorChallengeDesc: "أدخل الرمز المكون من 6 أرقام من تطبيق المصادقة",
+    backupCodeOption: "استخدم رمز النسخ الاحتياطي بدلاً من ذلك",
+    enterBackupCode: "أدخل رمز النسخ الاحتياطي",
+    loginCode: "رمز الدخول"
+  }
 };
 
 // Get translation

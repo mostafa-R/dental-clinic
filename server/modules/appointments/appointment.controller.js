@@ -12,7 +12,7 @@ import { sendSuccess } from '../../utils/sendSuccess.js';
 
 const POPULATE = [
   { path: 'patient', select: 'patientId firstName lastName phone' },
-  { path: 'doctor', select: 'name role isDoctor' },
+  { path: 'doctor', select: 'name roleId isDoctor' },
   { path: 'branch', select: 'name' },
 ];
 
@@ -38,7 +38,8 @@ function emitAppointment(branchId, event, appointment) {
   const payload = {
     appointment: appointment.toJSON ? appointment.toJSON() : appointment,
   };
-  emitToBranch(branchId, event, payload);
+  const resolved = branchId?._id ?? branchId;
+  emitToBranch(String(resolved), event, payload);
 }
 
 async function loadAppointment(id, branchFilter) {
@@ -120,7 +121,7 @@ async function assertReferences(payload, branchFilter) {
   if (!patient) throw ApiError.badRequest('Referenced patient does not exist in this branch', { patient: 'not found' });
 
   const doctor = await User.findOne({ _id: payload.doctor, ...branchFilter });
-  if (!doctor || (!doctor.isDoctor && doctor.role !== 'doctor')) {
+  if (!doctor || !doctor.isDoctor) {
     throw ApiError.badRequest('Referenced doctor does not exist or is not a doctor', { doctor: 'not found' });
   }
 }
@@ -136,6 +137,7 @@ async function assertNoOverlap({ doctor, branch, start, end, chair, excludeId })
     start: { $lt: end },
     end: { $gt: start },
   };
+  if (chair) filter.chair = chair;
   if (excludeId) filter._id = { $ne: toObjectId(excludeId) };
   const conflict = await Appointment.findOne(filter).select('_id').lean();
   if (conflict) {
@@ -151,27 +153,37 @@ export const createAppointment = asyncHandler(async (req, res) => {
   const tenant = currentTenant(req);
 
   await assertReferences({ patient: data.patient, doctor: data.doctor }, filterByBranch(req));
-  await assertNoOverlap({
-    doctor: data.doctor,
-    branch,
-    start: data.start ? new Date(data.start) : null,
-    end: data.end ? new Date(data.end) : null,
-    chair: data.chair,
-  });
 
-  const appointment = await Appointment.create({
-    patient: toObjectId(data.patient),
-    doctor: toObjectId(data.doctor),
-    branch,
-    tenant,
-    chair: data.chair || '',
-    start: data.start ? new Date(data.start) : undefined,
-    end: data.end ? new Date(data.end) : undefined,
-    status: data.status || 'scheduled',
-    reason: data.reason || '',
-    notes: data.notes || '',
-    createdBy: req.user._id,
-  });
+  const session = await mongoose.startSession();
+  let appointment;
+  try {
+    await session.withTransaction(async () => {
+      await assertNoOverlap({
+        doctor: data.doctor,
+        branch,
+        start: data.start ? new Date(data.start) : null,
+        end: data.end ? new Date(data.end) : null,
+        chair: data.chair,
+      });
+
+      const docs = await Appointment.create([{
+        patient: toObjectId(data.patient),
+        doctor: toObjectId(data.doctor),
+        branch,
+        tenant,
+        chair: data.chair || '',
+        start: data.start ? new Date(data.start) : undefined,
+        end: data.end ? new Date(data.end) : undefined,
+        status: data.status || 'scheduled',
+        reason: data.reason || '',
+        notes: data.notes || '',
+        createdBy: req.user._id,
+      }], { session });
+      appointment = docs[0];
+    });
+  } finally {
+    session.endSession();
+  }
 
   await appointment.populate(POPULATE);
   emitAppointment(branch, 'appointment:created', appointment);
@@ -194,12 +206,12 @@ export const updateAppointment = asyncHandler(async (req, res) => {
   }
 
   if (data.patient) {
-    const p = await Patient.findById(data.patient);
-    if (!p) throw ApiError.badRequest('Referenced patient does not exist', { patient: 'not found' });
+    const p = await Patient.findOne({ _id: data.patient, ...branchFilter });
+    if (!p) throw ApiError.badRequest('Referenced patient does not exist in this branch', { patient: 'not found' });
   }
   if (data.doctor) {
-    const d = await User.findById(data.doctor);
-    if (!d || (!d.isDoctor && d.role !== 'doctor')) {
+    const d = await User.findOne({ _id: data.doctor, ...branchFilter });
+    if (!d || !d.isDoctor) {
       throw ApiError.badRequest('Referenced doctor does not exist or is not a doctor', { doctor: 'not found' });
     }
   }

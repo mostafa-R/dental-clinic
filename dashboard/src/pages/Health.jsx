@@ -9,6 +9,7 @@ import { fetchHealth } from "../features/health/healthSlice";
 import { t } from "../lib/i18n";
 
 function formatUptime(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0m";
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -23,9 +24,9 @@ function RedisCard({ data: redis, language }) {
   if (!redis) return null;
   return (
     <Card>
-      <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
-        {t("redis", language)} {redis.connected ? `✅ ${t("redisConnected", language)}` : `❌ ${t("redisDisconnected", language)}`}
-      </h3>
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
+            {t("redis", language)} {redis.connected ? `- ${t("redisConnected", language)}` : `- ${t("redisDisconnected", language)}`}
+          </h3>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
         <div className="text-center p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
           <div className="text-2xl font-bold text-slate-900 dark:text-white">{redis.usedMemory || 'N/A'}</div>
@@ -164,9 +165,9 @@ export default function Health() {
                     <span className="font-medium text-slate-900 dark:text-white">{data.memory.heapUsed} MB</span>
                   </div>
                   <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5">
-                    <div className="h-2.5 rounded-full bg-purple-500" style={{ width: `${Math.min((data.memory.heapUsed / data.memory.heapTotal) * 100, 100)}%` }} />
-                  </div>
-                </div>
+                     <div className="h-2.5 rounded-full bg-sky-500" style={{ width: `${Math.min((data.memory.heapUsed / Math.max(data.memory.heapTotal || 1, 1)) * 100, 100)}%` }} />
+                   </div>
+                 </div>
               </div>
             </Card>
           </>

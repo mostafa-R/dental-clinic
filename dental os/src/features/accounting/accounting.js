@@ -18,12 +18,13 @@ export const EXPENSE_CATEGORY_LABELS = {
   other: 'Other',
 };
 
-export const EXPENSE_PAYMENT_METHODS = ['cash', 'bank', 'card'];
+export const EXPENSE_PAYMENT_METHODS = ['cash', 'bank', 'card', 'wallet'];
 
 export const EXPENSE_PAYMENT_LABELS = {
   cash: 'Cash',
   bank: 'Bank Transfer',
   card: 'Card',
+  wallet: 'Wallet',
 };
 
 export const WALLET_TX_TYPES = ['credit', 'debit'];
@@ -66,6 +67,15 @@ export const COMMISSION_STATUS = ['pending', 'paid'];
 export const COMMISSION_STATUS_LABELS = {
   pending: 'Pending',
   paid: 'Paid',
+};
+
+export const INSTALLMENT_FREQUENCIES = ['weekly', 'biweekly', 'monthly', 'custom'];
+
+export const INSTALLMENT_FREQUENCIES_LABELS = {
+  weekly: 'Weekly',
+  biweekly: 'Biweekly',
+  monthly: 'Monthly',
+  custom: 'Custom',
 };
 
 export const COMMISSION_STATUS_STYLES = {

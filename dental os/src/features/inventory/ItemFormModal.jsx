@@ -4,13 +4,14 @@ import { useDispatch, useSelector } from 'react-redux';
 import Modal from '../../components/ui/Modal';
 import { createItem, resetFormState, updateItem } from './inventorySlice';
 import { showErrorDialog } from '../ui/uiSlice';
-import { INVENTORY_CATEGORIES, INVENTORY_UNITS } from '../../lib/inventory';
+import { INVENTORY_CATEGORIES, INVENTORY_UNITS } from './inventory';
 import { useT } from '../../lib/i18n';
 
 export default function ItemFormModal({ open, onClose, item }) {
   const dispatch = useDispatch();
   const { t } = useT();
   const formStatus = useSelector((s) => s.inventory.formStatus);
+  const user = useSelector((s) => s.auth.user);
 
   const [form, setForm] = useState({
     name: '',
@@ -67,6 +68,7 @@ export default function ItemFormModal({ open, onClose, item }) {
       expiryDate: form.expiryDate ? new Date(form.expiryDate).toISOString() : undefined,
       supplier: form.supplier.trim() || undefined,
       notes: form.notes.trim() || undefined,
+      branch: user?.branch?._id || user?.branch || undefined,
     };
     if (!item) {
       payload.quantity = form.quantity ? Number(form.quantity) : 0;

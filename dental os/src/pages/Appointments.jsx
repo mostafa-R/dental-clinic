@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   fetchAppointments,
@@ -14,6 +14,7 @@ import Card from '../components/ui/Card';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import api from '../lib/axios';
+import { useSocketEvent } from '../lib/socket';
 import { canManageAppointments } from '../lib/roles';
 import { useT } from '../lib/i18n';
 
@@ -43,6 +44,7 @@ export default function Appointments() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [defaultStart, setDefaultStart] = useState(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
     api.get('/users/doctors').then((d) => setDoctors(d.data.data.doctors)).catch(() => {});
@@ -52,7 +54,7 @@ export default function Appointments() {
     dispatch(setDate(dateInputValue(anchor)));
   }, [dispatch, anchor]);
 
-  useEffect(() => {
+  const buildParams = useCallback(() => {
     const params = { limit: 200 };
     if (view === 'week') {
       const end = addDays(anchor, 6);
@@ -63,10 +65,34 @@ export default function Appointments() {
     }
     if (query.doctor) params.doctor = query.doctor;
     if (query.status) params.status = query.status;
-    dispatch(fetchAppointments(params));
-  }, [dispatch, anchor, view, query.doctor, query.status]);
+    if (query.patient) params.patient = query.patient;
+    return params;
+  }, [anchor, view, query.doctor, query.status, query.patient]);
+
+  useEffect(() => {
+    dispatch(fetchAppointments(buildParams()));
+  }, [dispatch, buildParams]);
+
+  const refetch = useCallback(() => {
+    if (tab === 'queue') return;
+    dispatch(fetchAppointments(buildParams()));
+  }, [dispatch, buildParams, tab]);
+
+  useSocketEvent('appointment:created', refetch);
+  useSocketEvent('appointment:updated', refetch);
+  useSocketEvent('appointment:statusChanged', refetch);
 
   useEffect(() => () => dispatch(resetAppointments()), [dispatch]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        dispatch(fetchAppointments(buildParams()));
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [dispatch, buildParams]);
 
   const isLoading = status === 'loading' || status === 'idle';
 
@@ -92,17 +118,7 @@ export default function Appointments() {
 
   const onSaved = () => {
     closeForm();
-    const params = { limit: 200 };
-    if (view === 'week') {
-      const end = addDays(anchor, 6);
-      params.from = dateInputValue(anchor);
-      params.to = dateInputValue(end);
-    } else {
-      params.date = dateInputValue(anchor);
-    }
-    if (query.doctor) params.doctor = query.doctor;
-    if (query.status) params.status = query.status;
-    dispatch(fetchAppointments(params));
+    dispatch(fetchAppointments(buildParams()));
   };
 
   const doctorList = useMemo(() => {
@@ -126,22 +142,25 @@ export default function Appointments() {
   };
 
   const inputCls =
-    'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200';
+    'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200';
+
+  const hasActiveFilters = query.patient || query.doctor;
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('appointments.title')}</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('appointments.subtitle')}</p>
+    <div className="space-y-4">
+      <header className="flex items-start justify-between gap-3 sm:items-center">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-white sm:text-2xl">{t('appointments.title')}</h1>
+          <p className="hidden text-sm text-slate-500 dark:text-slate-400 sm:block">{t('appointments.subtitle')}</p>
         </div>
         {canManage && (
           <button
             type="button"
             onClick={() => openCreate(anchor)}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 sm:px-4"
           >
-            {t('appointments.new')}
+            <span className="hidden sm:inline">{t('appointments.new')}</span>
+            <span className="sm:hidden">+</span>
           </button>
         )}
       </header>
@@ -150,7 +169,7 @@ export default function Appointments() {
         <button
           type="button"
           onClick={() => setTab('calendar')}
-          className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition ${
+          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition sm:px-4 ${
             tab === 'calendar' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
           }`}
         >
@@ -159,7 +178,7 @@ export default function Appointments() {
         <button
           type="button"
           onClick={() => setTab('queue')}
-          className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition ${
+          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition sm:px-4 ${
             tab === 'queue' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
           }`}
         >
@@ -169,8 +188,8 @@ export default function Appointments() {
 
       {tab === 'calendar' && (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => setAnchor((d) => addDays(d, view === 'week' ? -7 : -1))}
@@ -182,7 +201,7 @@ export default function Appointments() {
               <button
                 type="button"
                 onClick={() => setAnchor(new Date())}
-                className="rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 sm:text-sm"
               >
                 {t('appointments.today')}
               </button>
@@ -194,16 +213,56 @@ export default function Appointments() {
               >
                 <svg className="rtl:rotate-180" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m9 18 6-6-6-6" /></svg>
               </button>
-              <span className="ms-2 text-sm font-medium text-slate-700 dark:text-slate-200">{formatRange(anchor, view)}</span>
+              <span className="ms-1 text-xs font-medium text-slate-700 dark:text-slate-200 sm:text-sm">{formatRange(anchor, view)}</span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="ms-auto flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setFiltersOpen((v) => !v)}
+                className={`relative rounded-md border border-slate-200 p-1.5 transition hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800 sm:hidden ${
+                  hasActiveFilters ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'
+                }`}
+                aria-label="Filters"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
+                </svg>
+                {hasActiveFilters && (
+                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-indigo-500" />
+                )}
+              </button>
+              <div className="flex gap-1 rounded-lg border border-slate-200 p-0.5 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setView('day')}
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
+                    view === 'day' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {t('appointments.day')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView('week')}
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
+                    view === 'week' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {t('appointments.week')}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {filtersOpen && (
+            <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900 sm:hidden">
               <input
                 type="text"
                 value={query.patient}
                 onChange={(e) => dispatch(setPatientFilter(e.target.value))}
                 placeholder={t('appointments.searchPatient')}
-                className={`w-44 ${inputCls}`}
+                className={inputCls}
               />
               <select
                 value={query.doctor}
@@ -215,31 +274,31 @@ export default function Appointments() {
                   <option key={d._id} value={d._id}>{d.name}</option>
                 ))}
               </select>
-              <div className="flex gap-1 rounded-lg border border-slate-200 p-1 dark:border-slate-700">
-                <button
-                  type="button"
-                  onClick={() => setView('day')}
-                  className={`rounded-md px-3 py-1 text-xs font-medium transition ${
-                    view === 'day' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  {t('appointments.day')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView('week')}
-                  className={`rounded-md px-3 py-1 text-xs font-medium transition ${
-                    view === 'week' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  {t('appointments.week')}
-                </button>
-              </div>
             </div>
+          )}
+
+          <div className="hidden items-center gap-2 sm:flex">
+            <input
+              type="text"
+              value={query.patient}
+              onChange={(e) => dispatch(setPatientFilter(e.target.value))}
+              placeholder={t('appointments.searchPatient')}
+              className={`w-44 ${inputCls}`}
+            />
+            <select
+              value={query.doctor}
+              onChange={(e) => dispatch(setDoctorFilter(e.target.value))}
+              className={inputCls}
+            >
+              <option value="">{t('appointments.allDoctors')}</option>
+              {(doctors.length ? doctors : doctorList).map((d) => (
+                <option key={d._id} value={d._id}>{d.name}</option>
+              ))}
+            </select>
           </div>
 
           <Card padded={false}>
-            <div className="p-4">
+            <div className="p-2 sm:p-4">
               {isLoading && <Spinner label={t('appointments.loading')} />}
               {error && !isLoading && (
                 <EmptyState title={t('appointments.loadFailed')} message={error?.message || error} />

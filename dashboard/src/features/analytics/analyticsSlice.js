@@ -81,7 +81,7 @@ const analyticsSlice = createSlice({
       })
       .addCase(fetchGlobalStats.fulfilled, (state, action) => {
         state.loading = false;
-        state.stats = action.payload;
+        state.stats = action.payload || state.stats;
       })
       .addCase(fetchGlobalStats.rejected, (state, action) => {
         state.loading = false;

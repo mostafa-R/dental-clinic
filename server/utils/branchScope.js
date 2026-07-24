@@ -32,7 +32,7 @@ export function filterByBranch(req) {
     throw ApiError.unauthorized('Authentication required');
   }
 
-  const isSystemAdmin = req._roleResolved?.isSystemAdmin ?? ['site_admin', 'clinic_admin', 'super_admin'].includes(req.user.role);
+  const isSystemAdmin = req._roleResolved?.isSystemAdmin;
   if (isSystemAdmin) {
     const filter = {};
     // Tenant isolation: clinic admins only see their own tenant's data.
@@ -77,7 +77,7 @@ export async function resolveBranchForCreate(req, bodyBranch) {
 
   let branchId;
 
-  const isSystemAdmin = req._roleResolved?.isSystemAdmin ?? ['site_admin', 'clinic_admin', 'super_admin'].includes(req.user.role);
+  const isSystemAdmin = req._roleResolved?.isSystemAdmin;
   if (isSystemAdmin) {
     if (!bodyBranch) {
       throw ApiError.badRequest('branch is required', { branch: 'branch is required' });

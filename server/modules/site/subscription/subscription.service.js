@@ -6,10 +6,16 @@ import Tenant from '../tenant/tenant.model.js';
 async function getPlanPrice(planKey, billingCycle) {
   const planDoc = await Plan.findOne({ key: planKey, isActive: true }).lean();
   const price = planDoc?.price ?? 99;
+
   if (billingCycle === 'yearly') {
-    return planDoc?.interval === 'year' ? price : price * 10;
+    // Always store yearly as 12x monthly so MRR calculation (amount / 12) is correct
+    return price * 12;
   }
-  return price;
+
+  // For monthly billing cycle:
+  // - If plan interval is 'year', divide by 12 to get monthly equivalent
+  // - If plan interval is 'month', use price as-is
+  return planDoc?.interval === 'year' ? price / 12 : price;
 }
 
 export async function listSubscriptions() {
@@ -84,7 +90,7 @@ export async function getRevenueStats() {
     monthlyRecurring: monthlyRecurringAgg[0]?.total || 0,
     yearlyRecurring: yearlyRecurringAgg[0]?.total || 0,
     pendingPayments: pendingPaymentsFormatted,
-    revenueByPlan: revenueByPlan.map((r) => ({ plan: r._id, revenue: r.total, count: r.count })),
+    revenueByPlan: revenueByPlan.map((r) => ({ plan: r._id, revenue: r.revenue, count: r.count })),
     revenueByMonth: revenueByMonth.map((r) => ({
       month: `${r._id.year}-${String(r._id.month).padStart(2, '0')}`,
       total: r.total,
@@ -121,16 +127,28 @@ export async function processPayment(tenantId, { amount }) {
   const subscription = await Subscription.findOne({ tenant: tenantId });
   if (!subscription) throw ApiError.notFound('Subscription not found for this tenant');
 
-  const now = new Date();
-  const nextPayment =
-    subscription.billingCycle === 'yearly'
-      ? new Date(now.setFullYear(now.getFullYear() + 1))
-      : new Date(now.setMonth(now.getMonth() + 1));
+  // Validate amount matches subscription amount (within small tolerance for floating point)
+  const expectedAmount = subscription.amount;
+  const tolerance = 0.01; // 1 cent tolerance
+  if (Math.abs(amount - expectedAmount) > tolerance) {
+    throw ApiError.badRequest(`Payment amount ${amount} does not match subscription amount ${expectedAmount}`);
+  }
+
+  // Check subscription status - don't reactivate cancelled subscriptions without validation
+  if (subscription.status === 'cancelled') {
+    throw ApiError.badRequest('Cannot process payment for cancelled subscription. Please create a new subscription.');
+  }
+
+  // Use separate Date objects to avoid mutation
+  const paymentDate = new Date();
+  const nextPayment = subscription.billingCycle === 'yearly'
+    ? new Date(paymentDate.getFullYear() + 1, paymentDate.getMonth(), paymentDate.getDate())
+    : new Date(paymentDate.getFullYear(), paymentDate.getMonth() + 1, paymentDate.getDate());
 
   subscription.status = 'active';
-  subscription.lastPaymentAt = new Date();
+  subscription.lastPaymentAt = paymentDate;
   subscription.nextPaymentAt = nextPayment;
-  subscription.currentPeriodStart = new Date();
+  subscription.currentPeriodStart = paymentDate;
   subscription.currentPeriodEnd = nextPayment;
 
   await subscription.save();

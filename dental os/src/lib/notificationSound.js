@@ -1,4 +1,5 @@
 let audioCtx = null;
+let permitted = false;
 
 function getContext() {
   if (!audioCtx) {
@@ -7,12 +8,32 @@ function getContext() {
   return audioCtx;
 }
 
-export async function playNotificationSound() {
+/**
+ * Must be called from a user-gesture handler (click/keydown) on first
+ * interaction.  Unlocks the AudioContext and requests notification permission
+ * in one go.
+ */
+export function initNotifications() {
   try {
     const ctx = getContext();
     if (ctx.state === 'suspended') {
-      await ctx.resume();
+      ctx.resume();
     }
+    permitted = true;
+  } catch {
+    /* unavailable */
+  }
+
+  if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+export function playNotificationSound() {
+  if (!permitted) return;
+  try {
+    const ctx = getContext();
+    if (ctx.state === 'suspended') return;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -25,5 +46,6 @@ export async function playNotificationSound() {
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.3);
   } catch {
+    /* unavailable */
   }
 }

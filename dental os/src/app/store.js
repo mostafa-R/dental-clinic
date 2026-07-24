@@ -11,7 +11,7 @@ import inventoryReducer from '../features/inventory/inventorySlice';
 import patientsReducer from '../features/patients/patientSlice';
 import rolesReducer from '../features/roles/rolesSlice';
 import uiReducer from '../features/ui/uiSlice';
-import usersReducer from '../features/users/usersSlice';
+import usersReducer from '../features/users/userSlice';
 import walletReducer from '../features/wallet/walletSlice';
 
 export const store = configureStore({

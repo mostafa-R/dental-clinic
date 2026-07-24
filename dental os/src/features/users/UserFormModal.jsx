@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Modal from '../../components/ui/Modal';
 import PasswordInput from '../../components/ui/PasswordInput';
-import { createUser, updateUser } from './usersSlice';
+import { createUser, updateUser, resetFormState } from './userSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { fetchBranches } from '../branches/branchSlice';
 import { fetchRoles } from '../roles/rolesSlice';
@@ -27,7 +27,11 @@ export default function UserFormModal({ open, onClose, user }) {
   const [credentials, setCredentials] = useState(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setCredentials(null);
+      dispatch(resetFormState());
+      return;
+    }
     dispatch(fetchBranches());
     dispatch(fetchRoles());
   }, [open, dispatch]);
@@ -99,7 +103,7 @@ export default function UserFormModal({ open, onClose, user }) {
 
   if (credentials) {
     return (
-      <Modal open title={t('users.form.credentialsTitle') || 'Staff Created'} onClose={onClose} size="md">
+      <Modal open={open} title={t('users.form.credentialsTitle') || 'Staff Created'} onClose={onClose} size="md">
         <div className="space-y-4">
           <p className="text-sm text-slate-600 dark:text-slate-300">{t('users.form.credentialsMsg') || 'Share these credentials with the staff member:'}</p>
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-900/20">
@@ -118,7 +122,7 @@ export default function UserFormModal({ open, onClose, user }) {
             <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">{t('users.form.credentialsWarning') || 'This password is shown only once. Save it now.'}</p>
           </div>
           <div className="flex justify-end">
-            <button type="button" onClick={onClose} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400">{t('common.done') || 'Done'}</button>
+            <button type="button" onClick={() => { setCredentials(null); onClose(); }} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400">{t('common.done') || 'Done'}</button>
           </div>
         </div>
       </Modal>

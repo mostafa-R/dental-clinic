@@ -1,3 +1,5 @@
+import mongoose from 'mongoose';
+
 import Branch from './branch.model.js';
 import Role from './role.model.js';
 import Tenant from '../site/tenant/tenant.model.js';
@@ -6,6 +8,8 @@ import { currentTenant, filterByBranch, toObjectId } from '../../utils/branchSco
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
+import { invalidatePermission } from '../../utils/cache.js';
+import { emitToBranch } from '../../socket/index.js';
 
 const POPULATE = [
   { path: 'branch', select: 'name address phone isActive' },
@@ -29,14 +33,18 @@ export const createUser = asyncHandler(async (req, res) => {
   const data = req.validatedBody;
   const tenant = currentTenant(req);
 
-  // Prevent creating a site_admin — only the platform holds it.
-  if (data.role === 'site_admin') {
-    throw ApiError.forbidden('Only the platform can create site admin accounts');
+  // Validate roleId — must exist and belong to same tenant.
+  const roleDoc = await Role.findById(data.roleId);
+  if (!roleDoc) {
+    throw ApiError.badRequest('Referenced role does not exist', { roleId: 'not found' });
+  }
+  if (tenant && String(roleDoc.tenant || '') !== String(tenant)) {
+    throw ApiError.badRequest('Role does not belong to your clinic', { roleId: 'tenant mismatch' });
   }
 
   // Resolve branch: clinic owner must assign to a branch within their tenant.
   let branchId;
-  const creatorIsPlatform = (req._roleResolved?.isSystemAdmin ?? ['site_admin', 'clinic_admin', 'super_admin'].includes(req.user.role)) && !tenant;
+  const creatorIsPlatform = req._roleResolved?.isSystemAdmin && !tenant;
   if (creatorIsPlatform) {
     // Platform admin: branch must be provided explicitly.
     if (!data.branch) {
@@ -48,42 +56,33 @@ export const createUser = asyncHandler(async (req, res) => {
     branchId = data.branch ? toObjectId(data.branch) : toObjectId(req.user.branch);
   }
 
-  // Validate the branch belongs to the same tenant (for clinic owners).
+  // Validate the branch belongs to the same tenant and is active (for clinic owners).
   if (tenant) {
-    const branch = await Branch.findOne({ _id: branchId, tenant });
+    const branch = await Branch.findOne({ _id: branchId, tenant, isActive: true });
     if (!branch) {
-      throw ApiError.badRequest('The selected branch does not belong to your clinic', {
-        branch: 'not found',
+      throw ApiError.badRequest('The selected branch does not belong to your clinic or is inactive', {
+        branch: 'not found or inactive',
       });
     }
   } else {
-    const branch = await Branch.findById(branchId);
+    const branch = await Branch.findOne({ _id: branchId, isActive: true });
     if (!branch) {
-      throw ApiError.badRequest('Referenced branch does not exist', { branch: 'not found' });
+      throw ApiError.badRequest('Referenced branch does not exist or is inactive', { branch: 'not found or inactive' });
     }
   }
 
-  // Email uniqueness
-  const existing = await User.findOne({ email: data.email });
+  // Email uniqueness within tenant
+  const emailFilter = { email: data.email };
+  if (tenant) emailFilter.tenant = tenant;
+  const existing = await User.findOne(emailFilter);
   if (existing) {
-    throw ApiError.conflict('A user with this email already exists');
-  }
-
-  // Validate roleId if provided — must exist and belong to same tenant
-  if (data.roleId) {
-    const roleDoc = await Role.findById(data.roleId);
-    if (!roleDoc) {
-      throw ApiError.badRequest('Referenced role does not exist', { roleId: 'not found' });
-    }
-    if (tenant && String(roleDoc.tenant || '') !== String(tenant)) {
-      throw ApiError.badRequest('Role does not belong to your clinic', { roleId: 'tenant mismatch' });
-    }
+    throw ApiError.conflict('A user with this email already exists in this clinic');
   }
 
   // Plan limit: enforce maxDoctors when creating a doctor.
-  if ((data.isDoctor || data.role === 'doctor') && tenant) {
+  if (data.isDoctor && tenant) {
     const tenantDoc = await Tenant.findById(tenant).select('settings');
-    const doctorCount = await User.countDocuments({ tenant, $or: [{ isDoctor: true }, { role: 'doctor' }] });
+    const doctorCount = await User.countDocuments({ tenant, isDoctor: true });
     const maxDoctors = tenantDoc?.settings?.maxDoctors ?? 999;
     if (doctorCount >= maxDoctors) {
       throw ApiError.conflict(
@@ -99,16 +98,17 @@ export const createUser = asyncHandler(async (req, res) => {
   });
   await user.populate(POPULATE);
 
+  emitToBranch(String(branchId), 'user:created', { user: user.toSafeObject() });
   return sendSuccess(res, { user: user.toSafeObject() }, 201);
 });
 
 /**
  * GET /api/users
  * List staff. Clinic owner sees only their own tenant's users. Platform admin
- * sees all (with optional ?role / ?branch filters).
+ * sees all (with optional ?roleId / ?branch filters).
  */
 export const listUsers = asyncHandler(async (req, res) => {
-  const filter = {};
+  const filter = { ...filterByBranch(req) };
 
   // Tenant isolation: clinic owners only see their own staff.
   const tenant = currentTenant(req);
@@ -116,18 +116,30 @@ export const listUsers = asyncHandler(async (req, res) => {
     filter.tenant = tenant;
   }
 
-  const { role, isDoctor, branch } = req.validatedQuery || {};
-  if (role) filter.role = role;
+  const { roleId, isDoctor, branch } = req.validatedQuery || {};
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
+  const skip = (page - 1) * limit;
+
+  if (roleId) filter.roleId = toObjectId(roleId);
   if (isDoctor === 'true') {
-    filter.$or = [{ isDoctor: true }, { role: 'doctor' }];
+    filter.isDoctor = true;
   }
   if (branch) filter.branch = toObjectId(branch);
 
-  const users = await User.find(filter)
-    .populate(POPULATE)
-    .sort('-createdAt');
+  const [users, total] = await Promise.all([
+    User.find(filter)
+      .populate(POPULATE)
+      .sort('-createdAt')
+      .skip(skip)
+      .limit(limit),
+    User.countDocuments(filter),
+  ]);
 
-  return sendSuccess(res, { users: users.map((u) => u.toSafeObject()) });
+  return sendSuccess(res, {
+    users: users.map((u) => u.toSafeObject()),
+    pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+  });
 });
 
 /**
@@ -137,14 +149,15 @@ export const listUsers = asyncHandler(async (req, res) => {
  * users list so receptionists/doctors don't need full users:read.
  */
 export const listDoctors = asyncHandler(async (req, res) => {
-  const filter = {};
+  const filter = { ...filterByBranch(req) };
   const tenant = currentTenant(req);
   if (tenant) filter.tenant = tenant;
-  filter.$or = [{ isDoctor: true }, { role: 'doctor' }];
+  filter.isDoctor = true;
 
   const users = await User.find(filter)
-    .select('name email role isDoctor branch')
-    .sort('name');
+    .select('name email roleId isDoctor branch')
+    .sort('name')
+    .limit(200);
 
   return sendSuccess(res, { doctors: users.map((u) => u.toSafeObject()) });
 });
@@ -153,6 +166,9 @@ export const listDoctors = asyncHandler(async (req, res) => {
  * GET /api/users/:id
  */
 export const getUser = asyncHandler(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    throw ApiError.badRequest('Invalid user id');
+  }
   const tenant = currentTenant(req);
   const filter = { _id: req.params.id };
   if (tenant) filter.tenant = tenant;
@@ -166,6 +182,9 @@ export const getUser = asyncHandler(async (req, res) => {
  * Update a staff member. Cannot change tenant.
  */
 export const updateUser = asyncHandler(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    throw ApiError.badRequest('Invalid user id');
+  }
   const data = req.validatedBody;
   const tenant = currentTenant(req);
   const filter = { _id: req.params.id };
@@ -178,16 +197,21 @@ export const updateUser = asyncHandler(async (req, res) => {
     throw ApiError.forbidden('Cannot deactivate your own account');
   }
 
-  // Prevent changing to site_admin
-  if (data.role === 'site_admin') {
-    throw ApiError.forbidden('Cannot change a user to site_admin');
+  // Prevent changing to a system admin role
+  if (data.roleId) {
+    const targetRole = await Role.findById(data.roleId).select('isSystemAdmin isBuiltIn');
+    if (targetRole?.isSystemAdmin) {
+      throw ApiError.forbidden('Cannot assign a system admin role through this endpoint');
+    }
   }
 
-  // Email uniqueness check
+  // Email uniqueness check within tenant
   if (data.email && data.email !== user.email) {
-    const existing = await User.findOne({ email: data.email, _id: { $ne: user._id } });
+    const emailFilter = { email: data.email, _id: { $ne: user._id } };
+    if (tenant) emailFilter.tenant = tenant;
+    const existing = await User.findOne(emailFilter);
     if (existing) {
-      throw ApiError.conflict('A user with this email already exists');
+      throw ApiError.conflict('A user with this email already exists in this clinic');
     }
   }
 
@@ -195,27 +219,13 @@ export const updateUser = asyncHandler(async (req, res) => {
   if (data.branch) {
     const branchId = toObjectId(data.branch);
     if (tenant) {
-      const branch = await Branch.findOne({ _id: branchId, tenant });
-      if (!branch) throw ApiError.badRequest('The selected branch does not belong to your clinic');
+      const branch = await Branch.findOne({ _id: branchId, tenant, isActive: true });
+      if (!branch) throw ApiError.badRequest('The selected branch is not available');
     }
     data.branch = branchId;
   }
 
-  if (data.name !== undefined) user.name = data.name;
-  if (data.email !== undefined) user.email = data.email;
-  if (data.phone !== undefined) user.phone = data.phone;
-  if (data.role !== undefined) {
-    user.role = data.role;
-    // Clear roleId when role string changes, unless roleId is also provided.
-    if (data.roleId === undefined) user.roleId = null;
-  }
-  if (data.roleId !== undefined) user.roleId = data.roleId;
-  if (data.branch !== undefined) user.branch = toObjectId(data.branch);
-  if (data.isActive !== undefined) user.isActive = data.isActive;
-  if (data.isDoctor !== undefined) user.isDoctor = data.isDoctor;
-  if (data.commissionRate !== undefined) user.commissionRate = data.commissionRate;
-  if (data.password) user.password = data.password;
-
+  // Validate roleId belongs to same tenant
   if (data.roleId) {
     const roleDoc = await Role.findById(data.roleId);
     if (!roleDoc) throw ApiError.badRequest('Referenced role does not exist');
@@ -224,8 +234,25 @@ export const updateUser = asyncHandler(async (req, res) => {
     }
   }
 
+  if (data.name !== undefined) user.name = data.name;
+  if (data.email !== undefined) user.email = data.email;
+  if (data.phone !== undefined) user.phone = data.phone;
+  if (data.roleId !== undefined) user.roleId = data.roleId;
+  if (data.branch !== undefined) user.branch = toObjectId(data.branch);
+  if (data.isActive !== undefined) user.isActive = data.isActive;
+  if (data.isDoctor !== undefined) user.isDoctor = data.isDoctor;
+  if (data.commissionRate !== undefined) user.commissionRate = data.commissionRate;
+  if (data.password) user.password = data.password;
+
   await user.save();
   await user.populate(POPULATE);
+
+  // Invalidate cached permissions for this user so next request picks up the new role
+  if (data.roleId !== undefined) {
+    await invalidatePermission(String(user._id), user.roleId ? String(user.roleId) : '');
+  }
+
+  emitToBranch(String(user.branch?._id ?? user.branch), 'user:updated', { user: user.toSafeObject() });
   return sendSuccess(res, { user: user.toSafeObject() });
 });
 
@@ -234,6 +261,9 @@ export const updateUser = asyncHandler(async (req, res) => {
  * Soft-delete (deactivate).
  */
 export const deleteUser = asyncHandler(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    throw ApiError.badRequest('Invalid user id');
+  }
   const tenant = currentTenant(req);
   const filter = { _id: req.params.id };
   if (tenant) filter.tenant = tenant;
@@ -244,6 +274,7 @@ export const deleteUser = asyncHandler(async (req, res) => {
   }
   user.isActive = false;
   await user.save();
+  emitToBranch(String(user.branch), 'user:deleted', { _id: user._id });
   return sendSuccess(res, { message: 'User deactivated' });
 });
 
@@ -252,6 +283,9 @@ export const deleteUser = asyncHandler(async (req, res) => {
  * Toggle isActive status (activate / deactivate).
  */
 export const toggleUserActive = asyncHandler(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    throw ApiError.badRequest('Invalid user id');
+  }
   const tenant = currentTenant(req);
   const filter = { _id: req.params.id };
   if (tenant) filter.tenant = tenant;
@@ -263,5 +297,6 @@ export const toggleUserActive = asyncHandler(async (req, res) => {
   user.isActive = !user.isActive;
   await user.save();
   await user.populate(POPULATE);
+  emitToBranch(String(user.branch?._id ?? user.branch), 'user:toggled', { user: user.toSafeObject() });
   return sendSuccess(res, { user: user.toSafeObject() });
 });

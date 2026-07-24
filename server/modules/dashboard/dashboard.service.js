@@ -3,13 +3,9 @@ import Appointment from '../appointments/appointment.model.js';
 import Invoice from '../billing/invoice.model.js';
 import Patient from '../patients/patient.model.js';
 import User from '../users/user.model.js';
-import { ROLES } from '../../constants/roles.js';
 import { round2 } from '../../constants/accounting.js';
 
-export async function getDashboardStats(branchFilter, user) {
-  const role = user.role;
-  const isSuperAdmin = role === 'site_admin' || role === 'super_admin';
-  const isClinicAdmin = role === 'clinic_admin';
+export async function getDashboardStats(branchFilter, user, isSystemAdmin = false) {
 
   const now = new Date();
   const dayStart = new Date(now);
@@ -34,20 +30,30 @@ export async function getDashboardStats(branchFilter, user) {
         $facet: {
           totalStaff: [{ $count: 'count' }],
           activeStaff: [{ $match: { isActive: true } }, { $count: 'count' }],
-          doctors: [{ $match: { $or: [{ isDoctor: true }, { role: 'doctor' }] } }, { $count: 'count' }],
-          byRole: [{ $group: { _id: '$role', count: { $sum: 1 } } }],
+          doctors: [{ $match: { isDoctor: true } }, { $count: 'count' }],
+          byRole: [
+            { $group: { _id: '$roleId', count: { $sum: 1 } } },
+            {
+              $lookup: {
+                from: 'roles',
+                localField: '_id',
+                foreignField: '_id',
+                as: 'roleDoc',
+              },
+            },
+            { $unwind: { path: '$roleDoc', preserveNullAndEmptyArrays: true } },
+            { $project: { _id: 1, name: { $ifNull: ['$roleDoc.name', 'Unknown'] }, count: 1 } },
+          ],
         },
       },
     ]),
     User.find(branchFilter)
       .sort('-createdAt')
       .limit(5)
-      .select('name email role createdAt'),
-    isSuperAdmin
-      ? Branch.find(user.tenant ? { tenant: user.tenant } : {}).lean().sort('name')
-      : isClinicAdmin
-        ? Branch.find({ tenant: user.tenant }).lean().sort('name')
-        : Branch.find({ _id: user.branch }).lean(),
+      .select('name email roleId isDoctor createdAt'),
+    isSystemAdmin
+      ? Branch.find(user.tenant ? { tenant: user.tenant } : { _id: { $in: [] } }).lean().sort('name')
+      : Branch.find({ _id: user.branch }).lean(),
     Patient.countDocuments(branchFilter),
     Appointment.aggregate([
       { $match: todayFilter },
@@ -97,10 +103,10 @@ export async function getDashboardStats(branchFilter, user) {
     staffCount: countByBranch.get(String(b._id)) || 0,
   }));
 
-  const staffByRole = ROLES.map((role) => ({
-    role,
-    count: staffByRoleAgg.find((r) => r._id === role)?.count || 0,
-  })).filter((r) => r.count > 0);
+  const staffByRole = staffByRoleAgg.map((r) => ({
+    role: r.name || 'Unknown',
+    count: r.count,
+  }));
 
   return {
     summary: {

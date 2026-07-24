@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 import Counter from '../../core/counters.js';
-import { round2 } from '../../constants/accounting.js';
+import { EXPENSE_PAYMENT_METHODS, round2 } from '../../constants/accounting.js';
 
 const ownerDrawingSchema = new mongoose.Schema(
   {
@@ -28,11 +28,22 @@ const ownerDrawingSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    patient: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Patient',
+      default: null,
+      index: true,
+    },
     amount: {
       type: Number,
       required: true,
       min: 0.01,
       set: (v) => round2(v),
+    },
+    paymentMethod: {
+      type: String,
+      enum: EXPENSE_PAYMENT_METHODS,
+      default: 'cash',
     },
     description: {
       type: String,

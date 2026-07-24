@@ -63,12 +63,24 @@ export const recordPayment = createAsyncThunk(
 
 export const voidInvoice = createAsyncThunk(
   'billing/void',
-  async (id, { rejectWithValue }) => {
+  async ({ id, reason }, { rejectWithValue }) => {
     try {
-      const { invoice } = await billingApi.void(id);
+      const { invoice } = await billingApi.void(id, { reason });
       return invoice;
     } catch (err) {
       return rejectWithValue(err.response?.data || { message: 'Failed to void invoice' });
+    }
+  },
+);
+
+export const refundPayment = createAsyncThunk(
+  'billing/refund',
+  async ({ id, payload }, { rejectWithValue }) => {
+    try {
+      const { invoice } = await billingApi.refund(id, payload);
+      return invoice;
+    } catch (err) {
+      return rejectWithValue(err.response?.data || { message: 'Failed to refund payment' });
     }
   },
 );
@@ -98,6 +110,8 @@ const billingSlice = createSlice({
     formError: null,
     paymentStatus: 'idle',
     paymentError: null,
+    voidStatus: 'idle',
+    voidError: null,
     aging: null,
     agingStatus: 'idle',
   },
@@ -131,6 +145,10 @@ const billingSlice = createSlice({
       state.paymentStatus = 'idle';
       state.paymentError = null;
     },
+    resetVoidState(state) {
+      state.voidStatus = 'idle';
+      state.voidError = null;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -161,8 +179,7 @@ const billingSlice = createSlice({
         state.formStatus = 'loading';
         state.formError = null;
       })
-      .addCase(createInvoice.fulfilled, (state, action) => {
-        state.items.unshift(action.payload);
+      .addCase(createInvoice.fulfilled, (state) => {
         state.formStatus = 'succeeded';
         state.formError = null;
       })
@@ -199,18 +216,32 @@ const billingSlice = createSlice({
         state.paymentError = action.payload;
       })
       .addCase(voidInvoice.pending, (state) => {
-        state.formStatus = 'loading';
-        state.formError = null;
+        state.voidStatus = 'loading';
+        state.voidError = null;
       })
       .addCase(voidInvoice.fulfilled, (state, action) => {
         const idx = state.items.findIndex((i) => i._id === action.payload._id);
         if (idx >= 0) state.items[idx] = action.payload;
-        state.formStatus = 'succeeded';
-        state.formError = null;
+        state.voidStatus = 'succeeded';
+        state.voidError = null;
       })
       .addCase(voidInvoice.rejected, (state, action) => {
-        state.formStatus = 'failed';
-        state.formError = action.payload;
+        state.voidStatus = 'failed';
+        state.voidError = action.payload;
+      })
+      .addCase(refundPayment.pending, (state) => {
+        state.paymentStatus = 'loading';
+        state.paymentError = null;
+      })
+      .addCase(refundPayment.fulfilled, (state, action) => {
+        const idx = state.items.findIndex((i) => i._id === action.payload._id);
+        if (idx >= 0) state.items[idx] = action.payload;
+        state.paymentStatus = 'succeeded';
+        state.paymentError = null;
+      })
+      .addCase(refundPayment.rejected, (state, action) => {
+        state.paymentStatus = 'failed';
+        state.paymentError = action.payload;
       })
       .addCase(fetchAgingReport.pending, (state) => {
         state.agingStatus = 'loading';
@@ -232,6 +263,7 @@ export const {
   resetBilling,
   resetFormState,
   resetPaymentState,
+  resetVoidState,
 } = billingSlice.actions;
 
 export default billingSlice.reducer;

@@ -17,9 +17,10 @@ const backupLogSchema = new mongoose.Schema(
     },
     triggeredBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "SiteAdmin",
       default: null,
     },
+    encrypted: { type: Boolean, default: false },
     dbSizeBytes: { type: Number, default: 0 },
     durationMs: { type: Number, default: 0 },
   },

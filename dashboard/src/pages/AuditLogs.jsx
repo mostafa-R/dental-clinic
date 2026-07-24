@@ -8,7 +8,7 @@ import EmptyState from "../components/ui/EmptyState";
 import Pagination from "../components/ui/Pagination";
 import { PageLoader } from "../components/ui/Spinner";
 import { fetchAuditLogs, fetchAuditActions } from "../features/auditLogs/auditLogsSlice";
-import { formatDate, formatDateTime } from "../lib/format";
+import { formatDateTime } from "../lib/format";
 import { t } from "../lib/i18n";
 
 const actionVariant = (action) => {

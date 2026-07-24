@@ -93,7 +93,7 @@ const invoiceSchema = new mongoose.Schema(
     discount: { type: Number, default: 0, min: 0 },
     taxRate: { type: Number, default: 0, min: 0, max: 100 },
     tax: { type: Number, default: 0, min: 0 },
-    total: { type: Number, default: 0 },
+    total: { type: Number, default: 0, min: 0 },
     dueDate: { type: Date, default: null },
     paidAmount: { type: Number, default: 0, min: 0 },
     status: {
@@ -147,9 +147,12 @@ function computeTotals(doc) {
     const taxRate = Math.min(Math.max(Number(doc.taxRate) || 0, 0), 100);
     tax = round2((subtotal - discount) * taxRate / 100);
   }
-  const total = round2(subtotal - discount + tax);
+  const total = round2(Math.max(subtotal - discount + tax, 0));
   const paidAmount = round2(
-    (doc.payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
+    (doc.payments || []).reduce((sum, p) => {
+      const amt = Number(p.amount) || 0;
+      return sum + (p.isRefund ? -Math.abs(amt) : amt);
+    }, 0),
   );
 
   doc.subtotal = subtotal;
@@ -184,7 +187,11 @@ invoiceSchema.pre("validate", async function assignInvoiceNo() {
     const nextSeq = await Counter.next("invoice", this.tenant);
     this.invoiceNo = `INV-${String(nextSeq).padStart(5, "0")}`;
   }
-  computeTotals(this);
+  const financialFields = ['items', 'discount', 'discountType', 'discountRate', 'tax', 'taxRate', 'payments'];
+  const needsRecompute = this.isNew || financialFields.some((f) => this.isModified(f));
+  if (needsRecompute) {
+    computeTotals(this);
+  }
 });
 
 invoiceSchema.virtual("balance").get(function balance() {

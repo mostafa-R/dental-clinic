@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Card from '../../components/ui/Card';
@@ -7,10 +7,11 @@ import Spinner from '../../components/ui/Spinner';
 import PrescriptionFormModal from './PrescriptionFormModal';
 import { deletePrescription, fetchPrescriptions } from './emrSlice';
 import { showErrorDialog } from '../ui/uiSlice';
+import { useSocketEvent } from '../../lib/socket';
 import { canManagePrescriptions } from '../../lib/roles';
 import { formatDate } from '../../lib/format';
 import { useT } from '../../lib/i18n';
-import { PhiField } from '../../lib/usePhi.jsx';
+import { PhiField } from '../../hooks/usePhi';
 
 export default function PrescriptionsTab({ patientId, patient }) {
   const dispatch = useDispatch();
@@ -20,9 +21,17 @@ export default function PrescriptionsTab({ patientId, patient }) {
 
   const [formOpen, setFormOpen] = useState(false);
 
-  useEffect(() => {
+  const refetch = useCallback(() => {
     dispatch(fetchPrescriptions({ patientId, params: { limit: 100 } }));
   }, [dispatch, patientId]);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  useSocketEvent('prescription:created', refetch);
+  useSocketEvent('prescription:updated', refetch);
+  useSocketEvent('prescription:deleted', refetch);
 
   const onDelete = async (rxId) => {
     if (!window.confirm(t('emr.rx.deleteConfirm'))) return;
@@ -67,7 +76,7 @@ export default function PrescriptionsTab({ patientId, patient }) {
                 </div>
                 {canManage && (
                   <button type="button" onClick={() => onDelete(rx._id)} className="rounded-md px-2 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/15">
-                    {t('common.close')}
+                    {t('common.delete')}
                   </button>
                 )}
               </div>

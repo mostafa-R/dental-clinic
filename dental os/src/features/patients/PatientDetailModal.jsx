@@ -5,7 +5,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import { formatDate } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { canViewEmr } from '../../lib/roles';
-import { PhiField } from '../../lib/usePhi.jsx';
+import { PhiField } from '../../hooks/usePhi';
 
 function genderLabel(gender, t) {
   switch (gender) {

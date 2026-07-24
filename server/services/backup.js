@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
-import { mkdir, stat, rm, readdir } from "node:fs/promises";
+import { mkdir, stat, rm, readdir, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import mongoose from "mongoose";
 
 import BackupLog from "../modules/site/backup/backupLog.model.js";
+import { encryptFile } from "../utils/encryption.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -17,7 +18,9 @@ function getRetentionDays() {
 }
 
 function getMongoUri() {
-  return process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/dental-clinic';
+  const uri = process.env.MONGO_URI;
+  if (!uri) throw new Error('MONGO_URI is required for backups');
+  return uri;
 }
 
 function parseDbName(uri) {
@@ -59,18 +62,47 @@ export async function performBackup(type = "scheduled", triggeredBy = null) {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const archivePath = path.join(backupDir, `backup-${timestamp}.archive`);
 
+  let finalPath = archivePath;
+  let encrypted = false;
+
   const logEntry = await BackupLog.create({
     filename: path.basename(archivePath),
     status: "running",
     type,
     triggeredBy: triggeredBy,
+    encrypted: false,
   });
 
   try {
     const mongodumpBin = process.env.MONGODUMP_PATH || "mongodump";
+    
+    const { execSync } = await import("node:child_process");
+    const checkCmd = process.platform === "win32" ? `where ${mongodumpBin}` : `command -v ${mongodumpBin}`;
+    try {
+      execSync(checkCmd, { stdio: "ignore" });
+    } catch {
+      throw new Error("mongodump not found. Install MongoDB Database Tools or set MONGODUMP_PATH in .env");
+    }
+    
     await runMongodump(mongodumpBin, uri, archivePath);
 
-    const stats = await stat(archivePath);
+    // Encrypt the backup if BACKUP_ENCRYPTION_KEY is set
+    const encryptionEnabled = process.env.BACKUP_ENCRYPTION_KEY || process.env.BACKUP_ENCRYPT === 'true';
+
+    if (encryptionEnabled) {
+      try {
+        const encryptedPath = archivePath + '.enc';
+        await encryptFile(archivePath, encryptedPath);
+        await unlink(archivePath);
+        finalPath = encryptedPath;
+        encrypted = true;
+        console.log('[Backup] Backup encrypted successfully');
+      } catch (encErr) {
+        console.error('[Backup] Encryption failed, saving unencrypted:', encErr.message);
+      }
+    }
+
+    const stats = await stat(finalPath);
     const durationMs = Date.now() - start;
 
     let dbSizeBytes = 0;
@@ -84,6 +116,8 @@ export async function performBackup(type = "scheduled", triggeredBy = null) {
       console.warn('[Backup] Could not fetch dbStats:', err.message);
     }
 
+    logEntry.filename = path.basename(finalPath);
+    logEntry.encrypted = encrypted;
     logEntry.status = "completed";
     logEntry.sizeBytes = stats.size;
     logEntry.durationMs = durationMs;
@@ -99,7 +133,7 @@ export async function performBackup(type = "scheduled", triggeredBy = null) {
     logEntry.durationMs = Date.now() - start;
     await logEntry.save();
 
-    try { await rm(archivePath); } catch {}
+    try { await rm(finalPath); } catch {}
 
     throw err;
   }

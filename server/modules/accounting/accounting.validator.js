@@ -32,6 +32,8 @@ export const listExpenseQuerySchema = z.object({
 export const createDrawingSchema = z.object({
   owner: objectId,
   amount: z.number().min(0.01, 'Amount must be positive'),
+  paymentMethod: z.enum(EXPENSE_PAYMENT_METHODS).optional(),
+  patient: objectId.optional(),
   description: z.string().max(300).optional(),
   date: z.string().datetime({ message: 'Invalid date' }).optional().or(z.literal('')),
   branch: z.string().length(24, 'Invalid branch id').optional(),
@@ -54,7 +56,7 @@ export const listCommissionQuerySchema = z.object({
 });
 
 export const payCommissionSchema = z.object({
-  status: z.enum(COMMISSION_STATUS),
+  status: z.literal('paid'),
 });
 
 /* ---------------------------------------------- Treatment plan → invoice */

@@ -5,7 +5,7 @@ export const fetchPlatformSettings = createAsyncThunk(
   "platform/fetchPlatformSettings",
   async (_, { rejectWithValue }) => {
     try {
-      const response = await api.get("/platform/settings");
+      const response = await api.get("/platform");
       return response.data;
     } catch (error) {
       return rejectWithValue(
@@ -19,7 +19,7 @@ export const updatePlatformSettings = createAsyncThunk(
   "platform/updatePlatformSettings",
   async (data, { rejectWithValue }) => {
     try {
-      const response = await api.put("/platform/settings", data);
+      const response = await api.put("/platform", data);
       return response.data;
     } catch (error) {
       return rejectWithValue(
@@ -59,7 +59,7 @@ const platformSlice = createSlice({
       })
       .addCase(fetchPlatformSettings.fulfilled, (state, action) => {
         state.loading = false;
-        state.settings = action.payload;
+        state.settings = action.payload.settings || state.settings;
       })
       .addCase(fetchPlatformSettings.rejected, (state, action) => {
         state.loading = false;
@@ -70,7 +70,7 @@ const platformSlice = createSlice({
       })
       .addCase(updatePlatformSettings.fulfilled, (state, action) => {
         state.loading = false;
-        state.settings = action.payload;
+        state.settings = action.payload.settings || state.settings;
       })
       .addCase(updatePlatformSettings.rejected, (state, action) => {
         state.loading = false;

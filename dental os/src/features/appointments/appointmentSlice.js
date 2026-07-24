@@ -149,9 +149,7 @@ const appointmentsSlice = createSlice({
         state.formStatus = 'loading';
         state.formError = null;
       })
-      .addCase(createAppointment.fulfilled, (state, action) => {
-        state.items.push(action.payload);
-        state.items.sort((a, b) => new Date(a.start) - new Date(b.start));
+      .addCase(createAppointment.fulfilled, (state) => {
         state.formStatus = 'succeeded';
       })
       .addCase(createAppointment.rejected, (state, action) => {

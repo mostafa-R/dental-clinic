@@ -22,6 +22,7 @@ export const createInstallmentPlanSchema = z.object({
 });
 
 export const payInstallmentSchema = z.object({
+  installmentId: z.string().length(24, 'Invalid installment id'),
   amount: z.number().positive('Payment amount must be positive'),
   paymentMethod: z.enum(['cash', 'card', 'transfer', 'wallet']).optional(),
   paymentRef: z.string().max(100).optional(),

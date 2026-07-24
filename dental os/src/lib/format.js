@@ -34,10 +34,10 @@ export function timeAgo(date) {
   if (Number.isNaN(d.getTime())) return '—';
 
   const diff = Date.now() - d.getTime();
-  const sec = Math.round(diff / 1000);
-  const min = Math.round(sec / 60);
-  const hour = Math.round(min / 60);
-  const day = Math.round(hour / 24);
+  const sec = Math.floor(diff / 1000);
+  const min = Math.floor(sec / 60);
+  const hour = Math.floor(min / 60);
+  const day = Math.floor(hour / 24);
 
   // These labels are translated at the call site via the i18n dictionary
   // (dashboard.* keys). Returning a sentinel keeps this helper locale-aware

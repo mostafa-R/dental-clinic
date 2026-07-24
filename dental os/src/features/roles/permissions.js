@@ -1,3 +1,13 @@
+/**
+ * Clinic permission definitions — mirrors the backend source of truth at
+ * `server/constants/permissions.js`.  Both `CRUD_ACTIONS` and `MODULES` must
+ * stay in sync with that file.  If you add or remove a module, update both.
+ *
+ * SINGLE SOURCE OF TRUTH: server/constants/permissions.js
+ * This file is a frontend-only copy for the Dental OS clinic UI.
+ * TODO: Consider extracting to a shared package to eliminate duplication.
+ */
+
 export const CRUD_ACTIONS = ['create', 'read', 'update', 'delete'];
 
 export const CRUD_LABELS = {
@@ -14,6 +24,7 @@ export const CRUD_SHORT = {
   delete: 'D',
 };
 
+/** Must match MODULES in server/constants/permissions.js */
 export const MODULES = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'patients', label: 'Patients' },
@@ -27,7 +38,7 @@ export const MODULES = [
   { key: 'branches', label: 'Branches' },
   { key: 'settings', label: 'Settings' },
   { key: 'roles', label: 'Roles & Permissions' },
-  { key: 'chat', label: 'Chat' },
+  { key: 'chat', label: 'Clinic Chat' },
 ];
 
 export const MODULE_KEYS = MODULES.map((m) => m.key);

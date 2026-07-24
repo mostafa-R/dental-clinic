@@ -47,6 +47,7 @@ function WalletIcon() {
 
 export default function StatCards({ summary }) {
   const { t } = useT();
+  if (!summary) return null;
   const cards = [
     {
       label: t('dashboard.totalStaff'),
@@ -73,14 +74,14 @@ export default function StatCards({ summary }) {
       label: t('dashboard.todaysAppointments'),
       value: formatNumber(summary.todaysAppointments),
       icon: <CalendarIcon />,
-      hint: summary.todaysAppointments === 1 ? '1 today' : `${summary.todaysAppointments} today`,
+      hint: t('dashboard.todayCount', { count: summary.todaysAppointments }),
       accent: 'violet',
     },
     {
       label: t('dashboard.todaysInvoices'),
       value: formatNumber(summary.todaysInvoices),
       icon: <InvoiceIcon />,
-      hint: summary.todaysInvoices === 1 ? '1 today' : `${summary.todaysInvoices} today`,
+      hint: t('dashboard.todayCount', { count: summary.todaysInvoices }),
       accent: 'amber',
     },
     {

@@ -53,7 +53,7 @@ export const createTreatmentPlan = asyncHandler(async (req, res) => {
     patient: patient._id,
     branch: patient.branch,
     tenant: patient.tenant,
-    doctor: req.user._id,
+    doctor: data.doctor || req.user._id,
     createdBy: req.user._id,
   });
 
@@ -111,7 +111,7 @@ export const updateTreatmentPlan = asyncHandler(async (req, res) => {
         patient: patient._id,
         branch: patient.branch,
         tenant: patient.tenant,
-        doctor: req.user._id,
+        doctor: data.doctor || req.user._id,
         createdBy: req.user._id,
       });
       plan.nextAppointmentCreated = apptId;

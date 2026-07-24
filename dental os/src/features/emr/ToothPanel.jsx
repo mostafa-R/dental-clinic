@@ -2,9 +2,13 @@ import { useEffect, useState } from 'react';
 
 import {
   TOOTH_STATES,
+  SURFACES,
+  SURFACE_LABELS,
+  SURFACE_CONDITIONS,
+  SURFACE_CONDITION_LABELS,
   describeTooth,
   toothStyle,
-} from '../../lib/dental';
+} from './dental';
 import { useT } from '../../lib/i18n';
 
 const SURFACE_CONDITION_HEX = {
@@ -13,12 +17,11 @@ const SURFACE_CONDITION_HEX = {
   restored: '#38bdf8',
 };
 
-const CONDITION_ORDER = ['sound', 'caries', 'restored'];
-
-function nextCondition(current) {
-  const idx = CONDITION_ORDER.indexOf(current);
-  return CONDITION_ORDER[(idx + 1) % CONDITION_ORDER.length];
-}
+const CONDITION_BORDER = {
+  sound: 'border-slate-300 dark:border-slate-600',
+  caries: 'border-rose-400 dark:border-rose-500',
+  restored: 'border-sky-400 dark:border-sky-500',
+};
 
 function StateButton({ state, active, onClick, label }) {
   const style = toothStyle(state);
@@ -35,6 +38,40 @@ function StateButton({ state, active, onClick, label }) {
       <span className={`h-2.5 w-2.5 rounded-full ${style.dot}`} />
       {label}
     </button>
+  );
+}
+
+function SurfaceRow({ surface, condition, onChange }) {
+  const { t } = useT();
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-16 text-xs font-medium text-slate-600 dark:text-slate-300">
+        {SURFACE_LABELS[surface]}
+      </span>
+      <div className="flex gap-1">
+        {SURFACE_CONDITIONS.map((cond) => (
+          <button
+            key={cond}
+            type="button"
+            onClick={() => onChange(cond)}
+            title={`${SURFACE_LABELS[surface]}: ${SURFACE_CONDITION_LABELS[cond]}`}
+            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition ${
+              condition === cond
+                ? `${CONDITION_BORDER[cond]} bg-opacity-100 ring-1 ring-offset-1 dark:ring-offset-slate-800`
+                : 'border-slate-200 text-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800'
+            }`}
+            style={
+              condition === cond
+                ? { backgroundColor: SURFACE_CONDITION_HEX[cond], color: cond === 'sound' ? '#475569' : cond === 'caries' ? '#be123c' : '#0369a1' }
+                : undefined
+            }
+          >
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: SURFACE_CONDITION_HEX[cond] }} />
+            {SURFACE_CONDITION_LABELS[cond]}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -73,22 +110,15 @@ export default function ToothPanel({ tooth, onSave, saving, onCancel }) {
     );
   }
 
-  const cycleSurface = (surface) => {
-    setSurfaces((prev) => ({ ...prev, [surface]: nextCondition(prev[surface]) }));
+  const setSurface = (surface, condition) => {
+    setSurfaces((prev) => ({ ...prev, [surface]: condition }));
   };
 
-  // 3x3 grid layout: Buccal (top), Mesial/Occlusal/Distal (mid), Lingual (bottom).
-  const zones = [
-    { surface: null, key: 'tl' },
-    { surface: 'buccal', key: 't' },
-    { surface: null, key: 'tr' },
-    { surface: 'mesial', key: 'ml' },
-    { surface: 'occlusal', key: 'c' },
-    { surface: 'distal', key: 'mr' },
-    { surface: null, key: 'bl' },
-    { surface: 'lingual', key: 'b' },
-    { surface: null, key: 'br' },
-  ];
+  const hasCaries = Object.values(surfaces).some((c) => c === 'caries');
+  const hasRestorations = Object.values(surfaces).some((c) => c === 'restored');
+  const affectedSurfaces = Object.entries(surfaces)
+    .filter(([, c]) => c !== 'sound')
+    .map(([s]) => s);
 
   const submit = () => {
     onSave({ state, surfaces, notes });
@@ -126,26 +156,38 @@ export default function ToothPanel({ tooth, onSave, saving, onCancel }) {
       </div>
 
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('emr.tooth.surfaces')}</p>
-        <div className="grid max-w-[220px] grid-cols-3 gap-1.5">
-          {zones.map((zone) => {
-            if (!zone.surface) return <div key={zone.key} className="aspect-square" />;
-            const condition = surfaces[zone.surface];
-            return (
-              <button
-                key={zone.key}
-                type="button"
-                onClick={() => cycleSurface(zone.surface)}
-                title={`${t(`emr.surface.${zone.surface}`)}: ${t(`emr.surfaceCondition.${condition}`)}`}
-                className="flex aspect-square flex-col items-center justify-center rounded-md border border-slate-200 text-[10px] font-medium transition hover:scale-105 dark:border-slate-700"
-                style={{ backgroundColor: SURFACE_CONDITION_HEX[condition] }}
-              >
-                <span className="leading-tight text-slate-700 dark:text-slate-100">{t(`emr.surface.${zone.surface}`)}</span>
-                <span className="text-[9px] text-slate-500 dark:text-slate-300">{t(`emr.surfaceCondition.${condition}`)}</span>
-              </button>
-            );
-          })}
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('emr.tooth.surfaces')}</p>
+          {affectedSurfaces.length > 0 && (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-700 dark:text-slate-400">
+              {affectedSurfaces.length} affected
+            </span>
+          )}
         </div>
+        <div className="space-y-1.5">
+          {SURFACES.map((surface) => (
+            <SurfaceRow
+              key={surface}
+              surface={surface}
+              condition={surfaces[surface]}
+              onChange={(cond) => setSurface(surface, cond)}
+            />
+          ))}
+        </div>
+        {(hasCaries || hasRestorations) && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {hasCaries && (
+              <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+                {Object.values(surfaces).filter((c) => c === 'caries').length} caries
+              </span>
+            )}
+            {hasRestorations && (
+              <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">
+                {Object.values(surfaces).filter((c) => c === 'restored').length} restored
+              </span>
+            )}
+          </div>
+        )}
         <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">{t('emr.tooth.surfaceHint')}</p>
       </div>
 

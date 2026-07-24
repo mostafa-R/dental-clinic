@@ -126,7 +126,8 @@ export default function Admins() {
         resetForm();
       } else {
         const result = await dispatch(createAdmin(formData)).unwrap();
-        setCredentials({ email: result.admin.email, password: formData.password });
+        const createdAdmin = result.admin || result;
+        setCredentials({ email: createdAdmin.email, password: formData.password });
       }
     } catch (error) {
       console.error("Failed to save admin:", error);

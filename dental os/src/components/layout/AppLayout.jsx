@@ -3,8 +3,9 @@ import { Outlet } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
-import ChatGlobalListener from '../chat/ChatGlobalListener';
+import ChatGlobalListener from '../../features/chat/ChatGlobalListener';
 import { applyServerPreferences } from '../../features/preferences/usePreferences';
+import { initNotifications } from '../../lib/notificationSound';
 
 function ImpersonationBanner() {
   const user = useSelector((s) => s.auth.user);
@@ -33,6 +34,15 @@ export default function AppLayout() {
     applyServerPreferences(user);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?._id]);
+
+  useEffect(() => {
+    const handler = () => {
+      initNotifications();
+      document.removeEventListener('click', handler);
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">

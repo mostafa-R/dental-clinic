@@ -2,7 +2,7 @@ import { useEffect, useCallback, useMemo, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { getSocket } from '../../lib/socket';
 import { useSocket } from '../../hooks/useSocket';
-import { addMessage, fetchUnreadCounts, markMessagesAsRead } from '../../features/chat/chatSlice';
+import { addMessage, fetchUnreadCounts, markMessagesAsRead } from './chatSlice';
 import { playNotificationSound } from '../../lib/notificationSound';
 
 export default function ChatGlobalListener() {
@@ -25,23 +25,20 @@ export default function ChatGlobalListener() {
     return () => clearInterval(pollingRef.current);
   }, [dispatch, user]);
 
-  useEffect(() => {
-    if (Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, []);
-
   const handleMessage = useCallback((msg) => {
     if (String(msg.sender._id) === String(user?._id)) return;
     dispatch(addMessage(msg));
-    playNotificationSound();
-    if (Notification.permission === 'granted' && msg.sender?.name && document.hidden) {
-      new Notification(msg.sender.name, { body: msg.content, icon: '/favicon.ico' });
+    if (document.hidden) {
+      playNotificationSound();
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && msg.sender?.name) {
+        new Notification(msg.sender.name, { body: msg.content, icon: '/favicon.ico' });
+      }
     }
   }, [dispatch, user]);
 
   const handleRead = useCallback((payload) => {
     dispatch(markMessagesAsRead(payload));
+    dispatch(fetchUnreadCounts());
   }, [dispatch]);
 
   const events = useMemo(() => [

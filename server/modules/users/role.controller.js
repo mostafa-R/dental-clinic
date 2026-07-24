@@ -2,11 +2,13 @@ import mongoose from 'mongoose';
 
 import Role from './role.model.js';
 import User from './user.model.js';
-import { currentTenant, filterByBranch } from '../../utils/branchScope.js';
+import { currentTenant, filterByBranch, toObjectId, resolveBranchForCreate } from '../../utils/branchScope.js';
 import { MODULES, CRUD_ACTIONS } from '../../constants/permissions.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
+import { invalidateRole, invalidateTenantRoles, invalidatePermission } from '../../utils/cache.js';
+import { emitToBranch } from '../../socket/index.js';
 
 /**
  * GET /api/roles
@@ -15,7 +17,11 @@ import { sendSuccess } from '../../utils/sendSuccess.js';
 export const listRoles = asyncHandler(async (req, res) => {
   const tenant = currentTenant(req);
 
-  const filter = tenant ? { $or: [{ tenant }, { tenant: null }] } : { tenant: null };
+  const filter = { ...filterByBranch(req) };
+  if (tenant) {
+    filter.$or = [{ tenant }, { tenant: null }];
+  }
+  filter.isActive = { $ne: false };
   const roles = await Role.find(filter).sort('isBuiltIn -createdAt');
 
   return sendSuccess(res, { roles, modules: MODULES, actions: CRUD_ACTIONS });
@@ -46,8 +52,24 @@ export const createRole = asyncHandler(async (req, res) => {
   const tenant = currentTenant(req);
   const { name, description, permissions } = req.validatedBody;
 
-  // Check name uniqueness within the tenant scope.
-  const existingQuery = tenant ? { tenant, name } : { tenant: null, name };
+  // Resolve branch: system admins must provide one; others get their own.
+  let branchId = null;
+  if (req.body.branch || !tenant) {
+    try {
+      branchId = await resolveBranchForCreate(req, req.body.branch);
+    } catch (err) {
+      // Only swallow for platform admins (no tenant) without explicit branch
+      if (tenant || req.body.branch) throw err;
+    }
+  } else if (req.user.branch) {
+    branchId = toObjectId(req.user.branch);
+  }
+
+  // Check name uniqueness within the tenant + branch scope.
+  const existingQuery = { name };
+  if (tenant) existingQuery.tenant = tenant;
+  else existingQuery.tenant = null;
+  if (branchId) existingQuery.branch = branchId;
   const existing = await Role.findOne(existingQuery);
   if (existing) {
     throw ApiError.conflict('A role with this name already exists');
@@ -55,6 +77,7 @@ export const createRole = asyncHandler(async (req, res) => {
 
   const role = await Role.create({
     tenant,
+    branch: branchId,
     name,
     description: description || '',
     permissions: permissions || [],
@@ -62,6 +85,7 @@ export const createRole = asyncHandler(async (req, res) => {
     isSystemAdmin: false,
   });
 
+  emitToBranch(String(branchId || tenant || ''), 'role:created', { role });
   return sendSuccess(res, { role }, 201);
 });
 
@@ -97,6 +121,11 @@ export const updateRole = asyncHandler(async (req, res) => {
 
   await role.save();
 
+  // Invalidate cached role and all permissions that depend on it
+  await invalidateRole(String(role._id));
+  if (tenant) await invalidateTenantRoles(String(tenant));
+
+  emitToBranch(String(role.branch || role.tenant || ''), 'role:updated', { role });
   return sendSuccess(res, { role });
 });
 
@@ -121,10 +150,22 @@ export const deleteRole = asyncHandler(async (req, res) => {
     throw ApiError.conflict('Built-in roles cannot be deleted');
   }
 
-  // Clear roleId on any users that reference this role.
-  await User.updateMany({ roleId: role._id }, { $set: { roleId: null } });
+  const roleId = String(role._id);
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await User.updateMany({ roleId: role._id }, { $set: { roleId: null } }, { session });
+      await role.deleteOne({ session });
+    });
+  } finally {
+    session.endSession();
+  }
 
-  await role.deleteOne();
+  // Invalidate cached role and tenant roles
+  await invalidateRole(roleId);
+  if (tenant) await invalidateTenantRoles(String(tenant));
+
+  emitToBranch(String(role.branch || role.tenant || ''), 'role:deleted', { _id: role._id });
   return sendSuccess(res, { message: 'Role deleted' });
 });
 

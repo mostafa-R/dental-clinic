@@ -55,4 +55,19 @@ export const emrApi = {
     api.patch(`${base(patientId)}/clinical-notes/${noteId}`, payload).then((r) => r.data.data),
   deleteNote: (patientId, noteId) =>
     api.delete(`${base(patientId)}/clinical-notes/${noteId}`).then((r) => r.data.data),
+
+  /* Encrypted file attachments */
+  uploadFile: (file, onProgress) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/emr/attachments/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      },
+    }).then((r) => r.data.data);
+  },
+  getDownloadUrl: (filename) => `/api/v1/emr/attachments/${filename}/download`,
 };

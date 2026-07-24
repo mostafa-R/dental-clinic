@@ -24,12 +24,16 @@ export default function TreatmentPlanFormModal({ open, patientId, onClose, prese
   const [title, setTitle] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
   const [items, setItems] = useState([emptyItem()]);
+  const [nextAppointment, setNextAppointment] = useState('');
+  const [nextAppointmentNotes, setNextAppointmentNotes] = useState('');
 
   useEffect(() => {
     if (open) {
       setTitle('');
       setDiagnosis('');
       setItems([{ ...emptyItem(), tooth: preselectedTooth ? String(preselectedTooth) : '' }]);
+      setNextAppointment('');
+      setNextAppointmentNotes('');
       dispatch(resetFormState());
     }
   }, [open, dispatch, preselectedTooth]);
@@ -61,7 +65,13 @@ export default function TreatmentPlanFormModal({ open, patientId, onClose, prese
 
     try {
       await dispatch(
-        createPlan({ patientId, payload: { title: title.trim(), diagnosis: diagnosis.trim(), items: cleanItems } }),
+        createPlan({ patientId, payload: {
+          title: title.trim(),
+          diagnosis: diagnosis.trim(),
+          items: cleanItems,
+          nextAppointment: nextAppointment ? new Date(nextAppointment).toISOString() : undefined,
+          nextAppointmentNotes: nextAppointmentNotes.trim() || undefined,
+        } }),
       ).unwrap();
       onClose();
     } catch (err) {
@@ -129,6 +139,17 @@ export default function TreatmentPlanFormModal({ open, patientId, onClose, prese
                 </button>
               </div>
             ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('emr.plan.nextAppointment')}</label>
+            <input type="datetime-local" value={nextAppointment} onChange={(e) => setNextAppointment(e.target.value)} className={inputCls} />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('emr.plan.nextAppointmentNotes')}</label>
+            <input value={nextAppointmentNotes} onChange={(e) => setNextAppointmentNotes(e.target.value)} placeholder={t('emr.plan.nextAppointmentNotesPlaceholder')} className={inputCls} maxLength={500} />
           </div>
         </div>
         {formError?.message && <p className="text-xs text-rose-600 dark:text-rose-400">{formError.message}</p>}

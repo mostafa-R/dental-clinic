@@ -17,7 +17,7 @@ const auditLogSchema = new mongoose.Schema(
         'tenant.create', 'tenant.update', 'tenant.suspend', 'tenant.activate',
         'tenant.archive', 'tenant.delete', 'tenant.impersonate',
         'branch.create', 'branch.update', 'branch.delete',
-        'admin.create', 'admin.update', 'admin.delete',
+        'admin.create', 'admin.update', 'admin.delete', 'admin.update_permissions',
         'subscription.update', 'plan.create', 'plan.update', 'plan.delete',
         'platform.update', 'feature.toggle', '2fa.enable', '2fa.disable',
         'quarantine.set', 'quarantine.remove', 'impersonation.start', 'impersonation.end',

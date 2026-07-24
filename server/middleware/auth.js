@@ -1,7 +1,19 @@
 import ApiError from '../utils/ApiError.js';
 import { ACCESS_COOKIE, verifyAccessToken } from '../utils/jwt.js';
 import User from '../modules/users/user.model.js';
+import { getCachedTenant, cacheTenant, invalidateTenant } from '../utils/cache.js';
 
+/**
+ * Authentication middleware for clinic users.
+ *
+ * Flow:
+ *   1. Extract JWT from httpOnly cookie
+ *   2. Verify token signature and expiry
+ *   3. Load user from DB (with populated branch + tenant)
+ *   4. Validate token version (revoke on password change)
+ *   5. Check tenant subscription status (cached in Redis)
+ *   6. Attach user to req.user
+ */
 export async function protect(req, _res, next) {
   try {
     const token = req.cookies?.[ACCESS_COOKIE];
@@ -18,7 +30,7 @@ export async function protect(req, _res, next) {
 
     const user = await User.findById(decoded.sub)
       .populate('branch', 'name address phone isActive')
-      .populate('tenant', 'plan planModules planId status name isActive');
+      .populate('tenant', 'plan planModules planId status name isActive subscriptionEndsAt');
     if (!user) {
       throw ApiError.unauthorized('User no longer exists');
     }
@@ -32,21 +44,44 @@ export async function protect(req, _res, next) {
     }
 
     // Enforce tenant subscription status on every protected request.
-    // Check if the user has a tenant ID but the populate returned null (deleted tenant).
     const rawTenantId = user._doc?.tenant;
     if (rawTenantId && (!user.tenant || !user.tenant._id)) {
       throw ApiError.forbidden('Your clinic no longer exists. Contact your platform administrator.');
     }
+
     if (user.tenant) {
-      const tenant = user.tenant;
-      if (!tenant.isActive || tenant.status === 'suspended' || tenant.status === 'cancelled') {
+      const tenantId = String(user.tenant._id);
+
+      // Try cache first, then DB, then cache the result
+      let tenantConfig = await getCachedTenant(tenantId);
+      if (!tenantConfig) {
+        tenantConfig = {
+          _id: user.tenant._id,
+          plan: user.tenant.plan,
+          planModules: user.tenant.planModules,
+          planId: user.tenant.planId,
+          status: user.tenant.status,
+          name: user.tenant.name,
+          isActive: user.tenant.isActive,
+          subscriptionEndsAt: user.tenant.subscriptionEndsAt,
+        };
+        await cacheTenant(tenantId, tenantConfig);
+      }
+
+      // Quick subscription check from cache
+      if (!tenantConfig.isActive || tenantConfig.status === 'suspended' || tenantConfig.status === 'cancelled') {
         throw ApiError.forbidden('Your clinic subscription is suspended. Contact your platform administrator.');
       }
+
+      // Replace the populated tenant with the cached config for downstream use
+      user.tenant = tenantConfig;
     }
 
     req.user = user.toObject();
     delete req.user.password;
     delete req.user.refreshToken;
+    delete req.user.tokenVersion;
+    delete req.user.__v;
 
     // Propagate impersonation context so downstream middleware can restrict PHI.
     if (decoded.type === 'impersonation') {
@@ -59,5 +94,3 @@ export async function protect(req, _res, next) {
     return next(err);
   }
 }
-
-

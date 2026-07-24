@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   fetchBillingSummary,
@@ -14,6 +14,8 @@ import AgingReport from '../features/billing/AgingReport';
 import InvoiceFormModal from '../features/billing/InvoiceFormModal';
 import InvoiceDetailModal from '../features/billing/InvoiceDetailModal';
 import PaymentModal from '../features/billing/PaymentModal';
+import RefundModal from '../features/billing/RefundModal';
+import VoidConfirmModal from '../features/billing/VoidConfirmModal';
 import InvoicesTable from '../features/billing/InvoicesTable';
 import { INVOICE_STATUSES, statusTKey } from '../features/billing/statuses';
 import { showErrorDialog } from '../features/ui/uiSlice';
@@ -21,8 +23,11 @@ import Card from '../components/ui/Card';
 import EmptyState from '../components/ui/EmptyState';
 import Pagination from '../components/ui/Pagination';
 import Spinner from '../components/ui/Spinner';
+import { useSocketEvent } from '../lib/socket';
 import { canManageBilling, canViewBilling } from '../lib/roles';
 import { useT } from '../lib/i18n';
+
+
 
 export default function Billing() {
   const dispatch = useDispatch();
@@ -35,8 +40,10 @@ export default function Billing() {
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [paying, setPaying] = useState(null);
-  const [voidingId, setVoidingId] = useState(null);
+  const [refunding, setRefunding] = useState(null);
+  const [voiding, setVoiding] = useState(null);
   const [agingOpen, setAgingOpen] = useState(false);
+  const [voidLoading, setVoidLoading] = useState(false);
 
   useEffect(() => {
     if (!canViewBilling()) return undefined;
@@ -49,6 +56,14 @@ export default function Billing() {
     }
   }, [dispatch, canViewSummary, summaryStatus]);
 
+  const refreshAll = useCallback(() => {
+    dispatch(fetchInvoices(query));
+    if (canViewSummary) dispatch(fetchBillingSummary());
+  }, [dispatch, query, canViewSummary]);
+
+  useSocketEvent('invoice:created', refreshAll);
+  useSocketEvent('invoice:updated', refreshAll);
+
   useEffect(() => () => dispatch(resetBilling()), [dispatch]);
 
   if (!canViewBilling()) {
@@ -59,16 +74,12 @@ export default function Billing() {
     );
   }
 
-  const refreshAll = () => {
-    dispatch(fetchInvoices(query));
-    if (canViewSummary) dispatch(fetchBillingSummary());
-  };
-
   const openCreate = () => {
     setEditing(null);
     setFormOpen(true);
   };
   const openEdit = (invoice) => {
+    setViewing(null);
     setEditing(invoice);
     setFormOpen(true);
   };
@@ -91,18 +102,25 @@ export default function Billing() {
     refreshAll();
   };
 
-  const handleVoid = async (invoice) => {
-    if (!window.confirm(t('billing.voidConfirm', { no: invoice.invoiceNo }))) return;
-    setVoidingId(invoice._id);
+  const handleVoid = async (reason) => {
+    if (!voiding || !reason.trim()) return;
+    setVoidLoading(true);
     try {
-      await dispatch(voidInvoice(invoice._id)).unwrap();
+      await dispatch(voidInvoice({ id: voiding._id, reason: reason.trim() })).unwrap();
       setViewing(null);
+      setVoiding(null);
       refreshAll();
     } catch (err) {
       dispatch(showErrorDialog(err));
     } finally {
-      setVoidingId(null);
+      setVoidLoading(false);
     }
+  };
+
+  const handleRefund = () => {
+    setViewing(null);
+    setRefunding(null);
+    refreshAll();
   };
 
   const isLoading = status === 'loading' || status === 'idle';
@@ -186,7 +204,7 @@ export default function Billing() {
         )}
 
         {status === 'succeeded' && !error && (
-          <InvoicesTable onView={setViewing} onPay={openPay} onVoid={handleVoid} />
+          <InvoicesTable onView={setViewing} onPay={openPay} onVoid={setVoiding} />
         )}
 
         {status === 'succeeded' && !error && items.length > 0 && (
@@ -196,6 +214,8 @@ export default function Billing() {
             total={pagination.total}
             pageSize={pagination.limit}
             onChange={(p) => dispatch(setPage(p))}
+            prevLabel={t('common.prev')}
+            nextLabel={t('common.next')}
           />
         )}
       </Card>
@@ -218,10 +238,26 @@ export default function Billing() {
         onClose={() => setViewing(null)}
         onPay={openPay}
         onEdit={openEdit}
-        onVoid={handleVoid}
+        onVoid={(inv) => { setViewing(null); setVoiding(inv); }}
+        onRefund={(inv) => { setViewing(null); setRefunding(inv); }}
       />
 
-      {voidingId && (
+      <VoidConfirmModal
+        open={Boolean(voiding)}
+        invoice={voiding}
+        onClose={() => setVoiding(null)}
+        onConfirm={handleVoid}
+        loading={voidLoading}
+      />
+
+      <RefundModal
+        open={Boolean(refunding)}
+        invoice={refunding}
+        onClose={() => setRefunding(null)}
+        onSaved={handleRefund}
+      />
+
+      {voiding && (
         <p className="sr-only">Voiding invoice…</p>
       )}
 

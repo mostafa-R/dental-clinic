@@ -10,17 +10,19 @@ const updateUserSchema = z.object({
   name: z.string().min(2).max(80).optional(),
   email: z.string().email().optional(),
   password: z.string().min(8).max(128).optional(),
-  role: z.enum(['clinic_admin', 'doctor', 'receptionist', 'accountant']).optional(),
-  roleId: z.string().length(24).nullable().optional(),
   phone: z.string().max(30).optional(),
   branch: z.string().length(24).nullable().optional(),
   isActive: z.boolean().optional(),
   isDoctor: z.boolean().optional(),
+});
+
+const updateUserAdminSchema = updateUserSchema.extend({
+  roleId: z.string().length(24).optional(),
   commissionRate: z.number().min(0).max(100).optional(),
 });
 
 const listUsersQuerySchema = z.object({
-  role: z.string().optional(),
+  roleId: z.string().length(24).optional(),
   isDoctor: z.enum(['true', 'false']).optional(),
   branch: z.string().length(24).optional(),
 });
@@ -28,10 +30,10 @@ const listUsersQuerySchema = z.object({
 const router = Router();
 
 router.get('/', protect, checkPermission('users', 'read'), validate(listUsersQuerySchema, 'query'), listUsers);
-router.get('/doctors', protect, listDoctors);
+router.get('/doctors', protect, checkPermission('appointments', 'create'), listDoctors);
 router.get('/:id', protect, checkPermission('users', 'read'), getUser);
 router.post('/', protect, checkPermission('users', 'create'), validate(createUserSchema), createUser);
-router.patch('/:id', protect, checkPermission('users', 'update'), validate(updateUserSchema), updateUser);
+router.patch('/:id', protect, checkPermission('users', 'update'), validate(updateUserAdminSchema), updateUser);
 router.delete('/:id', protect, checkPermission('users', 'delete'), deleteUser);
 router.patch('/:id/toggle-active', protect, checkPermission('users', 'update'), toggleUserActive);
 

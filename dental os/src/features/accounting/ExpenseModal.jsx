@@ -7,7 +7,7 @@ import { showErrorDialog } from '../ui/uiSlice';
 import {
   EXPENSE_CATEGORIES,
   EXPENSE_PAYMENT_METHODS,
-} from '../../lib/accounting';
+} from './accounting';
 import { useT } from '../../lib/i18n';
 
 export default function ExpenseModal({ open, onClose }) {

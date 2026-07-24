@@ -53,25 +53,26 @@ const featureFlagsSlice = createSlice({
       .addCase(fetchTenantModules.pending, (state) => { state.loading = true; })
       .addCase(fetchTenantModules.fulfilled, (state, action) => {
         state.loading = false;
-        state.tenants[action.payload.tenantId] = {
+        state.tenants[action.meta.arg] = {
           plan: action.payload.plan,
-          enabledModules: action.payload.enabledModules,
-          availableModules: action.payload.availableModules,
+          enabledModules: action.payload.enabledModules || [],
+          availableModules: action.payload.availableModules || [],
         };
       })
       .addCase(fetchTenantModules.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
       .addCase(toggleModule.pending, (state) => { state.toggling = true; })
       .addCase(toggleModule.fulfilled, (state, action) => {
         state.toggling = false;
-        const t = state.tenants[action.payload.tenantId];
-        if (t) t.enabledModules = action.payload.enabledModules;
+        const tenant = state.tenants[action.meta.arg.tenantId];
+        if (tenant) tenant.enabledModules = action.payload.enabledModules || [];
       })
       .addCase(toggleModule.rejected, (state, action) => { state.toggling = false; state.error = action.payload; })
       .addCase(setModules.fulfilled, (state, action) => {
-        const t = state.tenants[action.payload.tenantId];
-        if (t) t.enabledModules = action.payload.enabledModules;
+        const tenant = state.tenants[action.meta.arg.tenantId];
+        if (tenant) tenant.enabledModules = action.payload.enabledModules || [];
       });
   },
 });
 
+export const { clearTenantModules } = featureFlagsSlice.actions;
 export default featureFlagsSlice.reducer;

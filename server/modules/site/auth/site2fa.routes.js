@@ -36,6 +36,7 @@ router.post(
       req.params = {};
       const origJson = res.json.bind(res);
       res.json = function (body) {
+        res.json = origJson;
         if (body?.success && body?.data?.verified) {
           admin.lastLogin = new Date();
           admin.save().catch(() => {});

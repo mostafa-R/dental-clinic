@@ -146,6 +146,7 @@ function replaceDrawing(state, drawing) {
 function replaceCommission(state, commission) {
   const idx = state.commissions.items.findIndex((c) => c._id === commission._id);
   if (idx >= 0) state.commissions.items[idx] = commission;
+  else state.commissions.items.unshift(commission);
 }
 
 const accountingSlice = createSlice({

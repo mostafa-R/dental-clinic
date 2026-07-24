@@ -1,9 +1,12 @@
+import mongoose from 'mongoose';
+
 import Branch from './branch.model.js';
 import Tenant from '../site/tenant/tenant.model.js';
 import { currentTenant } from '../../utils/branchScope.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 import ApiError from '../../utils/ApiError.js';
+import { emitToBranch } from '../../socket/index.js';
 
 export const listBranches = asyncHandler(async (req, res) => {
   const filter = {};
@@ -33,11 +36,15 @@ export const createBranch = asyncHandler(async (req, res) => {
 
   const branch = await Branch.create({ tenant, name, address, phone, isActive: isActive ?? true });
 
+  emitToBranch(String(branch._id), 'branch:created', { branch: branch.toObject() });
   return sendSuccess(res, { branch }, 201);
 });
 
 export const updateBranch = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  if (!mongoose.isValidObjectId(id)) {
+    throw ApiError.badRequest('Invalid branch id');
+  }
   const { name, address, phone, isActive } = req.validatedBody;
   const tenant = currentTenant(req);
 
@@ -51,11 +58,15 @@ export const updateBranch = asyncHandler(async (req, res) => {
 
   await branch.save();
 
+  emitToBranch(String(branch._id), 'branch:updated', { branch: branch.toObject() });
   return sendSuccess(res, { branch: branch.toObject() });
 });
 
 export const deleteBranch = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  if (!mongoose.isValidObjectId(id)) {
+    throw ApiError.badRequest('Invalid branch id');
+  }
   const tenant = currentTenant(req);
 
   const branch = await Branch.findOne({ _id: id, ...(tenant ? { tenant } : {}) });
@@ -78,5 +89,6 @@ export const deleteBranch = asyncHandler(async (req, res) => {
 
   await Branch.deleteOne({ _id: id });
 
+  emitToBranch(String(id), 'branch:deleted', { _id: id });
   return sendSuccess(res, { message: 'Branch deleted' });
 });

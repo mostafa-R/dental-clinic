@@ -15,7 +15,7 @@ export const billingApi = {
   create: (payload) => api.post('/billing', payload).then((r) => r.data.data),
   update: (id, payload) => api.patch(`/billing/${id}`, payload).then((r) => r.data.data),
   addPayment: (id, payload) => api.post(`/billing/${id}/payments`, payload).then((r) => r.data.data),
-  void: (id) => api.post(`/billing/${id}/void`).then((r) => r.data.data),
+  void: (id, payload) => api.post(`/billing/${id}/void`, payload).then((r) => r.data.data),
   aging: () => api.get('/billing/aging').then((r) => r.data.data),
   refund: (id, payload) => api.post(`/billing/${id}/refund`, payload).then((r) => r.data.data),
 };

@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Card from '../components/ui/Card';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import { fetchBranches, deleteBranch } from '../features/branches/branchSlice';
 import { showErrorDialog } from '../features/ui/uiSlice';
+import { useSocketEvent } from '../lib/socket';
 import { useT } from '../lib/i18n';
 import { canManageBranches } from '../lib/roles';
 import BranchFormModal from '../features/branches/BranchFormModal';
@@ -21,6 +22,11 @@ export default function Branches() {
   useEffect(() => {
     dispatch(fetchBranches());
   }, [dispatch]);
+
+  const refetch = useCallback(() => { dispatch(fetchBranches()); }, [dispatch]);
+  useSocketEvent('branch:created', refetch);
+  useSocketEvent('branch:updated', refetch);
+  useSocketEvent('branch:deleted', refetch);
 
   const openCreate = () => { setEditing(null); setFormOpen(true); };
   const openEdit = (branch) => { setEditing(branch); setFormOpen(true); };

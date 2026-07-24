@@ -57,14 +57,18 @@ export async function cacheSet(key, value, ttlSeconds = 300) {
   if (!redis || !isConnected) return;
   try {
     await redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
-  } catch {}
+  } catch (err) {
+    console.warn('[Redis] cacheSet error:', err.message);
+  }
 }
 
 export async function cacheDel(key) {
   if (!redis || !isConnected) return;
   try {
     await redis.del(key);
-  } catch {}
+  } catch (err) {
+    console.warn('[Redis] cacheDel error:', err.message);
+  }
 }
 
 export async function getRedisInfo() {

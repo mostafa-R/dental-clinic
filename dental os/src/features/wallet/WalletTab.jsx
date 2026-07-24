@@ -4,9 +4,11 @@ import { useDispatch, useSelector } from 'react-redux';
 import Card from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
 import Spinner from '../../components/ui/Spinner';
-import { fetchWallet, fetchInstallmentPlans, addTransaction, createInstallmentPlan, payInstallmentPlan, resetFormState } from './walletSlice';
+import { fetchWallet, fetchInstallmentPlans, addTransaction, createInstallmentPlan, payInstallmentPlan, updateInstallmentPlan, resetFormState, resetTransactionState } from './walletSlice';
+import { showErrorDialog } from '../ui/uiSlice';
 import { canManageBilling, canViewBilling } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
+import { useSocketEvent } from '../../lib/socket';
 import { formatMoney, formatDate } from '../../lib/format';
 
 const INSTALLMENT_STATUS_STYLES = {
@@ -24,7 +26,7 @@ const PLAN_STATUS_STYLES = {
 export default function WalletTab({ patientId }) {
   const dispatch = useDispatch();
   const { t } = useT();
-  const { wallet, walletStatus, plans, formStatus, formError } = useSelector((s) => s.wallet);
+  const { wallet, walletStatus, plans, transactionStatus, formStatus, formError } = useSelector((s) => s.wallet);
   const canManage = canManageBilling();
   const canView = canViewBilling();
 
@@ -38,6 +40,9 @@ export default function WalletTab({ patientId }) {
   const [planInstallments, setPlanInstallments] = useState([{ dueDate: '', amount: '' }]);
   const [payingPlanId, setPayingPlanId] = useState(null);
   const [payAmount, setPayAmount] = useState('');
+  const [editingPlan, setEditingPlan] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [viewingPlan, setViewingPlan] = useState(null);
 
   useEffect(() => {
     if (!canView) return;
@@ -45,17 +50,33 @@ export default function WalletTab({ patientId }) {
     dispatch(fetchInstallmentPlans({ patientId, params: { limit: 100 } }));
   }, [dispatch, patientId, canView]);
 
+  const refetchWallet = useCallback(() => {
+    if (patientId) {
+      dispatch(fetchWallet(patientId));
+      dispatch(fetchInstallmentPlans({ patientId, params: { limit: 100 } }));
+    }
+  }, [dispatch, patientId]);
+  useSocketEvent('wallet:updated', refetchWallet);
+  useSocketEvent('installment:created', refetchWallet);
+  useSocketEvent('installment:updated', refetchWallet);
+  useSocketEvent('installment:paid', refetchWallet);
+
   const handleAddFunds = useCallback(async (e) => {
     e.preventDefault();
     if (!fundAmount || Number(fundAmount) <= 0) return;
-    await dispatch(addTransaction({
-      patientId,
-      payload: { type: 'credit', amount: Number(fundAmount), description: fundDesc },
-    }));
-    setShowAddFunds(false);
-    setFundAmount('');
-    setFundDesc('');
-    dispatch(resetFormState());
+    try {
+      await dispatch(addTransaction({
+        patientId,
+        payload: { type: 'credit', amount: Number(fundAmount), description: fundDesc },
+      })).unwrap();
+      setShowAddFunds(false);
+      setFundAmount('');
+      setFundDesc('');
+    } catch (err) {
+      dispatch(showErrorDialog(err));
+    } finally {
+      dispatch(resetTransactionState());
+    }
   }, [dispatch, patientId, fundAmount, fundDesc]);
 
   const handleAddInstallment = () => {
@@ -80,7 +101,7 @@ export default function WalletTab({ patientId }) {
     const validated = planInstallments.filter((i) => i.dueDate && i.amount);
     if (validated.length === 0) return;
 
-    await dispatch(createInstallmentPlan({
+    const result = await dispatch(createInstallmentPlan({
       patientId,
       payload: {
         title: planTitle,
@@ -98,19 +119,44 @@ export default function WalletTab({ patientId }) {
     setPlanFrequency('monthly');
     setPlanInstallments([{ dueDate: '', amount: '' }]);
     dispatch(resetFormState());
+    if (result.meta.requestStatus === 'fulfilled' && result.payload) {
+      setViewingPlan(result.payload);
+    }
   }, [dispatch, patientId, planTitle, planTotal, planFrequency, planInstallments]);
 
   const handlePayInstallment = useCallback(async (planId) => {
     if (!payAmount || Number(payAmount) <= 0) return;
-    await dispatch(payInstallmentPlan({
-      patientId,
-      planId,
-      payload: { amount: Number(payAmount) },
-    }));
-    setPayingPlanId(null);
-    setPayAmount('');
-    dispatch(resetFormState());
+    try {
+      await dispatch(payInstallmentPlan({
+        patientId,
+        planId,
+        payload: { amount: Number(payAmount) },
+      })).unwrap();
+      setPayingPlanId(null);
+      setPayAmount('');
+    } catch (err) {
+      dispatch(showErrorDialog(err));
+    } finally {
+      dispatch(resetFormState());
+    }
   }, [dispatch, patientId, payAmount]);
+
+  const handleEditPlan = useCallback(async () => {
+    if (!editingPlan || !editTitle.trim()) return;
+    try {
+      await dispatch(updateInstallmentPlan({
+        patientId,
+        planId: editingPlan._id,
+        payload: { title: editTitle.trim() },
+      })).unwrap();
+      setEditingPlan(null);
+      setEditTitle('');
+    } catch (err) {
+      dispatch(showErrorDialog(err));
+    } finally {
+      dispatch(resetFormState());
+    }
+  }, [dispatch, patientId, editingPlan, editTitle]);
 
   if (!canView) {
     return <EmptyState title={t('error.notAllowed')} message={t('error.notAllowedMsg')} />;
@@ -151,9 +197,9 @@ export default function WalletTab({ patientId }) {
               placeholder={t('wallet.description')}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500" />
             <div className="flex gap-2">
-              <button type="submit" disabled={formStatus === 'loading'}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-                {formStatus === 'loading' ? t('common.saving') : t('wallet.addFunds')}
+              <button type="submit" disabled={transactionStatus === 'loading'}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+                {transactionStatus === 'loading' ? t('common.saving') : t('wallet.addFunds')}
               </button>
               <button type="button" onClick={() => setShowAddFunds(false)}
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800">
@@ -224,9 +270,17 @@ export default function WalletTab({ patientId }) {
                     <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{plan.title}</h3>
                     <p className="text-xs text-slate-400 dark:text-slate-500">{plan.installments?.length || 0} {t('wallet.installments')} · {t(`wallet.frequency.${plan.frequency || 'monthly'}`)}</p>
                   </div>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PLAN_STATUS_STYLES[plan.status]}`}>
-                    {t(`wallet.planStatus.${plan.status}`)}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PLAN_STATUS_STYLES[plan.status]}`}>
+                      {t(`wallet.planStatus.${plan.status}`)}
+                    </span>
+                    {canManage && (
+                      <button type="button" onClick={() => { setEditingPlan(plan); setEditTitle(plan.title); }}
+                        className="rounded-md px-2 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
+                        {t('common.edit')}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mb-3 grid grid-cols-3 gap-3 text-center">
@@ -369,6 +423,98 @@ export default function WalletTab({ patientId }) {
             </div>
           </form>
         </Card>
+      )}
+
+      {/* Edit Installment Plan Modal */}
+      {editingPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900">
+            <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">{t('wallet.editPlan')}</h3>
+            <input type="text" required value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
+              placeholder={t('wallet.planTitle')}
+              className="mb-4 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500" />
+            <div className="flex gap-2">
+              <button type="button" onClick={handleEditPlan} disabled={formStatus === 'loading' || !editTitle.trim()}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                {formStatus === 'loading' ? t('common.saving') : t('common.save')}
+              </button>
+              <button type="button" onClick={() => { setEditingPlan(null); setEditTitle(''); }}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800">
+                {t('common.cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Created Plan Dialog */}
+      {viewingPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{t('wallet.planDetails')}</h3>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PLAN_STATUS_STYLES[viewingPlan.status]}`}>
+                {t(`wallet.planStatus.${viewingPlan.status}`)}
+              </span>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-sm font-medium text-slate-900 dark:text-white">{viewingPlan.title}</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">{t(`wallet.frequency.${viewingPlan.frequency || 'monthly'}`)}</p>
+            </div>
+
+            <div className="mb-4 grid grid-cols-3 gap-3 text-center">
+              <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
+                <p className="text-xs text-slate-400 dark:text-slate-500">{t('wallet.totalAmount')}</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-white">{formatMoney(viewingPlan.totalAmount)}</p>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
+                <p className="text-xs text-slate-400 dark:text-slate-500">{t('wallet.paidAmount')}</p>
+                <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{formatMoney(viewingPlan.paidAmount)}</p>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
+                <p className="text-xs text-slate-400 dark:text-slate-500">{t('wallet.balanceLabel')}</p>
+                <p className="text-sm font-bold text-amber-600 dark:text-amber-400">{formatMoney(viewingPlan.totalAmount - viewingPlan.paidAmount)}</p>
+              </div>
+            </div>
+
+            {viewingPlan.installments?.length > 0 && (
+              <div className="mb-4 overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-slate-400 dark:border-slate-700">
+                      <th className="pb-1 font-medium">#</th>
+                      <th className="pb-1 font-medium">{t('wallet.dueDate')}</th>
+                      <th className="pb-1 font-medium">{t('wallet.amount')}</th>
+                      <th className="pb-1 font-medium">{t('wallet.status')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {viewingPlan.installments.map((inst) => (
+                      <tr key={inst._id} className="border-b border-slate-100 dark:border-slate-800">
+                        <td className="py-1.5 text-slate-500">{inst.number}</td>
+                        <td className="py-1.5 text-slate-700 dark:text-slate-300">{formatDate(inst.dueDate)}</td>
+                        <td className="py-1.5 font-medium text-slate-900 dark:text-white">{formatMoney(inst.amount)}</td>
+                        <td className="py-1.5">
+                          <span className={`rounded-full px-1.5 py-0.5 text-xs font-medium ${INSTALLMENT_STATUS_STYLES[inst.status]}`}>
+                            {t(`wallet.installment${inst.status.charAt(0).toUpperCase() + inst.status.slice(1)}`)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button type="button" onClick={() => setViewingPlan(null)}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                {t('common.close')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

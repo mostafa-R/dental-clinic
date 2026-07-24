@@ -48,8 +48,32 @@ const quarantineSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(fetchAbuseChecks.pending, (state) => { state.loading = true; })
-      .addCase(fetchAbuseChecks.fulfilled, (state, action) => { state.loading = false; state.checks = action.payload; })
-      .addCase(fetchAbuseChecks.rejected, (state, action) => { state.loading = false; state.error = action.payload; });
+      .addCase(fetchAbuseChecks.fulfilled, (state, action) => {
+        state.loading = false;
+        const payload = action.payload || [];
+        state.checks = payload.map((c) => ({
+          tenantId: c.tenantId,
+          name: c.name,
+          plan: c.plan,
+          quarantined: !c.isActive,
+          warnings: c.flagged && c.reason ? [c.reason] : [],
+        }));
+      })
+      .addCase(fetchAbuseChecks.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
+      .addCase(setQuarantine.fulfilled, (state, action) => {
+        state.checks = state.checks.map((check) =>
+          check.tenantId === action.meta.arg.tenantId
+            ? { ...check, quarantined: true, quarantineReason: action.meta.arg.reason || check.quarantineReason }
+            : check,
+        );
+      })
+      .addCase(removeQuarantine.fulfilled, (state, action) => {
+        state.checks = state.checks.map((check) =>
+          check.tenantId === action.meta.arg
+            ? { ...check, quarantined: false, quarantineReason: null }
+            : check,
+        );
+      });
   },
 });
 

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { sendMessage } from '../../features/chat/chatSlice';
+import { sendMessage } from './chatSlice';
 import { useT } from '../../lib/i18n';
 
 export default function MessageInput() {

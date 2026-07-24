@@ -79,7 +79,7 @@ export default function Quarantine() {
                         <Badge variant="info" size="sm">{c.plan}</Badge>
                       </td>
                       <td className="px-4 py-3">
-                        {c.warnings.length > 0 ? (
+                        {c.warnings?.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
                             {c.warnings.map((w, i) => (
                               <Badge key={i} variant="warning" size="sm">{w}</Badge>
@@ -95,6 +95,7 @@ export default function Quarantine() {
                             variant="danger"
                             size="sm"
                             onClick={() => setQuarantineTarget(c.tenantId)}
+                            disabled={c.quarantined}
                           >
                             {t("quarantineTenant", language)}
                           </Button>
@@ -103,6 +104,7 @@ export default function Quarantine() {
                             size="sm"
                             className="text-emerald-600"
                             onClick={() => setRemoveTarget(c.tenantId)}
+                            disabled={!c.quarantined}
                           >
                             {t("removeQuarantine", language)}
                           </Button>

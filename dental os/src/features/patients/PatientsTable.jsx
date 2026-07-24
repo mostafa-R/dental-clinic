@@ -6,7 +6,7 @@ import { showErrorDialog } from '../ui/uiSlice';
 import { canManagePatients, canViewEmr } from '../../lib/roles';
 import { formatDate, formatNumber } from '../../lib/format';
 import { useT } from '../../lib/i18n';
-import { PhiField } from '../../lib/usePhi.jsx';
+import { PhiField } from '../../hooks/usePhi';
 
 function genderLabel(gender, t) {
   switch (gender) {

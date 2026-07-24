@@ -29,6 +29,8 @@ const walletSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+const MAX_TRANSACTIONS = 1000;
+
 walletSchema.methods.addTransaction = function ({ type, amount, reference, description, invoice, installment, userId }) {
   const balanceBefore = this.balance;
   const absAmount = round2(Math.abs(Number(amount)));
@@ -38,6 +40,10 @@ walletSchema.methods.addTransaction = function ({ type, amount, reference, descr
 
   if (balanceAfter < 0) {
     throw new Error('Insufficient wallet balance');
+  }
+
+  if (this.transactions.length >= MAX_TRANSACTIONS) {
+    this.transactions = this.transactions.slice(-MAX_TRANSACTIONS + 1);
   }
 
   this.transactions.push({

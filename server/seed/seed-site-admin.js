@@ -1,30 +1,10 @@
-import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-dotenv.config();
-
-const SITE_ROLES = { SUPER_ADMIN: "super_admin", ADMIN: "admin", SUPPORT: "support" };
-
-const siteAdminSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required: true, select: false },
-    role: { type: String, enum: Object.values(SITE_ROLES), default: SITE_ROLES.SUPPORT },
-    isActive: { type: Boolean, default: true },
-    lastLogin: { type: Date, default: null },
-  },
-  { timestamps: true },
-);
-
-siteAdminSchema.pre("save", async function hashPassword() {
-  if (!this.isModified("password")) return;
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-});
-
-const SiteAdmin = mongoose.model("SiteAdmin", siteAdminSchema);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, "..", ".env") });
 
 async function seed() {
   const uri = process.env.MONGO_URI;
@@ -44,11 +24,20 @@ async function seed() {
   await mongoose.connect(uri);
   console.log("Connected to MongoDB");
 
+  // Import the actual SiteAdmin model
+  const { default: SiteAdmin } = await import("../modules/site/admin/admin.model.js");
+
   const existing = await SiteAdmin.findOne({ email: email.toLowerCase() });
   if (existing) {
     console.log(`Site admin already exists: ${existing.email}`);
   } else {
-    await SiteAdmin.create({ name: "Site Admin", email, password, role: "super_admin", isActive: true });
+    await SiteAdmin.create({
+      name: "Site Admin",
+      email,
+      password,
+      role: "super_admin",
+      isActive: true,
+    });
     console.log(`Created site admin: ${email}`);
   }
 

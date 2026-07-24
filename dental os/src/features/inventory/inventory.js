@@ -31,13 +31,14 @@ export const UNIT_LABELS = {
   g: 'g',
 };
 
-export const STOCK_TX_TYPES = ['stock_in', 'stock_out', 'adjustment', 'expired'];
+export const STOCK_TX_TYPES = ['stock_in', 'stock_out', 'adjustment', 'expired', 'initial'];
 
 export const STOCK_TX_LABELS = {
   stock_in: 'Stock In',
   stock_out: 'Stock Out',
   adjustment: 'Adjustment',
   expired: 'Expired',
+  initial: 'Initial Stock',
 };
 
 export function unitLabel(unit, qty) {

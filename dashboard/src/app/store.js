@@ -1,6 +1,8 @@
 import { configureStore } from "@reduxjs/toolkit";
 import adminsReducer from "../features/admins/adminsSlice";
 import analyticsReducer from "../features/analytics/analyticsSlice";
+import backupsReducer from "../features/backups/backupsSlice";
+import perfReducer from "../features/perf/perfSlice";
 import auditLogsReducer from "../features/auditLogs/auditLogsSlice";
 import authReducer from "../features/auth/authSlice";
 import branchesReducer from "../features/branches/branchesSlice";
@@ -34,6 +36,8 @@ export const store = configureStore({
     impersonation: impersonationReducer,
     quarantine: quarantineReducer,
     health: healthReducer,
+    backups: backupsReducer,
+    perf: perfReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

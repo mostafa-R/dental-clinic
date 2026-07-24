@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { disconnectSocket } from './socket';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -9,6 +10,7 @@ let isRefreshing = false;
 let queue = [];
 
 function redirectToLogin() {
+  disconnectSocket();
   if (window.location.pathname !== '/login') {
     window.location.href = '/login';
   }

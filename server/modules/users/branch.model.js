@@ -12,16 +12,19 @@ const branchSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      maxlength: 100,
     },
     address: {
       type: String,
       trim: true,
       default: "",
+      maxlength: 500,
     },
     phone: {
       type: String,
       trim: true,
       default: "",
+      maxlength: 30,
     },
     isActive: {
       type: Boolean,
@@ -30,6 +33,8 @@ const branchSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+branchSchema.index({ tenant: 1, name: 1 }, { unique: true });
 
 const Branch = mongoose.model("Branch", branchSchema);
 

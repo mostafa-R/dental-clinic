@@ -3,9 +3,10 @@ import { useDispatch, useSelector } from 'react-redux';
 
 import api from '../../lib/axios';
 import Modal from '../../components/ui/Modal';
-import { createNote, resetFormState } from './emrSlice';
+import MedicalFileUpload from './MedicalFileUpload';
+import { createNote, updateNote, resetFormState } from './emrSlice';
 import { showErrorDialog } from '../ui/uiSlice';
-import { ATTACHMENT_TYPES } from '../../lib/dental';
+import { ATTACHMENT_TYPES } from './dental';
 import { useT } from '../../lib/i18n';
 
 function emptyAttachment() {
@@ -18,7 +19,14 @@ function nowLocalDatetime() {
   return d.toISOString().slice(0, 16);
 }
 
-export default function ClinicalNoteFormModal({ open, patientId, patient, onClose }) {
+function toLocalDatetime(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+
+export default function ClinicalNoteFormModal({ open, patientId, patient, note, onClose }) {
   const dispatch = useDispatch();
   const { t } = useT();
   const formStatus = useSelector((s) => s.emr.formStatus);
@@ -34,26 +42,42 @@ export default function ClinicalNoteFormModal({ open, patientId, patient, onClos
   const [diagnosis, setDiagnosis] = useState('');
   const [plan, setPlan] = useState('');
   const [attachments, setAttachments] = useState([emptyAttachment()]);
+  const [nextAppointment, setNextAppointment] = useState('');
+  const [nextAppointmentNotes, setNextAppointmentNotes] = useState('');
 
   useEffect(() => {
     if (!open) return;
-    setVisitDate(nowLocalDatetime());
-    setChiefComplaint('');
-    setExamination('');
-    setDiagnosis('');
-    setPlan('');
-    setAttachments([emptyAttachment()]);
     dispatch(resetFormState());
-    if (isDoctor) {
-      setDoctor(currentUser._id);
+    if (note) {
+      setDoctor(note.doctor?._id || note.doctor || '');
+      setVisitDate(note.visitDate ? toLocalDatetime(note.visitDate) : nowLocalDatetime());
+      setChiefComplaint(note.chiefComplaint || '');
+      setExamination(note.examination || '');
+      setDiagnosis(note.diagnosis || '');
+      setPlan(note.plan || '');
+      setAttachments(note.attachments?.length ? [...note.attachments] : [emptyAttachment()]);
+      setNextAppointment(note.nextAppointment ? toLocalDatetime(note.nextAppointment) : '');
+      setNextAppointmentNotes(note.nextAppointmentNotes || '');
     } else {
-      setDoctor('');
-      const branchId = patient?.branch?._id || patient?.branch;
-      api
-        .get('/users/doctors').then((r) => setDoctors(r.data.data.doctors || []))
-        .catch(() => setDoctors([]));
+      setVisitDate(nowLocalDatetime());
+      setChiefComplaint('');
+      setExamination('');
+      setDiagnosis('');
+      setPlan('');
+      setAttachments([emptyAttachment()]);
+      setNextAppointment('');
+      setNextAppointmentNotes('');
+      if (isDoctor) {
+        setDoctor(currentUser._id);
+      } else {
+        setDoctor('');
+        const branchId = patient?.branch?._id || patient?.branch;
+        api
+          .get('/users/doctors', { params: branchId ? { branch: branchId } : {} }).then((r) => setDoctors(r.data.data.doctors || []))
+          .catch(() => setDoctors([]));
+      }
     }
-  }, [open, isDoctor, currentUser, patient, dispatch]);
+  }, [open, note, isDoctor, currentUser, patient, dispatch]);
 
   const updateAttachment = (idx, field, value) => {
     setAttachments((prev) => prev.map((a, i) => (i === idx ? { ...a, [field]: value } : a)));
@@ -71,20 +95,42 @@ export default function ClinicalNoteFormModal({ open, patientId, patient, onClos
       .map((a) => ({ type: a.type, url: a.url.trim(), caption: a.caption?.trim() || undefined }));
 
     try {
-      await dispatch(
-        createNote({
-          patientId,
-          payload: {
-            doctor,
-            visitDate: visitDate ? new Date(visitDate).toISOString() : undefined,
-            chiefComplaint: chiefComplaint.trim() || undefined,
-            examination: examination.trim() || undefined,
-            diagnosis: diagnosis.trim() || undefined,
-            plan: plan.trim() || undefined,
-            attachments: cleanAttachments.length ? cleanAttachments : undefined,
-          },
-        }),
-      ).unwrap();
+      if (note) {
+        await dispatch(
+          updateNote({
+            patientId,
+            noteId: note._id,
+            payload: {
+              doctor,
+              visitDate: visitDate ? new Date(visitDate).toISOString() : undefined,
+              chiefComplaint: chiefComplaint.trim() || undefined,
+              examination: examination.trim() || undefined,
+              diagnosis: diagnosis.trim() || undefined,
+              plan: plan.trim() || undefined,
+              attachments: cleanAttachments.length ? cleanAttachments : undefined,
+              nextAppointment: nextAppointment ? new Date(nextAppointment).toISOString() : undefined,
+              nextAppointmentNotes: nextAppointmentNotes.trim() || undefined,
+            },
+          }),
+        ).unwrap();
+      } else {
+        await dispatch(
+          createNote({
+            patientId,
+            payload: {
+              doctor,
+              visitDate: visitDate ? new Date(visitDate).toISOString() : undefined,
+              chiefComplaint: chiefComplaint.trim() || undefined,
+              examination: examination.trim() || undefined,
+              diagnosis: diagnosis.trim() || undefined,
+              plan: plan.trim() || undefined,
+              attachments: cleanAttachments.length ? cleanAttachments : undefined,
+              nextAppointment: nextAppointment ? new Date(nextAppointment).toISOString() : undefined,
+              nextAppointmentNotes: nextAppointmentNotes.trim() || undefined,
+            },
+          }),
+        ).unwrap();
+      }
       onClose();
     } catch (err) {
       dispatch(showErrorDialog(err));
@@ -97,7 +143,7 @@ export default function ClinicalNoteFormModal({ open, patientId, patient, onClos
   return (
     <Modal
       open={open}
-      title={t('emr.note.new')}
+      title={note ? t('emr.note.edit') : t('emr.note.new')}
       onClose={onClose}
       size="xl"
       footer={
@@ -106,7 +152,7 @@ export default function ClinicalNoteFormModal({ open, patientId, patient, onClos
             {t('common.cancel')}
           </button>
           <button type="button" onClick={submit} disabled={formStatus === 'loading'} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-400">
-            {formStatus === 'loading' ? t('common.saving') : t('emr.note.create')}
+            {formStatus === 'loading' ? t('common.saving') : (note ? t('common.save') : t('emr.note.create'))}
           </button>
         </>
       }
@@ -151,12 +197,30 @@ export default function ClinicalNoteFormModal({ open, patientId, patient, onClos
           </div>
         </div>
 
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('emr.note.nextAppointment')}</label>
+            <input type="datetime-local" value={nextAppointment} onChange={(e) => setNextAppointment(e.target.value)} className={inputCls} />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('emr.note.nextAppointmentNotes')}</label>
+            <input value={nextAppointmentNotes} onChange={(e) => setNextAppointmentNotes(e.target.value)} placeholder={t('emr.note.nextAppointmentNotesPlaceholder')} className={inputCls} maxLength={500} />
+          </div>
+        </div>
+
         <div>
           <div className="mb-2 flex items-center justify-between">
             <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('emr.note.attachments')}</label>
-            <button type="button" onClick={addAttachment} className="rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-600 transition hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300">
-              {t('emr.note.addAttachment')}
-            </button>
+            <div className="flex items-center gap-2">
+              <MedicalFileUpload
+                onUploaded={(file) => {
+                  setAttachments((prev) => [...prev, { type: file.type || 'xray', url: file.url, caption: file.originalName || '' }]);
+                }}
+              />
+              <button type="button" onClick={addAttachment} className="rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-600 transition hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300">
+                {t('emr.note.addUrl')}
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             {attachments.map((a, idx) => (

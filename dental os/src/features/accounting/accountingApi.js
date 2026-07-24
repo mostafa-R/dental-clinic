@@ -28,6 +28,8 @@ export const accountingApi = {
     api.get(`/patients/${patientId}/installments`, { params }).then((r) => r.data.data),
   createInstallment: (patientId, payload) =>
     api.post(`/patients/${patientId}/installments`, payload).then((r) => r.data.data),
+  updateInstallment: (patientId, planId, payload) =>
+    api.patch(`/patients/${patientId}/installments/${planId}`, payload).then((r) => r.data.data),
   payInstallment: (patientId, planId, payload) =>
     api.post(`/patients/${patientId}/installments/${planId}/pay`, payload).then((r) => r.data.data),
 

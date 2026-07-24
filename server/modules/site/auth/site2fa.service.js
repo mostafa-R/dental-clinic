@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import { TOTP, generateSecret } from 'otplib';
 import SiteAdmin from '../admin/admin.model.js';
 import ApiError from '../../../utils/ApiError.js';
@@ -20,7 +21,8 @@ export async function setup2fa(adminId) {
   );
 
   admin.twoFactorSecret = secret;
-  admin.twoFactorBackupCodes = backupCodes;
+  const hashedCodes = await Promise.all(backupCodes.map((c) => bcrypt.hash(c, 10)));
+  admin.twoFactorBackupCodes = hashedCodes;
   await admin.save();
 
   return { secret, otpauth, backupCodes };
@@ -74,7 +76,13 @@ export async function verify2faLogin(adminId, { token, backupCode }) {
   }
 
   if (backupCode) {
-    const idx = admin.twoFactorBackupCodes.indexOf(backupCode);
+    const idx = await admin.twoFactorBackupCodes.reduce(async (prevPromise, hashedCode, i) => {
+      const prev = await prevPromise;
+      if (prev !== -1) return prev;
+      const match = await bcrypt.compare(backupCode, hashedCode);
+      return match ? i : -1;
+    }, Promise.resolve(-1));
+
     if (idx !== -1) {
       admin.twoFactorBackupCodes.splice(idx, 1);
       admin.lastLogin = new Date();

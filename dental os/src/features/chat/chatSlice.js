@@ -62,6 +62,18 @@ export const markRead = createAsyncThunk(
   },
 );
 
+export const markChannelRead = createAsyncThunk(
+  'chat/markChannelRead',
+  async (channel, { rejectWithValue }) => {
+    try {
+      await chatApi.markChannelRead(channel);
+      return channel;
+    } catch (err) {
+      return rejectWithValue(errPayload(err, 'Failed to mark channel read'));
+    }
+  },
+);
+
 const initialState = {
   activeChat: null,
   staff: [],
@@ -87,6 +99,9 @@ const chatSlice = createSlice({
     },
     addMessage(state, action) {
       const msg = action.payload;
+      if (!msg) return;
+      const msgId = msg._id;
+      if (msgId && state.messages.some((m) => m._id === msgId)) return;
       const senderId = msg.sender?._id ? String(msg.sender._id) : null;
       if (!state.activeChat) {
         if (msg.channel) {
@@ -96,8 +111,9 @@ const chatSlice = createSlice({
         }
         return;
       }
+      const recipientId = msg.recipient ? String(msg.recipient) : null;
       const belongs = state.activeChat.type === 'dm'
-        ? String(msg.sender._id) === String(state.activeChat.id) || String(msg.recipient) === String(state.activeChat.id)
+        ? (senderId && senderId === String(state.activeChat.id)) || (recipientId && recipientId === String(state.activeChat.id))
         : msg.channel === state.activeChat.id;
       if (belongs) {
         state.messages.push(msg);
@@ -172,7 +188,7 @@ const chatSlice = createSlice({
       });
     builder
       .addCase(fetchUnreadCounts.fulfilled, (state, action) => {
-        state.unread = { ...state.unread, ...action.payload.unread };
+        state.unread = action.payload.unread;
       });
     builder.addCase(markRead.fulfilled, (state, action) => {
       const readIds = action.payload;

@@ -40,8 +40,8 @@ const auditLogsSlice = createSlice({
       .addCase(fetchAuditLogs.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(fetchAuditLogs.fulfilled, (state, action) => {
         state.loading = false;
-        state.logs = action.payload.logs;
-        state.pagination = action.payload.pagination;
+        state.logs = action.payload.logs || [];
+        state.pagination = action.payload.pagination || state.pagination;
       })
       .addCase(fetchAuditLogs.rejected, (state, action) => {
         state.loading = false;

@@ -2,7 +2,7 @@ import axios from "axios";
 
 const api = axios.create({
   baseURL:
-    import.meta.env.VITE_API_BASE_URL || "/api/site",
+    import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api/site",
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",
@@ -18,7 +18,6 @@ function redirectToLogin() {
   }
 }
 
-// Response interceptor - unwrap the sendSuccess envelope and handle auth errors.
 api.interceptors.response.use(
   (response) => {
     const body = response.data;

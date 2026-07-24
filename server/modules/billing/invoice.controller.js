@@ -55,13 +55,13 @@ export const updateInvoice = asyncHandler(async (req, res) => {
 });
 
 export const addPayment = asyncHandler(async (req, res) => {
-  const result = await invoiceService.addPayment(req.params.id, filterByBranch(req), {
+  const invoice = await invoiceService.addPayment(req.params.id, filterByBranch(req), {
     ...req.validatedBody,
     idempotencyKey: req.headers['x-idempotency-key'] || null,
     userId: req.user._id,
   });
-  emitInvoice(result.invoice.branch, 'invoice:updated', result.invoice);
-  return sendSuccess(res, result);
+  emitInvoice(invoice.branch, 'invoice:updated', invoice);
+  return sendSuccess(res, { invoice });
 });
 
 export const voidInvoice = asyncHandler(async (req, res) => {
@@ -74,13 +74,13 @@ export const voidInvoice = asyncHandler(async (req, res) => {
 });
 
 export const refundPayment = asyncHandler(async (req, res) => {
-  const result = await invoiceService.refundPayment(req.params.id, filterByBranch(req), {
+  const invoice = await invoiceService.refundPayment(req.params.id, filterByBranch(req), {
     ...req.validatedBody,
     idempotencyKey: req.headers['x-idempotency-key'] || null,
     userId: req.user._id,
   });
-  emitInvoice(result.invoice.branch, 'invoice:updated', result.invoice);
-  return sendSuccess(res, result);
+  emitInvoice(invoice.branch, 'invoice:updated', invoice);
+  return sendSuccess(res, { invoice });
 });
 
 export const getInvoiceAging = asyncHandler(async (req, res) => {

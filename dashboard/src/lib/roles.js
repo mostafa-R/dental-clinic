@@ -1,28 +1,14 @@
-// Site Dashboard Roles (for platform administrators)
+/**
+ * Site Dashboard constants — role names and tenant status for the platform
+ * admin UI.  Note: SITE_PERMISSIONS lives in lib/permissions.js (the source
+ * of truth for site-admin permission strings).  Clinic-level roles are
+ * managed dynamically via the backend RBAC system and are NOT hardcoded here.
+ */
+
 export const SITE_ROLES = {
   SUPER_ADMIN: "super_admin",
   ADMIN: "admin",
   SUPPORT: "support",
-};
-
-// Clinic Dashboard Roles (for tenant users)
-export const CLINIC_ROLES = {
-  CLINIC_ADMIN: "clinic_admin",
-  DOCTOR: "doctor",
-  ASSISTANT: "assistant",
-  RECEPTIONIST: "receptionist",
-  ACCOUNTANT: "accountant",
-  INVENTORY_MANAGER: "inventory_manager",
-};
-
-// Permission levels for site dashboard
-export const SITE_PERMISSIONS = {
-  MANAGE_TENANTS: "manage_tenants",
-  MANAGE_SUBSCRIPTIONS: "manage_subscriptions",
-  MANAGE_BILLING: "manage_billing",
-  VIEW_ANALYTICS: "view_analytics",
-  MANAGE_ADMINS: "manage_admins",
-  SYSTEM_SETTINGS: "system_settings",
 };
 
 // Tenant status

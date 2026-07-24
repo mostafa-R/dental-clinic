@@ -20,7 +20,7 @@ export async function authenticateSiteAdmin(email, password) {
 export function create2faChallenge(adminId) {
   return jwt.sign(
     { sub: adminId.toString(), type: '2fa_challenge' },
-    process.env.JWT_SECRET,
+    process.env.JWT_2FA_SECRET || process.env.JWT_SECRET,
     { expiresIn: '5m' },
   );
 }

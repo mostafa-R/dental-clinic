@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchPatients, resetPatients, setPage } from '../features/patients/patientSlice';
 import PatientDetailModal from '../features/patients/PatientDetailModal';
@@ -11,6 +11,7 @@ import Pagination from '../components/ui/Pagination';
 import Spinner from '../components/ui/Spinner';
 import { canManagePatients } from '../lib/roles';
 import { useT } from '../lib/i18n';
+import { useSocketEvent } from '../lib/socket';
 
 export default function Patients() {
   const dispatch = useDispatch();
@@ -27,6 +28,11 @@ export default function Patients() {
   }, [dispatch, query]);
 
   useEffect(() => () => dispatch(resetPatients()), [dispatch]);
+
+  const refetch = useCallback(() => { dispatch(fetchPatients(query)); }, [dispatch, query]);
+  useSocketEvent('patient:created', refetch);
+  useSocketEvent('patient:updated', refetch);
+  useSocketEvent('patient:archived', refetch);
 
   const openCreate = () => {
     setEditing(null);
@@ -102,6 +108,8 @@ export default function Patients() {
             total={pagination.total}
             pageSize={pagination.limit}
             onChange={(p) => dispatch(setPage(p))}
+            prevLabel={t('common.prev')}
+            nextLabel={t('common.next')}
           />
         )}
       </Card>

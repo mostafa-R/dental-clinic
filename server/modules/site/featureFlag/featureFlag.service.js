@@ -1,6 +1,6 @@
 import Tenant from '../tenant/tenant.model.js';
 import ApiError from '../../../utils/ApiError.js';
-import { cacheGet, cacheSet } from '../../../config/redis.js';
+import { cacheGet, cacheSet, cacheDel } from '../../../utils/cache.js';
 
 const AVAILABLE_MODULES = [
   'dashboard', 'patients', 'appointments', 'billing',
@@ -9,12 +9,11 @@ const AVAILABLE_MODULES = [
 ];
 
 export async function getTenantModules(tenantId) {
-  const cacheKey = `modules:${tenantId}`;
-  let tenant = await cacheGet(cacheKey);
+  let tenant = await cacheGet('modules', tenantId);
   if (!tenant) {
     tenant = await Tenant.findById(tenantId).select('planModules plan').lean();
     if (!tenant) throw ApiError.notFound('Tenant not found');
-    await cacheSet(cacheKey, tenant, 300);
+    await cacheSet('modules', tenantId, tenant, 300);
   }
 
   return {
@@ -42,7 +41,7 @@ export async function toggleModule(tenantId, { module, enabled }) {
   }
 
   await tenant.save();
-  await cacheSet(`modules:${tenantId}`, null, 1);
+  await cacheDel('modules', tenantId);
 
   return { tenantId: tenant._id, enabledModules: tenant.planModules, tenantName: tenant.name };
 }
@@ -58,7 +57,7 @@ export async function setModules(tenantId, { modules }) {
 
   tenant.planModules = modules;
   await tenant.save();
-  await cacheSet(`modules:${tenantId}`, null, 1);
+  await cacheDel('modules', tenantId);
 
   return { tenantId: tenant._id, enabledModules: tenant.planModules, tenantName: tenant.name };
 }

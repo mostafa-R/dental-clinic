@@ -1,6 +1,6 @@
 import api from '../../lib/axios';
 
-export const usersApi = {
+export const userApi = {
   list: (params) => api.get('/users', { params }).then((r) => r.data.data),
   get: (id) => api.get(`/users/${id}`).then((r) => r.data.data),
   create: (payload) => api.post('/users', payload).then((r) => r.data.data),

@@ -7,6 +7,8 @@ import {
 
 export { INVENTORY_CATEGORIES, INVENTORY_UNITS };
 
+const MAX_INVENTORY_TRANSACTIONS = 1000;
+
 /**
  * StockTransaction — an immutable ledger entry for every quantity change.
  * This gives full auditability: every stock-in, stock-out, adjustment, and
@@ -149,6 +151,13 @@ inventoryItemSchema.virtual('isExpired').get(function isExpired() {
 
 inventoryItemSchema.set('toJSON', { virtuals: true });
 inventoryItemSchema.set('toObject', { virtuals: true });
+
+// Cap embedded transactions array to prevent unbounded document growth
+inventoryItemSchema.pre('save', function capTransactions() {
+  if (this.isModified('transactions') && this.transactions.length > MAX_INVENTORY_TRANSACTIONS) {
+    this.transactions = this.transactions.slice(-MAX_INVENTORY_TRANSACTIONS);
+  }
+});
 
 inventoryItemSchema.index({ branch: 1, name: 1 });
 inventoryItemSchema.index({ branch: 1, category: 1 });

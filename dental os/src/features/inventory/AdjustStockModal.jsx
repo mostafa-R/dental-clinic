@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import Modal from '../../components/ui/Modal';
 import { adjustStock, resetFormState } from './inventorySlice';
 import { showErrorDialog } from '../ui/uiSlice';
-import { STOCK_TX_TYPES } from '../../lib/inventory';
+import { STOCK_TX_TYPES } from './inventory';
 import { useT } from '../../lib/i18n';
 
 export default function AdjustStockModal({ open, onClose, item }) {

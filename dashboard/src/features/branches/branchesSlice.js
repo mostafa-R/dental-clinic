@@ -113,7 +113,7 @@ const branchesSlice = createSlice({
       })
       .addCase(fetchBranches.fulfilled, (state, action) => {
         state.loading = false;
-        state.items = action.payload.branches;
+        state.items = action.payload.branches || [];
         state.pagination = {
           ...state.pagination,
           ...action.payload.pagination,

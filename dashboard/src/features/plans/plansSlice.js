@@ -98,7 +98,7 @@ const plansSlice = createSlice({
       })
       .addCase(fetchPlans.fulfilled, (state, action) => {
         state.loading = false;
-        state.items = action.payload;
+        state.items = Array.isArray(action.payload) ? action.payload : [];
       })
       .addCase(fetchPlans.rejected, (state, action) => {
         state.loading = false;

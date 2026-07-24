@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { useT } from '../../lib/i18n';
-import { fetchMyPermissions } from '../../features/users/usersSlice';
+import { fetchMyPermissions } from '../../features/users/userSlice';
 import { setSidebarCollapsed, setMobileSidebarOpen } from '../../features/ui/uiSlice';
 import {
   DashboardIcon,

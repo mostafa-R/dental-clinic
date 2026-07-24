@@ -2,9 +2,11 @@ import * as authService from './auth.service.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import {
+  ACCESS_COOKIE,
   REFRESH_COOKIE,
   clearAuthCookies,
   setAuthCookies,
+  verifyAccessToken,
   verifyRefreshToken,
 } from '../../utils/jwt.js';
 import User from '../users/user.model.js';
@@ -53,12 +55,19 @@ export const refresh = asyncHandler(async (req, res) => {
   }
 
   await authService.assertTenantActive(user.tenant);
-  await authService.refreshUser(decoded, user.tokenVersion);
 
-  // Atomic increment to prevent race conditions on concurrent refresh requests.
-  await User.findByIdAndUpdate(decoded.sub, { $inc: { tokenVersion: 1 } });
+  // Atomic compare-and-swap: only increment if tokenVersion still matches,
+  // preventing two concurrent refreshes from both succeeding.
+  const updated = await User.findOneAndUpdate(
+    { _id: decoded.sub, tokenVersion: decoded.tokenVersion },
+    { $inc: { tokenVersion: 1 } },
+    { new: true },
+  );
+  if (!updated) {
+    throw ApiError.unauthorized('Token has been rotated, please log in again');
+  }
 
-  user.tokenVersion = (user.tokenVersion || 0) + 1;
+  user.tokenVersion = updated.tokenVersion;
   setAuthCookies(res, user);
   return sendSuccess(res, { message: 'Token refreshed' });
 });
@@ -84,8 +93,44 @@ export const updatePreferences = asyncHandler(async (req, res) => {
     .populate('branch', 'name address phone isActive')
     .populate('tenant', 'plan planModules planId status name isActive');
 
-  const safe = user.toObject();
-  delete safe.password;
-  delete safe.refreshToken;
+  const safe = user.toSafeObject();
   return sendSuccess(res, { user: safe });
+});
+
+export const verifyImpersonation = asyncHandler(async (req, res) => {
+  const token = req.body?.token;
+  if (!token) throw ApiError.badRequest('Token is required');
+
+  let decoded;
+  try {
+    decoded = verifyAccessToken(token);
+  } catch {
+    throw ApiError.unauthorized('Invalid or expired impersonation token');
+  }
+
+  if (decoded.type !== 'impersonation') {
+    throw ApiError.badRequest('Not an impersonation token');
+  }
+
+  const user = await User.findById(decoded.sub)
+    .populate('branch', 'name address phone isActive')
+    .populate('tenant', 'plan planModules planId status name isActive');
+  if (!user || !user.isActive) {
+    throw ApiError.unauthorized('User no longer exists or is disabled');
+  }
+
+  await authService.assertTenantActive(user.tenant);
+
+  if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== user.tokenVersion) {
+    throw ApiError.unauthorized('Token revoked — please request a new impersonation token');
+  }
+
+  const safe = user.toSafeObject();
+  return sendSuccess(res, {
+    user: {
+      ...safe,
+      _impersonating: true,
+      _impersonator: decoded.impersonatorName || 'Admin',
+    },
+  });
 });

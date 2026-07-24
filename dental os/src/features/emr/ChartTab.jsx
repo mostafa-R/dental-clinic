@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
-import DentalChart from '../../components/emr/DentalChart';
-import ToothPanel from '../../components/emr/ToothPanel';
+import DentalChart from './DentalChart';
+import ToothPanel from './ToothPanel';
 import Card from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
 import Spinner from '../../components/ui/Spinner';
 import TreatmentPlanFormModal from './TreatmentPlanFormModal';
 import { fetchChart, fetchPlans, resetFormState, saveTooth } from './emrSlice';
+import { useSocketEvent } from '../../lib/socket';
 import { canManageEmr } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
 import { formatMoney } from '../../lib/format';
-import { PROCEDURE_STATUS_STYLES } from '../../lib/dental';
+import { PROCEDURE_STATUS_STYLES } from './dental';
 
 export default function ChartTab({ patientId }) {
   const dispatch = useDispatch();
@@ -24,10 +25,18 @@ export default function ChartTab({ patientId }) {
   const [selectedNumber, setSelectedNumber] = useState(null);
   const [planFormOpen, setPlanFormOpen] = useState(false);
 
-  useEffect(() => {
+  const refetch = useCallback(() => {
     dispatch(fetchChart(patientId));
     dispatch(fetchPlans({ patientId, params: { status: 'active', limit: 100 } }));
   }, [dispatch, patientId]);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  useSocketEvent('chart:updated', refetch);
+  useSocketEvent('treatment-plan:created', refetch);
+  useSocketEvent('treatment-plan:updated', refetch);
 
   const teeth = chart?.teeth || [];
   const selectedTooth = selectedNumber ? teeth.find((t) => t.number === selectedNumber) : null;

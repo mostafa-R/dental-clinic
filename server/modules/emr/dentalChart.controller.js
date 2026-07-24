@@ -20,6 +20,7 @@ export const getDentalChart = asyncHandler(async (req, res) => {
   const patient = await loadScopedPatient(req, req.params.patientId);
 
   let chart = await DentalChart.findOne({ patient: patient._id, branch: patient.branch });
+  let isNew = false;
   if (!chart) {
     chart = await DentalChart.create({
       branch: patient.branch,
@@ -27,6 +28,14 @@ export const getDentalChart = asyncHandler(async (req, res) => {
       patient: patient._id,
       updatedBy: req.user._id,
     });
+    isNew = true;
+  }
+
+  if (isNew || !chart.populated('patient')) {
+    await chart.populate([
+      { path: 'patient', select: 'patientId firstName lastName' },
+      { path: 'updatedBy', select: 'name' },
+    ]);
   }
 
   const data = req.isImpersonation ? stripPHI(chart.toJSON()) : chart;
@@ -52,6 +61,9 @@ export const updateDentalChart = asyncHandler(async (req, res) => {
     // Merge incoming tooth updates by number, preserving untouched teeth.
     const byNumber = new Map(chart.teeth.map((t) => [t.number, t]));
     for (const incoming of data.teeth) {
+      if (!Number.isInteger(incoming.number) || incoming.number < 1 || incoming.number > 32) {
+        throw ApiError.badRequest(`Invalid tooth number: ${incoming.number}`);
+      }
       const existing = byNumber.get(incoming.number);
       if (!existing) continue;
       if (incoming.state) existing.state = incoming.state;

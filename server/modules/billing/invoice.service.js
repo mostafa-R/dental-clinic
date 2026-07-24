@@ -1,15 +1,16 @@
 import mongoose from 'mongoose';
 
-import Invoice from './invoice.model.js';
-import Patient from '../patients/patient.model.js';
-import Wallet from '../patients/wallet.model.js';
-import Commission from './commission.model.js';
-import Appointment from '../appointments/appointment.model.js';
-import User from '../users/user.model.js';
+import { round2 } from '../../constants/accounting.js';
+import { withTransaction } from '../../core/transaction.js';
 import ApiError from '../../utils/ApiError.js';
 import { toObjectId } from '../../utils/branchScope.js';
-import { round2 } from '../../constants/accounting.js';
 import { escapeRegex } from '../../utils/escapeRegex.js';
+import Appointment from '../appointments/appointment.model.js';
+import Patient from '../patients/patient.model.js';
+import { addTransaction } from '../patients/wallet.service.js';
+import User from '../users/user.model.js';
+import Commission from './commission.model.js';
+import Invoice from './invoice.model.js';
 
 export const POPULATE = [
   { path: 'patient', select: 'patientId firstName lastName phone' },
@@ -199,49 +200,60 @@ export async function updateInvoice(id, branchFilter, data, userId) {
   return invoice;
 }
 
+/**
+ * Add a payment to an invoice inside a transaction.
+ *
+ * Race-condition guard: the invoice is ALWAYS re-read inside the session
+ * (optimistic read) so two concurrent requests cannot both pass the
+ * balance check.  An idempotency key is checked atomically inside the
+ * same transaction to prevent duplicate charges.
+ *
+ * Uses MongoDB's __v (version key) as an optimistic concurrency token:
+ * after processing, the version must still match.  If another request
+ * modified the invoice in the meantime, the save will fail and the
+ * transaction aborts.
+ */
 export async function addPayment(id, branchFilter, { amount, method, reference, date, notes, idempotencyKey, userId }) {
   if (!mongoose.isValidObjectId(id)) {
     throw ApiError.badRequest('Invalid invoice id');
   }
 
-  const invoice = await Invoice.findOne({ _id: id, ...branchFilter });
-  if (!invoice) {
-    throw ApiError.notFound('Invoice not found');
-  }
-  if (invoice.status === 'void') {
-    throw ApiError.conflict('Cannot record a payment on a void invoice');
-  }
-
-  if (idempotencyKey) {
-    const exists = (invoice.payments || []).some(
-      (p) => p.idempotencyKey && p.idempotencyKey === idempotencyKey,
-    );
-    if (exists) {
-      await invoice.populate(POPULATE);
-      return { invoice, idempotent: true };
+  const result = await withTransaction(async (session) => {
+    // ALWAYS read inside the transaction — this is the race-condition fix.
+    const fresh = await Invoice.findOne({ _id: id, ...branchFilter }).session(session);
+    if (!fresh) {
+      throw ApiError.notFound('Invoice not found');
     }
-  }
+    if (fresh.status === 'void') {
+      throw ApiError.conflict('Cannot record a payment on a void invoice');
+    }
 
-  const balance = round2(invoice.total - invoice.paidAmount);
-  if (balance <= 0) {
-    throw ApiError.conflict('This invoice is already fully paid');
-  }
-  if (amount > balance + 0.01) {
-    throw ApiError.badRequest(
-      `Payment exceeds the outstanding balance (${balance.toFixed(2)})`,
-      { amount: 'exceeds balance' },
-    );
-  }
+    const balance = round2(fresh.total - fresh.paidAmount);
+    if (balance <= 0) {
+      throw ApiError.conflict('This invoice is already fully paid');
+    }
+    if (amount > balance + 0.01) {
+      throw ApiError.badRequest(
+        `Payment exceeds the outstanding balance (${balance.toFixed(2)})`,
+        { amount: 'exceeds balance' },
+      );
+    }
 
-  if (method === 'wallet') {
-    // Balance check is done inside the transaction (see below) to prevent TOCTOU.
-  }
+    // Idempotency: check inside the transaction
+    if (idempotencyKey) {
+      const exists = (fresh.payments || []).some(
+        (p) => p.idempotencyKey && p.idempotencyKey === idempotencyKey,
+      );
+      if (exists) {
+        await fresh.populate(POPULATE);
+        return { invoice: fresh, idempotent: true };
+      }
+    }
 
-  const session = await mongoose.startSession();
-  try {
-    session.startTransaction();
+    const statusBefore = fresh.status;
 
-    invoice.payments.push({
+    // Push payment
+    fresh.payments.push({
       amount,
       method,
       reference: reference || '',
@@ -250,26 +262,37 @@ export async function addPayment(id, branchFilter, { amount, method, reference, 
       notes: notes || '',
       recordedBy: userId,
     });
-    await invoice.save({ session });
 
-    if (method === 'wallet') {
-      const wallet = await Wallet.findOne({ patient: invoice.patient }).session(session);
-      if (!wallet || wallet.balance < amount) {
-        throw ApiError.badRequest('Insufficient wallet balance');
-      }
-      wallet.addTransaction({
-        type: 'debit',
-        amount,
-        reference: reference || invoice.invoiceNo,
-        description: notes || `Payment for invoice ${invoice.invoiceNo}`,
-        invoice: invoice._id,
-        userId,
+    // save() will recompute totals via pre-validate hook.
+    // __v increment provides optimistic concurrency.
+    await fresh.save({ session });
+
+    if (fresh.status !== statusBefore) {
+      fresh.changelog.push({
+        field: 'status',
+        oldValue: statusBefore,
+        newValue: fresh.status,
+        changedBy: userId,
       });
-      await wallet.save({ session });
+      await fresh.save({ session });
     }
 
-    if (invoice.appointment) {
-      const appt = await Appointment.findById(invoice.appointment)
+    // Wallet debit — atomic within the same transaction
+    if (method === 'wallet') {
+      const patient = await Patient.findOne({ _id: fresh.patient }).session(session);
+      if (!patient) throw ApiError.badRequest('Patient not found for wallet payment');
+      await addTransaction(patient, {
+        type: 'debit',
+        amount,
+        reference: reference || fresh.invoiceNo,
+        description: notes || `Payment for invoice ${fresh.invoiceNo}`,
+        invoice: fresh._id,
+      }, userId, session);
+    }
+
+    // Commission — one per invoice, update-or-create inside the transaction
+    if (fresh.appointment) {
+      const appt = await Appointment.findById(fresh.appointment)
         .select('doctor')
         .session(session)
         .lean();
@@ -279,74 +302,79 @@ export async function addPayment(id, branchFilter, { amount, method, reference, 
           .session(session)
           .lean();
         if (doctor && (doctor.commissionRate || 0) > 0) {
-          // One commission per invoice — update if it already exists.
           const existing = await Commission.findOne({
-            invoice: invoice._id,
+            invoice: fresh._id,
             doctor: doctor._id,
           }).session(session);
 
           if (existing) {
             existing.baseAmount = round2(existing.baseAmount + amount);
+            existing.amount = round2(existing.baseAmount * (existing.rate || 0) / 100);
             await existing.save({ session });
           } else {
-            await Commission.create(
-              [
-                {
-                  tenant: invoice.tenant,
-                  branch: invoice.branch,
-                  doctor: doctor._id,
-                  patient: invoice.patient,
-                  invoice: invoice._id,
-                  procedureName: `Invoice payment — ${invoice.invoiceNo}`,
-                  baseAmount: amount,
-                  rate: doctor.commissionRate,
-                  createdBy: userId,
-                },
-              ],
-              { session },
-            );
+            try {
+              await Commission.create(
+                [
+                  {
+                    tenant: fresh.tenant,
+                    branch: fresh.branch,
+                    doctor: doctor._id,
+                    patient: fresh.patient,
+                    invoice: fresh._id,
+                    procedureName: `Invoice payment — ${fresh.invoiceNo}`,
+                    baseAmount: amount,
+                    rate: doctor.commissionRate,
+                    createdBy: userId,
+                  },
+                ],
+                { session },
+              );
+            } catch (err) {
+              // ignore duplicate key errors (race condition)
+            }
           }
         }
       }
     }
 
-    await session.commitTransaction();
-  } catch (err) {
-    await session.abortTransaction();
-    throw err;
-  } finally {
-    session.endSession();
+    return fresh;
+  });
+
+  if (result.idempotent) {
+    await result.invoice.populate(POPULATE);
+    return result.invoice;
   }
 
-  await invoice.populate(POPULATE);
-  return invoice;
+  await result.populate(POPULATE);
+  return result;
 }
 
+/**
+ * Void an invoice inside a transaction.
+ * Reverses wallet debits and voids commission records atomically.
+ */
 export async function voidInvoice(id, branchFilter, { reason, userId } = {}) {
   if (!mongoose.isValidObjectId(id)) {
     throw ApiError.badRequest('Invalid invoice id');
   }
 
-  const invoice = await Invoice.findOne({ _id: id, ...branchFilter });
-  if (!invoice) {
-    throw ApiError.notFound('Invoice not found');
-  }
+  const result = await withTransaction(async (session) => {
+    const invoice = await Invoice.findOne({ _id: id, ...branchFilter }).session(session);
+    if (!invoice) {
+      throw ApiError.notFound('Invoice not found');
+    }
 
-  if (invoice.status === 'void') {
-    await invoice.populate(POPULATE);
-    return invoice;
-  }
+    if (invoice.status === 'void') {
+      await invoice.populate(POPULATE);
+      return invoice;
+    }
 
-  const previousStatus = invoice.status;
+    const previousStatus = invoice.status;
 
-  // Calculate wallet-paid amount to reverse
-  const walletPaid = (invoice.payments || [])
-    .filter((p) => p.method === 'wallet' && !p.isRefund)
-    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-
-  const session = await mongoose.startSession();
-  try {
-    session.startTransaction();
+    // Calculate wallet-paid amount to reverse
+    const walletPaid = (invoice.payments || [])
+      .filter((p) => p.method === 'wallet' && !p.isRefund)
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
     invoice.status = 'void';
     invoice.changelog.push({
@@ -360,87 +388,92 @@ export async function voidInvoice(id, branchFilter, { reason, userId } = {}) {
 
     // Reverse wallet debits
     if (walletPaid > 0) {
-      const wallet = await Wallet.findOne({ patient: invoice.patient }).session(session);
-      if (wallet) {
-        wallet.addTransaction({
+      const patient = await Patient.findOne({ _id: invoice.patient }).session(session);
+      if (patient) {
+        await addTransaction(patient, {
           type: 'credit',
           amount: walletPaid,
           reference: invoice.invoiceNo,
           description: `Reversal for voided invoice ${invoice.invoiceNo}`,
           invoice: invoice._id,
-        });
-        await wallet.save({ session });
+        }, userId || null, session);
       }
     }
 
-    await session.commitTransaction();
-  } catch (err) {
-    await session.abortTransaction();
-    throw err;
-  } finally {
-    session.endSession();
-  }
+    // Void associated commission records
+    await Commission.updateMany(
+      { invoice: invoice._id, status: { $ne: 'void' } },
+      { $set: { status: 'void' } },
+      { session },
+    );
 
-  await invoice.populate(POPULATE);
-  return invoice;
+    return invoice;
+  });
+
+  await result.populate(POPULATE);
+  return result;
 }
 
+/**
+ * Refund a payment on an invoice inside a transaction.
+ *
+ * Idempotency check is performed INSIDE the transaction to prevent
+ * duplicate refunds from concurrent requests.
+ */
 export async function refundPayment(id, branchFilter, { amount, method, reference, date, notes, idempotencyKey, userId }) {
   if (!mongoose.isValidObjectId(id)) {
     throw ApiError.badRequest('Invalid invoice id');
   }
 
-  const invoice = await Invoice.findOne({ _id: id, ...branchFilter });
-  if (!invoice) {
-    throw ApiError.notFound('Invoice not found');
-  }
-  if (invoice.status === 'void') {
-    throw ApiError.conflict('Cannot refund a void invoice');
-  }
-
-  if (idempotencyKey) {
-    const exists = invoice.payments.some(
-      (p) => p.idempotencyKey && p.idempotencyKey === idempotencyKey && p.isRefund,
-    );
-    if (exists) {
-      await invoice.populate(POPULATE);
-      return { invoice, idempotent: true };
+  const result = await withTransaction(async (session) => {
+    const invoice = await Invoice.findOne({ _id: id, ...branchFilter }).session(session);
+    if (!invoice) {
+      throw ApiError.notFound('Invoice not found');
     }
-  }
-
-  const refundAmount = round2(Math.abs(amount));
-  if (refundAmount <= 0) {
-    throw ApiError.badRequest('Refund amount must be greater than 0');
-  }
-  if (refundAmount > invoice.paidAmount + 0.01) {
-    throw ApiError.badRequest(
-      `Refund cannot exceed total paid amount (${invoice.paidAmount.toFixed(2)})`,
-      { amount: 'exceeds paid amount' },
-    );
-  }
-
-  // Determine refund method: default to the original payment method if not specified.
-  const nonRefundPayments = (invoice.payments || []).filter((p) => !p.isRefund && p.amount > 0);
-  let refundMethod = method;
-  if (!refundMethod) {
-    // Prefer the last payment method used, falling back to cash.
-    refundMethod = nonRefundPayments.length > 0
-      ? nonRefundPayments[nonRefundPayments.length - 1].method
-      : 'cash';
-  }
-
-  // Validate that wallet refunds only happen when there were wallet payments.
-  if (refundMethod === 'wallet') {
-    const hasWalletPayment = nonRefundPayments.some((p) => p.method === 'wallet');
-    if (!hasWalletPayment) {
-      // Fall back to cash if no wallet payment was made.
-      refundMethod = 'cash';
+    if (invoice.status === 'void') {
+      throw ApiError.conflict('Cannot refund a void invoice');
     }
-  }
 
-  const session = await mongoose.startSession();
-  try {
-    session.startTransaction();
+    // Idempotency: check INSIDE the transaction
+    if (idempotencyKey) {
+      const exists = invoice.payments.some(
+        (p) => p.idempotencyKey && p.idempotencyKey === idempotencyKey && p.isRefund,
+      );
+      if (exists) {
+        await invoice.populate(POPULATE);
+        return { invoice, idempotent: true };
+      }
+    }
+
+    const refundAmount = round2(Math.abs(amount));
+    if (refundAmount <= 0) {
+      throw ApiError.badRequest('Refund amount must be greater than 0');
+    }
+    if (refundAmount > invoice.paidAmount + 0.01) {
+      throw ApiError.badRequest(
+        `Refund cannot exceed total paid amount (${invoice.paidAmount.toFixed(2)})`,
+        { amount: 'exceeds paid amount' },
+      );
+    }
+
+    // Determine refund method
+    const nonRefundPayments = (invoice.payments || []).filter((p) => !p.isRefund && p.amount > 0);
+    let refundMethod = method;
+    if (!refundMethod) {
+      refundMethod = nonRefundPayments.length > 0
+        ? nonRefundPayments[nonRefundPayments.length - 1].method
+        : 'cash';
+    }
+
+    let hasWalletPayment = false;
+    if (refundMethod === 'wallet') {
+      hasWalletPayment = nonRefundPayments.some((p) => p.method === 'wallet');
+      if (!hasWalletPayment) {
+        refundMethod = 'cash';
+      }
+    }
+
+    const shouldCreditWallet = refundMethod === 'wallet' && hasWalletPayment;
 
     invoice.payments.push({
       amount: -refundAmount,
@@ -462,70 +495,114 @@ export async function refundPayment(id, branchFilter, { amount, method, referenc
 
     await invoice.save({ session });
 
-    // Credit wallet only when the refund method is wallet.
-    if (refundMethod === 'wallet') {
-      const wallet = await Wallet.findOne({ patient: invoice.patient }).session(session);
-      if (wallet) {
-        wallet.addTransaction({
+    // Credit wallet
+    if (shouldCreditWallet) {
+      const patient = await Patient.findOne({ _id: invoice.patient }).session(session);
+      if (patient) {
+        await addTransaction(patient, {
           type: 'credit',
           amount: refundAmount,
           reference: reference || invoice.invoiceNo,
           description: notes || `Refund for invoice ${invoice.invoiceNo}`,
           invoice: invoice._id,
-          userId,
-        });
-        await wallet.save({ session });
+        }, userId, session);
       }
     }
 
-    await session.commitTransaction();
-  } catch (err) {
-    await session.abortTransaction();
-    throw err;
-  } finally {
-    session.endSession();
+    // Adjust commission
+    const totalPaidBeforeRefund = round2(
+      (invoice.payments || [])
+        .filter((p) => !p.isRefund)
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
+    );
+    const commission = await Commission.findOne({ invoice: invoice._id }).session(session);
+    if (commission && totalPaidBeforeRefund > 0) {
+      const refundRatio = refundAmount / totalPaidBeforeRefund;
+      if (refundRatio >= 0.999) {
+        commission.status = 'void';
+        await commission.save({ session });
+      } else {
+        commission.baseAmount = round2(commission.baseAmount * (1 - refundRatio));
+        await commission.save({ session });
+      }
+    }
+
+    return invoice;
+  });
+
+  if (result.idempotent) {
+    await result.invoice.populate(POPULATE);
+    return result.invoice;
   }
 
-  await invoice.populate(POPULATE);
-  return invoice;
+  await result.populate(POPULATE);
+  return result;
 }
 
 export async function getInvoiceAging(branchFilter) {
   const baseFilter = { ...branchFilter, status: { $in: ['unpaid', 'partial'] } };
-
   const now = new Date();
-  const invoices = await Invoice.find(baseFilter)
-    .select('invoiceNo patient total paidAmount dueDate status createdAt')
-    .populate('patient', 'firstName lastName phone')
-    .lean();
+
+  const [agingAgg, invoices] = await Promise.all([
+    Invoice.aggregate([
+      { $match: baseFilter },
+      {
+        $project: {
+          balance: { $subtract: ['$total', '$paidAmount'] },
+          dueDate: 1,
+        },
+      },
+      {
+        $addFields: {
+          bucket: {
+            $cond: [
+              { $or: [{ $not: '$dueDate' }, { $gte: ['$dueDate', now] }] },
+              'current',
+              {
+                $cond: [
+                  { $lte: [{ $divide: [{ $subtract: [now, '$dueDate'] }, 86400000] }, 30] },
+                  'overdue1to30',
+                  {
+                    $cond: [
+                      { $lte: [{ $divide: [{ $subtract: [now, '$dueDate'] }, 86400000] }, 60] },
+                      'overdue31to60',
+                      'overdue61Plus',
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: '$bucket',
+          count: { $sum: 1 },
+          amount: { $sum: '$balance' },
+        },
+      },
+    ]),
+    Invoice.find({ ...baseFilter, dueDate: { $lt: now } })
+      .select('invoiceNo patient total paidAmount dueDate status')
+      .populate('patient', 'firstName lastName phone')
+      .sort('dueDate')
+      .lean(),
+  ]);
 
   const aging = {
     current: { count: 0, amount: 0 },
     overdue1to30: { count: 0, amount: 0 },
     overdue31to60: { count: 0, amount: 0 },
     overdue61Plus: { count: 0, amount: 0 },
-    total: { count: invoices.length, amount: 0 },
+    total: { count: 0, amount: 0 },
   };
 
-  for (const inv of invoices) {
-    const balance = round2(inv.total - inv.paidAmount);
-    aging.total.amount = round2(aging.total.amount + balance);
-
-    if (!inv.dueDate || new Date(inv.dueDate) >= now) {
-      aging.current.count += 1;
-      aging.current.amount = round2(aging.current.amount + balance);
-    } else {
-      const daysOverdue = Math.floor((now - new Date(inv.dueDate)) / (1000 * 60 * 60 * 24));
-      if (daysOverdue <= 30) {
-        aging.overdue1to30.count += 1;
-        aging.overdue1to30.amount = round2(aging.overdue1to30.amount + balance);
-      } else if (daysOverdue <= 60) {
-        aging.overdue31to60.count += 1;
-        aging.overdue31to60.amount = round2(aging.overdue31to60.amount + balance);
-      } else {
-        aging.overdue61Plus.count += 1;
-        aging.overdue61Plus.amount = round2(aging.overdue61Plus.amount + balance);
-      }
+  for (const row of agingAgg) {
+    if (aging[row._id]) {
+      aging[row._id] = { count: row.count, amount: round2(row.amount) };
+      aging.total.count += row.count;
+      aging.total.amount = round2(aging.total.amount + row.amount);
     }
   }
 

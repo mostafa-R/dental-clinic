@@ -40,8 +40,8 @@ const errorLogsSlice = createSlice({
       .addCase(fetchErrorLogs.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(fetchErrorLogs.fulfilled, (state, action) => {
         state.loading = false;
-        state.logs = action.payload.logs;
-        state.pagination = action.payload.pagination;
+        state.logs = action.payload.logs || [];
+        state.pagination = action.payload.pagination || state.pagination;
       })
       .addCase(fetchErrorLogs.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
       .addCase(fetchErrorLogStats.fulfilled, (state, action) => { state.stats = action.payload; });

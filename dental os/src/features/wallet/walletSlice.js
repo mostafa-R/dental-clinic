@@ -65,6 +65,18 @@ export const payInstallmentPlan = createAsyncThunk(
   },
 );
 
+export const updateInstallmentPlan = createAsyncThunk(
+  'wallet/updateInstallmentPlan',
+  async ({ patientId, planId, payload }, { rejectWithValue }) => {
+    try {
+      const { installmentPlan } = await accountingApi.updateInstallment(patientId, planId, payload);
+      return installmentPlan;
+    } catch (err) {
+      return rejectWithValue(errPayload(err, 'Failed to update installment plan'));
+    }
+  },
+);
+
 export const generateInvoiceFromPlan = createAsyncThunk(
   'wallet/generateInvoiceFromPlan',
   async ({ patientId, planId, payload }, { rejectWithValue }) => {
@@ -83,6 +95,9 @@ const initialState = {
 
   plans: { items: [], pagination: { page: 1, limit: 50, total: 0, pages: 1 }, status: 'idle', error: null },
 
+  transactionStatus: 'idle',
+  transactionError: null,
+
   formStatus: 'idle',
   formError: null,
 };
@@ -97,6 +112,10 @@ const walletSlice = createSlice({
     resetFormState(state) {
       state.formStatus = 'idle';
       state.formError = null;
+    },
+    resetTransactionState(state) {
+      state.transactionStatus = 'idle';
+      state.transactionError = null;
     },
   },
   extraReducers: (builder) => {
@@ -116,9 +135,17 @@ const walletSlice = createSlice({
       })
 
       /* add transaction */
+      .addCase(addTransaction.pending, (state) => {
+        state.transactionStatus = 'loading';
+        state.transactionError = null;
+      })
       .addCase(addTransaction.fulfilled, (state, action) => {
         state.wallet = action.payload;
-        state.formStatus = 'succeeded';
+        state.transactionStatus = 'succeeded';
+      })
+      .addCase(addTransaction.rejected, (state, action) => {
+        state.transactionStatus = 'failed';
+        state.transactionError = action.payload;
       })
 
       /* installment plans */
@@ -155,6 +182,20 @@ const walletSlice = createSlice({
         state.formStatus = 'succeeded';
       })
 
+      .addCase(updateInstallmentPlan.pending, (state) => {
+        state.formStatus = 'loading';
+        state.formError = null;
+      })
+      .addCase(updateInstallmentPlan.fulfilled, (state, action) => {
+        const idx = state.plans.items.findIndex((p) => p._id === action.payload._id);
+        if (idx >= 0) state.plans.items[idx] = action.payload;
+        state.formStatus = 'succeeded';
+      })
+      .addCase(updateInstallmentPlan.rejected, (state, action) => {
+        state.formStatus = 'failed';
+        state.formError = action.payload;
+      })
+
       .addCase(generateInvoiceFromPlan.pending, (state) => {
         state.formStatus = 'loading';
         state.formError = null;
@@ -169,6 +210,6 @@ const walletSlice = createSlice({
   },
 });
 
-export const { resetWallet, resetFormState } = walletSlice.actions;
+export const { resetWallet, resetFormState, resetTransactionState } = walletSlice.actions;
 
 export default walletSlice.reducer;

@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Card from '../components/ui/Card';
 import Spinner from '../components/ui/Spinner';
 import EmptyState from '../components/ui/EmptyState';
-import { fetchUsers, toggleUserActive } from '../features/users/usersSlice';
+import { fetchUsers, toggleUserActive } from '../features/users/userSlice';
 import { showErrorDialog } from '../features/ui/uiSlice';
+import { useSocketEvent } from '../lib/socket';
 import { useT } from '../lib/i18n';
 import { canManageUsers, roleLabel } from '../lib/roles';
 import UserFormModal from '../features/users/UserFormModal';
@@ -25,6 +26,12 @@ export default function Users() {
   const openCreate = () => { setEditing(null); setFormOpen(true); };
   const openEdit = (user) => { setEditing(user); setFormOpen(true); };
   const closeForm = () => { setFormOpen(false); setEditing(null); };
+
+  const refetch = useCallback(() => { dispatch(fetchUsers()); }, [dispatch]);
+  useSocketEvent('user:created', refetch);
+  useSocketEvent('user:updated', refetch);
+  useSocketEvent('user:deleted', refetch);
+  useSocketEvent('user:toggled', refetch);
 
   const onToggleActive = async (user) => {
     const action = user.isActive ? 'deactivate' : 'activate';

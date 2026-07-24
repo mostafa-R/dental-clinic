@@ -21,16 +21,10 @@ function emitRx(branchId, event, rx) {
 }
 
 async function assertDoctor(doctorId, branchId) {
-  const doctor = await User.findById(doctorId);
-  if (!doctor || (!doctor.isDoctor && doctor.role !== 'doctor')) {
+  const doctor = await User.findOne({ _id: doctorId, branch: branchId });
+  if (!doctor || !doctor.isDoctor) {
     throw ApiError.badRequest('Referenced doctor does not exist or is not a doctor', {
       doctor: 'not found',
-    });
-  }
-  // The prescribing doctor must belong to the same branch as the patient.
-  if (String(doctor.branch) !== String(branchId)) {
-    throw ApiError.badRequest('Doctor does not belong to this branch', {
-      doctor: 'branch mismatch',
     });
   }
 }

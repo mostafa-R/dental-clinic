@@ -12,6 +12,7 @@ const FIELD_KEYS = {
   password: 'login.password',
   name: 'patients.col.name',
   role: 'role.accountant',
+  patientId: 'patients.col.patientId',
 };
 
 const MESSAGE_HINTS = [
@@ -61,9 +62,6 @@ export function toFriendlyError(raw) {
   if (lower.includes('invalid email or password')) {
     title = t('error.signInFailed');
     text = t('error.signInFailedMsg');
-  } else if (lower.includes('validation failed') || fields.length) {
-    title = t('error.checkInput');
-    text = t('error.checkInputMsg');
   } else if (lower.includes('not authenticated') || lower.includes('session expired')) {
     title = t('error.sessionExpired');
     text = t('error.sessionExpiredMsg');
@@ -76,12 +74,12 @@ export function toFriendlyError(raw) {
   } else if (lower.includes('not found') || status === 404) {
     title = t('error.notFound');
     text = t('error.notFoundMsg');
-  } else if (lower.includes('duplicate') || lower.includes('already exists')) {
+  } else if (lower.includes('duplicate') || lower.includes('already exists') || lower.includes('duplicate value') || status === 409) {
     title = t('error.alreadyExists');
     text = t('error.alreadyExistsMsg');
-  } else if (status === 409) {
-    title = t('error.title');
-    text = message;
+  } else if (lower.includes('validation failed') || fields.length) {
+    title = t('error.checkInput');
+    text = t('error.checkInputMsg');
   } else if (status >= 500) {
     title = t('error.serverError');
     text = t('error.serverErrorMsg');

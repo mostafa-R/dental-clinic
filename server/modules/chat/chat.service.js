@@ -1,4 +1,5 @@
 import Message from './message.model.js';
+import ChannelRead from './channelRead.model.js';
 import User from '../users/user.model.js';
 import { toObjectId, currentTenant } from '../../utils/branchScope.js';
 
@@ -55,24 +56,62 @@ export async function markRead(branch, userId, messageIds) {
   return [...new Set(msgDocs.map((m) => String(m.sender)))];
 }
 
-export async function getUnreadCounts(branch, userId) {
+export async function getUnreadCounts(branch, userId, tenant) {
   const dmResults = await Message.aggregate([
     { $match: { branch: toObjectId(branch), recipient: toObjectId(userId), isRead: false } },
     { $group: { _id: '$sender', count: { $sum: 1 } } },
   ]);
-  const channelResults = await Message.aggregate([
-    { $match: { branch: toObjectId(branch), channel: { $ne: null }, sender: { $ne: toObjectId(userId) }, isRead: false } },
-    { $group: { _id: '$channel', count: { $sum: 1 } } },
-  ]);
+
+  const channelReadFilter = { branch: toObjectId(branch), user: toObjectId(userId) };
+  if (tenant) channelReadFilter.tenant = toObjectId(tenant);
+  const channelReadDocs = await ChannelRead.find(channelReadFilter).lean();
+  const channelReadMap = {};
+  channelReadDocs.forEach((cr) => { channelReadMap[cr.channel] = cr.lastReadAt; });
+
+  const CHANNEL_NAMES = ['doctors', 'accounting', 'general'];
+  const channelResults = await Promise.all(
+    CHANNEL_NAMES.map(async (ch) => {
+      const match = {
+        branch: toObjectId(branch),
+        channel: ch,
+        sender: { $ne: toObjectId(userId) },
+      };
+      const lastRead = channelReadMap[ch];
+      if (lastRead) {
+        match.createdAt = { $gt: lastRead };
+      }
+      const result = await Message.aggregate([
+        { $match: match },
+        { $group: { _id: '$channel', count: { $sum: 1 } } },
+      ]);
+      return { channel: ch, count: result[0]?.count || 0 };
+    }),
+  );
+
   const unread = {};
   dmResults.forEach((r) => { unread[String(r._id)] = r.count; });
-  channelResults.forEach((r) => { unread[`channel:${r._id}`] = r.count; });
+  channelResults.forEach((r) => {
+    if (r.count > 0) {
+      unread[`channel:${r.channel}`] = r.count;
+    }
+  });
   return unread;
 }
 
-export async function listStaff(branch, tenant) {
+export async function markChannelViewed(branch, userId, channel, tenant) {
+  const filter = { branch: toObjectId(branch), user: toObjectId(userId), channel };
+  if (tenant) filter.tenant = toObjectId(tenant);
+  await ChannelRead.findOneAndUpdate(
+    filter,
+    { lastReadAt: new Date() },
+    { upsert: true },
+  );
+}
+
+export async function listStaff(branch, tenant, excludeUserId) {
   const filter = { branch: toObjectId(branch), isActive: true };
   if (tenant) filter.tenant = toObjectId(tenant);
-  const staff = await User.find(filter).select('name email role').sort('name');
-  return staff.map((u) => ({ _id: u._id, name: u.name, email: u.email, role: u.role }));
+  if (excludeUserId) filter._id = { $ne: toObjectId(excludeUserId) };
+  const staff = await User.find(filter).select('name email roleId').populate('roleId', 'name').sort('name');
+  return staff.map((u) => ({ _id: u._id, name: u.name, email: u.email, role: u.roleId?.name || '' }));
 }

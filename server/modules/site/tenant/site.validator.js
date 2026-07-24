@@ -1,20 +1,27 @@
 import { z } from "zod";
 
-export const tenantSchema = z.object({
+const baseFields = {
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
   phone: z.string().optional(),
   plan: z.string().optional(),
+  status: z.enum(["trial", "active"]).optional(),
   address: z.string().optional(),
   city: z.string().optional(),
   country: z.string().optional(),
-  // Initial password for the auto-provisioned clinic admin account.
-  // When omitted, a secure random password is generated and returned.
+};
+
+export const tenantSchema = z.object({
+  ...baseFields,
   adminPassword: z
     .string()
     .min(8, "Admin password must be at least 8 characters")
     .optional(),
 });
+
+export const tenantUpdateSchema = z.object({
+  ...baseFields,
+}).strict();
 
 export const subscriptionSchema = z.object({
   plan: z.string().optional(),

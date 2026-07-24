@@ -15,7 +15,7 @@ export async function require2faChallenge(req, _res, next) {
 
     let decoded;
     try {
-      decoded = jwt.verify(challengeToken, process.env.JWT_SECRET);
+      decoded = jwt.verify(challengeToken, process.env.JWT_2FA_SECRET || process.env.JWT_SECRET);
     } catch {
       throw ApiError.unauthorized('Invalid or expired challenge token');
     }

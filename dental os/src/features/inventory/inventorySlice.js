@@ -68,7 +68,7 @@ export const adjustStock = createAsyncThunk(
 const initialState = {
   items: [],
   pagination: { page: 1, limit: 50, total: 0, pages: 1 },
-  stats: { lowStockCount: 0 },
+  stats: { lowStockCount: 0, totalStockValue: 0 },
   query: { search: '', category: '', lowStock: undefined, page: 1, limit: 50 },
   status: 'idle',
   error: null,
@@ -128,18 +128,72 @@ const inventorySlice = createSlice({
         state.status = 'failed';
         state.error = action.payload;
       })
+      .addCase(createItem.pending, (state) => {
+        state.formStatus = 'loading';
+        state.formError = null;
+      })
       .addCase(createItem.fulfilled, (state, action) => {
-        replaceItem(state, action.payload);
+        const item = action.payload;
+        replaceItem(state, item);
+        state.pagination.total += 1;
+        state.pagination.pages = Math.ceil(state.pagination.total / state.pagination.limit);
+        state.stats.totalStockValue += (item.costPerUnit || 0) * (item.quantity || 0);
+        state.stats.lowStockCount += item.needsReorder ? 1 : 0;
         state.formStatus = 'succeeded';
       })
       .addCase(createItem.rejected, (state, action) => {
         state.formStatus = 'failed';
         state.formError = action.payload;
       })
-      .addCase(updateItem.fulfilled, replaceItem)
-      .addCase(adjustStock.fulfilled, replaceItem)
+      .addCase(updateItem.pending, (state) => {
+        state.formStatus = 'loading';
+        state.formError = null;
+      })
+      .addCase(updateItem.fulfilled, (state, action) => {
+        const newItem = action.payload;
+        const oldItem = state.items.find((i) => i._id === newItem._id);
+        if (oldItem) {
+          state.stats.totalStockValue += (newItem.costPerUnit || 0) * (newItem.quantity || 0)
+            - (oldItem.costPerUnit || 0) * (oldItem.quantity || 0);
+          if (newItem.needsReorder && !oldItem.needsReorder) state.stats.lowStockCount += 1;
+          if (!newItem.needsReorder && oldItem.needsReorder) state.stats.lowStockCount -= 1;
+        }
+        replaceItem(state, newItem);
+        state.formStatus = 'succeeded';
+      })
+      .addCase(updateItem.rejected, (state, action) => {
+        state.formStatus = 'failed';
+        state.formError = action.payload;
+      })
+      .addCase(adjustStock.pending, (state) => {
+        state.formStatus = 'loading';
+        state.formError = null;
+      })
+      .addCase(adjustStock.fulfilled, (state, action) => {
+        const newItem = action.payload;
+        const oldItem = state.items.find((i) => i._id === newItem._id);
+        if (oldItem) {
+          state.stats.totalStockValue += (newItem.costPerUnit || 0) * (newItem.quantity || 0)
+            - (oldItem.costPerUnit || 0) * (oldItem.quantity || 0);
+          if (newItem.needsReorder && !oldItem.needsReorder) state.stats.lowStockCount += 1;
+          if (!newItem.needsReorder && oldItem.needsReorder) state.stats.lowStockCount -= 1;
+        }
+        replaceItem(state, newItem);
+        state.formStatus = 'succeeded';
+      })
+      .addCase(adjustStock.rejected, (state, action) => {
+        state.formStatus = 'failed';
+        state.formError = action.payload;
+      })
       .addCase(deleteItem.fulfilled, (state, action) => {
+        const deleted = state.items.find((i) => i._id === action.payload);
+        if (deleted) {
+          state.stats.totalStockValue -= (deleted.costPerUnit || 0) * (deleted.quantity || 0);
+          if (deleted.needsReorder) state.stats.lowStockCount -= 1;
+        }
         state.items = state.items.filter((i) => i._id !== action.payload);
+        state.pagination.total = Math.max(0, state.pagination.total - 1);
+        state.pagination.pages = Math.ceil(state.pagination.total / state.pagination.limit);
       });
   },
 });

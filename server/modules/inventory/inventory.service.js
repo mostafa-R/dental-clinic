@@ -29,10 +29,16 @@ export async function listItems(branchFilter, { search, category, lowStock, page
     $expr: { $lte: ['$quantity', '$reorderPoint'] },
   });
 
+  const stockValueResult = await InventoryItem.aggregate([
+    { $match: branchFilter },
+    { $group: { _id: null, total: { $sum: { $multiply: ['$quantity', '$costPerUnit'] } } } },
+  ]);
+  const totalStockValue = stockValueResult[0]?.total || 0;
+
   return {
     items,
     pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) },
-    stats: { lowStockCount },
+    stats: { lowStockCount, totalStockValue },
   };
 }
 
@@ -107,10 +113,11 @@ export async function deleteItem(id, branchFilter) {
   if (!mongoose.isValidObjectId(id)) {
     throw ApiError.badRequest('Invalid item id');
   }
-  const item = await InventoryItem.findOneAndDelete({
-    _id: id,
-    ...branchFilter,
-  });
+  const item = await InventoryItem.findOneAndUpdate(
+    { _id: id, ...branchFilter },
+    { $set: { isActive: false } },
+    { new: true },
+  );
   if (!item) {
     throw ApiError.notFound('Inventory item not found');
   }
@@ -193,6 +200,7 @@ export async function adjustStock(id, branchFilter, { type, quantity, reason, re
  */
 export async function deductForProcedure(branchId, tenantId, toothState, procedureName, userId, session) {
   const { PROCEDURE_DEDUCTION_MAP } = await import('../../constants/inventory.js');
+  const ApiError = (await import('../../utils/ApiError.js')).default;
 
   const category = PROCEDURE_DEDUCTION_MAP[toothState];
   if (!category) return [];
@@ -238,6 +246,11 @@ export async function deductForProcedure(branchId, tenantId, toothState, procedu
       deductions.push({ item: item.name, deducted: take });
       toDeduct -= take;
     }
+  }
+
+  if (toDeduct > 0) {
+    console.warn(`[Inventory] Insufficient stock for procedure ${procedureName}: ${toDeduct} units short`);
+    throw ApiError.conflict(`Insufficient inventory to complete procedure: ${procedureName}`);
   }
 
   return deductions;

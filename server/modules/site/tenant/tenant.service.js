@@ -1,10 +1,15 @@
 import crypto from 'crypto';
 import ApiError from '../../../utils/ApiError.js';
+import { cacheDelPattern, invalidateTenant, invalidateTenantRoles } from '../../../utils/cache.js';
 import Appointment from '../../appointments/appointment.model.js';
 import Invoice from '../../billing/invoice.model.js';
+import ClinicalNote from '../../emr/clinicalNote.model.js';
+import DentalChart from '../../emr/dentalChart.model.js';
 import Patient from '../../patients/patient.model.js';
 import Plan from '../../platform/plan.model.js';
+import PlatformSetting from '../../platform/platformSetting.model.js';
 import Branch from '../../users/branch.model.js';
+import Role from '../../users/role.model.js';
 import User from '../../users/user.model.js';
 import Subscription from './subscription.model.js';
 import Tenant from './tenant.model.js';
@@ -75,7 +80,7 @@ export async function getTenantById(id) {
   return { ...tenant, branchesCount, usersCount, patientsCount, appointmentsCount };
 }
 
-export async function createTenant({ name, email, phone, plan, address, city, country, adminPassword }) {
+export async function createTenant({ name, email, phone, plan, status, address, city, country, adminPassword }) {
   const existingTenant = await Tenant.findOne({ email });
   if (existingTenant) {
     throw ApiError.conflict('A tenant with this email already exists');
@@ -87,6 +92,19 @@ export async function createTenant({ name, email, phone, plan, address, city, co
   }
 
   const planDoc = plan ? await Plan.findOne({ key: plan, isActive: true }).lean() : null;
+  const platformSettings = await PlatformSetting.findOne().lean();
+  const trialDays = platformSettings?.trialDays ?? 14;
+
+  const tenantStatus = status || 'trial';
+  const now = new Date();
+  const trialEndsAt = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
+
+  let subscriptionEndsAt = null;
+  if (tenantStatus === 'active') {
+    const billingCycle = planDoc?.billingCycle === 'yearly' ? 'yearly' : 'monthly';
+    const periodDays = billingCycle === 'yearly' ? 365 : 30;
+    subscriptionEndsAt = new Date(now.getTime() + periodDays * 24 * 60 * 60 * 1000);
+  }
 
   const tenant = new Tenant({
     name,
@@ -95,8 +113,10 @@ export async function createTenant({ name, email, phone, plan, address, city, co
     address,
     city,
     country,
-    status: 'trial',
-    trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+    status: tenantStatus,
+    trialEndsAt: tenantStatus === 'trial' ? trialEndsAt : null,
+    subscriptionEndsAt,
+    isActive: tenantStatus === 'active',
   });
 
   let baseSlug = name
@@ -124,19 +144,47 @@ export async function createTenant({ name, email, phone, plan, address, city, co
 
   const defaultBranch = await Branch.create({
     tenant: tenant._id,
-    name: `${name} - Main`,
+    name: name,
     address: address || '',
     phone: phone || '',
     isActive: true,
   });
 
   const password = adminPassword || generatePassword();
+
+  // Create or find the clinic_admin role for this tenant
+  let clinicAdminRole = await Role.findOne({ key: 'clinic_admin', tenant: tenant._id }).lean();
+  if (!clinicAdminRole) {
+    const [created] = await Role.create([{
+      tenant: tenant._id,
+      name: 'Clinic Admin',
+      key: 'clinic_admin',
+      isSystemAdmin: false,
+      isBuiltIn: true,
+      permissions: [
+        { module: 'dashboard', actions: ['create', 'read', 'update', 'delete'] },
+        { module: 'patients', actions: ['create', 'read', 'update', 'delete'] },
+        { module: 'appointments', actions: ['create', 'read', 'update', 'delete'] },
+        { module: 'billing', actions: ['create', 'read', 'update', 'delete'] },
+        { module: 'accounting', actions: ['create', 'read', 'update', 'delete'] },
+        { module: 'emr', actions: ['create', 'read', 'update', 'delete'] },
+        { module: 'prescriptions', actions: ['create', 'read', 'update', 'delete'] },
+        { module: 'users', actions: ['create', 'read', 'update', 'delete'] },
+        { module: 'branches', actions: ['create', 'read', 'update', 'delete'] },
+        { module: 'settings', actions: ['create', 'read', 'update', 'delete'] },
+        { module: 'roles', actions: ['create', 'read', 'update', 'delete'] },
+        { module: 'chat', actions: ['create', 'read', 'update', 'delete'] },
+      ],
+    }]);
+    clinicAdminRole = created.toObject();
+  }
+
   const clinicAdmin = await User.create({
     tenant: tenant._id,
-    name: `${name} Admin`,
+    name: name,
     email,
     password,
-    role: 'clinic_admin',
+    roleId: clinicAdminRole._id,
     branch: defaultBranch._id,
     isActive: true,
   });
@@ -145,10 +193,10 @@ export async function createTenant({ name, email, phone, plan, address, city, co
   await Subscription.create({
     tenant: tenant._id,
     plan: tenant.plan,
-    status: 'pending',
+    status: tenantStatus === 'active' ? 'active' : 'pending',
     amount,
     currentPeriodStart: new Date(),
-    currentPeriodEnd: tenant.trialEndsAt,
+    currentPeriodEnd: subscriptionEndsAt || tenant.trialEndsAt,
   });
 
   const tenantObj = tenant.toObject();
@@ -158,14 +206,12 @@ export async function createTenant({ name, email, phone, plan, address, city, co
     usersCount: 1,
     adminCredentials: {
       email: clinicAdmin.email,
-      password,
-      loginUrl: 'http://localhost:5173/login',
+      loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/login`,
     },
-    encryptionKey: tenant.encryption?.key || null,
   };
 }
 
-export async function updateTenant(id, { name, email, phone, plan, address, city, country }) {
+export async function updateTenant(id, { name, email, phone, plan, status, address, city, country }) {
   const tenant = await Tenant.findById(id);
   if (!tenant) throw ApiError.notFound('Tenant not found');
 
@@ -183,11 +229,35 @@ export async function updateTenant(id, { name, email, phone, plan, address, city
     const planDoc = await Plan.findOne({ key: plan, isActive: true }).lean();
     tenant.updatePlanSettings(planDoc);
   }
+  if (status && status !== tenant.status) {
+    tenant.status = status;
+    if (status === 'active') {
+      tenant.isActive = true;
+      if (!tenant.subscriptionEndsAt) {
+        const billingCycle = tenant.plan === 'enterprise' ? 'yearly' : 'monthly';
+        const periodDays = billingCycle === 'yearly' ? 365 : 30;
+        tenant.subscriptionEndsAt = new Date(Date.now() + periodDays * 24 * 60 * 60 * 1000);
+      }
+      tenant.trialEndsAt = null;
+    } else if (status === 'trial') {
+      tenant.isActive = true;
+      tenant.subscriptionEndsAt = null;
+      const platformSettings = await PlatformSetting.findOne().lean();
+      const trialDays = platformSettings?.trialDays ?? 14;
+      tenant.trialEndsAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000);
+    } else if (status === 'suspended' || status === 'cancelled') {
+      tenant.isActive = false;
+    }
+  }
   if (address !== undefined) tenant.address = address;
   if (city !== undefined) tenant.city = city;
   if (country !== undefined) tenant.country = country;
 
   await tenant.save();
+
+  // Invalidate cached tenant so protect middleware picks up the new config
+  await invalidateTenant(String(id));
+
   return tenant;
 }
 
@@ -197,6 +267,7 @@ export async function archiveTenant(id) {
   tenant.status = 'archived';
   tenant.isActive = false;
   await tenant.save();
+  await invalidateTenant(String(id));
   return tenant;
 }
 
@@ -211,8 +282,15 @@ export async function deleteTenant(id) {
     Appointment.deleteMany({ tenant: id }),
     Invoice.deleteMany({ tenant: id }),
     Subscription.deleteMany({ tenant: id }),
+    ClinicalNote.deleteMany({ tenant: id }),
+    DentalChart.deleteMany({ tenant: id }),
     Tenant.findByIdAndDelete(id),
   ]);
+
+  // Invalidate all cached data for this tenant
+  await invalidateTenant(String(id));
+  await invalidateTenantRoles(String(id));
+  await cacheDelPattern(`permission:*${id}*`);
 }
 
 export async function suspendTenant(id) {
@@ -221,6 +299,7 @@ export async function suspendTenant(id) {
   tenant.status = 'suspended';
   tenant.isActive = false;
   await tenant.save();
+  await invalidateTenant(String(id));
   return tenant;
 }
 
@@ -230,6 +309,7 @@ export async function activateTenant(id) {
   tenant.status = 'active';
   tenant.isActive = true;
   await tenant.save();
+  await invalidateTenant(String(id));
   return tenant;
 }
 
@@ -241,7 +321,7 @@ export async function getTenantStats(id) {
     await Promise.all([
       Branch.countDocuments({ tenant: id }),
       User.countDocuments({ tenant: id }),
-      User.countDocuments({ tenant: id, $or: [{ isDoctor: true }, { role: 'doctor' }] }),
+      User.countDocuments({ tenant: id, isDoctor: true }),
       Patient.countDocuments({ tenant: id }),
       Appointment.countDocuments({ tenant: id }),
       Invoice.aggregate([

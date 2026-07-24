@@ -53,12 +53,15 @@ const impersonationSlice = createSlice({
         state.targetTenant = action.payload.tenant;
       })
       .addCase(startImpersonation.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
+      .addCase(endImpersonation.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(endImpersonation.fulfilled, (state) => {
+        state.loading = false;
         state.active = false;
         state.token = null;
         state.targetUser = null;
         state.targetTenant = null;
-      });
+      })
+      .addCase(endImpersonation.rejected, (state, action) => { state.loading = false; state.error = action.payload; });
   },
 });
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Card from '../../components/ui/Card';
@@ -16,15 +16,16 @@ import {
 } from './emrSlice';
 import { generateInvoiceFromPlan } from '../wallet/walletSlice';
 import { showErrorDialog } from '../ui/uiSlice';
+import { useSocketEvent } from '../../lib/socket';
 import { canManageEmr } from '../../lib/roles';
 import { formatMoney } from '../../lib/format';
 import {
   PLAN_STATUS_STYLES,
   PROCEDURE_STATUS_STYLES,
   PROCEDURE_STATUSES,
-} from '../../lib/dental';
+} from './dental';
 import { useT } from '../../lib/i18n';
-import { PhiField } from '../../lib/usePhi.jsx';
+import { PhiField } from '../../hooks/usePhi';
 
 const TOOTH_OPTIONS = [
   { value: '', label: '—' },
@@ -45,9 +46,16 @@ export default function TreatmentPlansTab({ patientId }) {
   const [expanded, setExpanded] = useState(new Set());
   const [drafts, setDrafts] = useState({});
 
-  useEffect(() => {
+  const refetch = useCallback(() => {
     dispatch(fetchPlans({ patientId, params: { limit: 100 } }));
   }, [dispatch, patientId]);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  useSocketEvent('treatment-plan:created', refetch);
+  useSocketEvent('treatment-plan:updated', refetch);
 
   const toggle = (planId) => {
     setExpanded((prev) => {

@@ -1,11 +1,11 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
-import { usersApi } from './usersApi';
+import { userApi } from './userApi';
 
 export const fetchUsers = createAsyncThunk(
   'users/fetchUsers',
   async (_, { rejectWithValue }) => {
     try {
-      return await usersApi.list();
+      return await userApi.list();
     } catch (err) {
       return rejectWithValue(err.response?.data || { message: 'Failed to load users' });
     }
@@ -16,7 +16,7 @@ export const createUser = createAsyncThunk(
   'users/createUser',
   async (payload, { rejectWithValue }) => {
     try {
-      const result = await usersApi.create(payload);
+      const result = await userApi.create(payload);
       return result;
     } catch (err) {
       return rejectWithValue(err.response?.data || { message: 'Failed to create user' });
@@ -28,7 +28,7 @@ export const updateUser = createAsyncThunk(
   'users/updateUser',
   async ({ id, payload }, { rejectWithValue }) => {
     try {
-      const { user } = await usersApi.update(id, payload);
+      const { user } = await userApi.update(id, payload);
       return user;
     } catch (err) {
       return rejectWithValue(err.response?.data || { message: 'Failed to update user' });
@@ -40,7 +40,7 @@ export const deleteUser = createAsyncThunk(
   'users/deleteUser',
   async (id, { rejectWithValue }) => {
     try {
-      await usersApi.delete(id);
+      await userApi.delete(id);
       return id;
     } catch (err) {
       return rejectWithValue(err.response?.data || { message: 'Failed to delete user' });
@@ -52,7 +52,7 @@ export const toggleUserActive = createAsyncThunk(
   'users/toggleUserActive',
   async (id, { rejectWithValue }) => {
     try {
-      const { user } = await usersApi.toggleActive(id);
+      const { user } = await userApi.toggleActive(id);
       return user;
     } catch (err) {
       return rejectWithValue(err.response?.data || { message: 'Failed to toggle user status' });
@@ -64,7 +64,7 @@ export const fetchMyPermissions = createAsyncThunk(
   'users/fetchMyPermissions',
   async (_, { rejectWithValue }) => {
     try {
-      return await usersApi.myPermissions();
+      return await userApi.myPermissions();
     } catch (err) {
       return rejectWithValue(err.response?.data || { message: 'Failed to load permissions' });
     }
@@ -80,7 +80,7 @@ const initialState = {
   permissionsStatus: 'idle',
 };
 
-const usersSlice = createSlice({
+const userSlice = createSlice({
   name: 'users',
   initialState,
   reducers: {
@@ -128,5 +128,5 @@ const usersSlice = createSlice({
   },
 });
 
-export const { resetFormState } = usersSlice.actions;
-export default usersSlice.reducer;
+export const { resetFormState } = userSlice.actions;
+export default userSlice.reducer;

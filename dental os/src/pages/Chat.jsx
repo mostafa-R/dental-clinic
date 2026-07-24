@@ -1,12 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchStaff, fetchMessages, setActiveChat, fetchUnreadCounts, markRead } from '../features/chat/chatSlice';
-import ChatSidebar from '../components/chat/ChatSidebar';
-import MessageList from '../components/chat/MessageList';
-import MessageInput from '../components/chat/MessageInput';
+import { fetchStaff, fetchMessages, setActiveChat, fetchUnreadCounts, markRead, markChannelRead } from '../features/chat/chatSlice';
+import ChatSidebar from '../features/chat/ChatSidebar';
+import MessageList from '../features/chat/MessageList';
+import MessageInput from '../features/chat/MessageInput';
 import { useT } from '../lib/i18n';
 
-const POLL_INTERVAL = 3000;
+const POLL_INTERVAL = 10000;
 
 export default function Chat() {
   const { t } = useT();
@@ -21,17 +21,31 @@ export default function Chat() {
     dispatch(fetchUnreadCounts());
   }, [dispatch]);
 
+  const startPolling = useCallback((params) => {
+    clearInterval(pollRef.current);
+    pollRef.current = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        dispatch(fetchMessages(params));
+      }
+    }, POLL_INTERVAL);
+  }, [dispatch]);
+
   useEffect(() => {
     if (!activeChat) return;
     const params = activeChat.type === 'dm'
       ? { recipient: activeChat.id }
       : { channel: activeChat.id };
     dispatch(fetchMessages(params));
-    pollRef.current = setInterval(() => {
-      dispatch(fetchMessages(params));
-    }, POLL_INTERVAL);
+    startPolling(params);
+    if (activeChat.type === 'channel') {
+      dispatch(markChannelRead(activeChat.id));
+    }
     return () => clearInterval(pollRef.current);
-  }, [activeChat, dispatch]);
+  }, [activeChat, dispatch, startPolling]);
+
+  useEffect(() => {
+    sentReadRef.current = new Set();
+  }, [activeChat]);
 
   useEffect(() => {
     if (activeChat?.type !== 'dm' || !messages.length || !user) return;
@@ -43,10 +57,6 @@ export default function Chat() {
       dispatch(markRead(unreadIds));
     }
   }, [messages, activeChat, user, dispatch]);
-
-  useEffect(() => {
-    sentReadRef.current = new Set();
-  }, [activeChat]);
 
   const handleSelectChat = (chat) => {
     dispatch(setActiveChat(chat));

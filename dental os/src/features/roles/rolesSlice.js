@@ -17,6 +17,17 @@ export const fetchRoles = createAsyncThunk(
   },
 );
 
+export const fetchModules = createAsyncThunk(
+  'roles/fetchModules',
+  async (_, { rejectWithValue }) => {
+    try {
+      return await rolesApi.listModules();
+    } catch (err) {
+      return rejectWithValue(errPayload(err, 'Failed to load modules'));
+    }
+  },
+);
+
 export const createRole = createAsyncThunk(
   'roles/createRole',
   async (payload, { rejectWithValue }) => {
@@ -55,6 +66,7 @@ export const deleteRole = createAsyncThunk(
 
 const initialState = {
   items: [],
+  modules: null,
   status: 'idle',
   error: null,
   formStatus: 'idle',
@@ -90,6 +102,13 @@ const rolesSlice = createSlice({
         state.status = 'failed';
         state.error = action.payload;
       })
+      .addCase(fetchModules.fulfilled, (state, action) => {
+        state.modules = action.payload;
+      })
+      .addCase(createRole.pending, (state) => {
+        state.formStatus = 'loading';
+        state.formError = null;
+      })
       .addCase(createRole.fulfilled, (state, action) => {
         replaceRole(state, action.payload);
         state.formStatus = 'succeeded';
@@ -98,7 +117,18 @@ const rolesSlice = createSlice({
         state.formStatus = 'failed';
         state.formError = action.payload;
       })
-      .addCase(updateRole.fulfilled, replaceRole)
+      .addCase(updateRole.pending, (state) => {
+        state.formStatus = 'loading';
+        state.formError = null;
+      })
+      .addCase(updateRole.fulfilled, (state, action) => {
+        replaceRole(state, action.payload);
+        state.formStatus = 'succeeded';
+      })
+      .addCase(updateRole.rejected, (state, action) => {
+        state.formStatus = 'failed';
+        state.formError = action.payload;
+      })
       .addCase(deleteRole.fulfilled, (state, action) => {
         state.items = state.items.filter((r) => r._id !== action.payload);
       });

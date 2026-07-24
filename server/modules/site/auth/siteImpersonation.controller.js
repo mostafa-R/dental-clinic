@@ -37,7 +37,7 @@ export const startImpersonation = asyncHandler(async (req, res) => {
   const impersonationToken = jwt.sign(
     {
       sub: user._id.toString(),
-      role: user.role,
+      roleId: user.roleId ? user.roleId.toString() : null,
       branch: user.branch?._id?.toString() || null,
       tenant: tenant._id.toString(),
       type: 'impersonation',
@@ -59,7 +59,6 @@ export const startImpersonation = asyncHandler(async (req, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role,
       branch: user.branch ? { _id: user.branch._id, name: user.branch.name } : null,
       tenant: { _id: tenant._id, name: tenant.name },
     },
@@ -72,6 +71,10 @@ export const startImpersonation = asyncHandler(async (req, res) => {
  * Log the end of an impersonation session.
  */
 export const endImpersonation = asyncHandler(async (req, res) => {
+  const { userId } = req.body || {};
+  if (userId) {
+    await User.findByIdAndUpdate(userId, { $inc: { tokenVersion: 1 } });
+  }
   req.auditDetails = { action: 'impersonation.end' };
   return sendSuccess(res, { message: 'Impersonation session ended' });
 });

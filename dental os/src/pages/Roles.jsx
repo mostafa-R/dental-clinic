@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Card from '../components/ui/Card';
@@ -8,16 +8,19 @@ import RoleFormModal from '../features/roles/RoleFormModal';
 import {
   deleteRole,
   fetchRoles,
+  fetchModules,
 } from '../features/roles/rolesSlice';
 import { showErrorDialog } from '../features/ui/uiSlice';
-import { CRUD_ACTIONS, CRUD_SHORT, MODULES } from '../lib/permissions';
+import { useSocketEvent } from '../lib/socket';
+import { CRUD_ACTIONS, CRUD_SHORT, MODULES as LOCAL_MODULES } from '../features/roles/permissions';
 import { useT } from '../lib/i18n';
 import { canManageRoles } from '../lib/roles';
 
 export default function Roles() {
   const dispatch = useDispatch();
   const { t } = useT();
-  const { items, status, error } = useSelector((s) => s.roles);
+  const { items, status, error, modules: serverModules } = useSelector((s) => s.roles);
+  const MODULES = serverModules?.modules || LOCAL_MODULES;
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -25,7 +28,13 @@ export default function Roles() {
 
   useEffect(() => {
     dispatch(fetchRoles());
+    dispatch(fetchModules());
   }, [dispatch]);
+
+  const refetch = useCallback(() => { dispatch(fetchRoles()); }, [dispatch]);
+  useSocketEvent('role:created', refetch);
+  useSocketEvent('role:updated', refetch);
+  useSocketEvent('role:deleted', refetch);
 
   const openCreate = () => { setEditing(null); setFormOpen(true); };
   const openEdit = (role) => { setEditing(role); setFormOpen(true); };

@@ -14,23 +14,27 @@ const tenantSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      maxlength: 200,
     },
     slug: {
       type: String,
       unique: true,
       lowercase: true,
       trim: true,
+      maxlength: 120,
     },
     email: {
       type: String,
       required: true,
       lowercase: true,
       trim: true,
+      maxlength: 254,
     },
     phone: {
       type: String,
       trim: true,
       default: "",
+      maxlength: 30,
     },
     plan: {
       type: String,
@@ -53,6 +57,7 @@ const tenantSchema = new mongoose.Schema(
     quarantineReason: {
       type: String,
       default: null,
+      maxlength: 1000,
     },
     quarantinePreviousStatus: {
       type: String,
@@ -70,16 +75,19 @@ const tenantSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: "",
+      maxlength: 500,
     },
     city: {
       type: String,
       trim: true,
       default: "",
+      maxlength: 100,
     },
     country: {
       type: String,
       trim: true,
       default: "",
+      maxlength: 100,
     },
     settings: {
       maxBranches: {
@@ -114,7 +122,7 @@ const tenantSchema = new mongoose.Schema(
 
 // Generate slug from name before saving
 tenantSchema.pre("save", function generateSlug() {
-  if (this.isModified("name") && !this.slug) {
+  if (this.isModified("name")) {
     this.slug = this.name
       .toLowerCase()
       .replace(/[^\p{L}\p{N}]+/gu, "-")

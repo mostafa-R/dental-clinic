@@ -23,9 +23,10 @@ import { showErrorDialog } from '../features/ui/uiSlice';
 import { canManageAccounting } from '../lib/roles';
 import {
   COMMISSION_STATUS_STYLES,
-} from '../lib/accounting';
+} from '../features/accounting/accounting';
 import { formatDate, formatMoney } from '../lib/format';
 import { useT } from '../lib/i18n';
+import { useSocketEvent } from '../lib/socket';
 
 const TABS = [
   { key: 'summary', labelKey: 'accounting.tab.summary' },
@@ -54,6 +55,18 @@ export default function Accounting() {
     if (tab === 'drawings') dispatch(fetchDrawings({ limit: 50 }));
     if (tab === 'commissions') dispatch(fetchCommissions({ limit: 50 }));
   }, [dispatch, tab]);
+
+  const refetchAll = useCallback(() => {
+    dispatch(fetchSummary());
+    if (tab === 'expenses') dispatch(fetchExpenses({ limit: 50 }));
+    if (tab === 'drawings') dispatch(fetchDrawings({ limit: 50 }));
+    if (tab === 'commissions') dispatch(fetchCommissions({ limit: 50 }));
+  }, [dispatch, tab]);
+  useSocketEvent('expense:created', refetchAll);
+  useSocketEvent('expense:deleted', refetchAll);
+  useSocketEvent('drawing:created', refetchAll);
+  useSocketEvent('drawing:deleted', refetchAll);
+  useSocketEvent('commission:updated', refetchAll);
 
   const onDeleteExpense = async (id) => {
     if (!window.confirm(t('accounting.expense.deleteConfirm'))) return;
@@ -95,11 +108,6 @@ export default function Accounting() {
 
   const monthlyChartData = useMemo(() => {
     const raw = summary?.monthlyRevenue || [];
-    const expenses = summary?.expenseByCategory || [];
-    const totalExpensesByMonth = {};
-    expenses.forEach((e) => {
-      /* expenseByCategory has no month breakdown, skip */
-    });
     return raw.map((r) => {
       const label = new Date(r.year, r.month - 1).toLocaleString('default', { month: 'short', year: '2-digit' });
       return { label, revenue: r.revenue, count: r.count };
@@ -317,8 +325,8 @@ export default function Accounting() {
                       <td className="px-5 py-3 text-slate-500 dark:text-slate-400">{t(`accounting.payment.${e.paymentMethod}`)}</td>
                       {canManage && (
                         <td className="px-5 py-3 text-end">
-                          <button type="button" onClick={() => onDeleteExpense(e._id)} className="rounded-md px-2 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/15">
-                            {t('common.close')}
+                           <button type="button" onClick={() => onDeleteExpense(e._id)} className="rounded-md px-2 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/15">
+                            {t('common.archive')}
                           </button>
                         </td>
                       )}
@@ -362,8 +370,8 @@ export default function Accounting() {
                       <td className="px-5 py-3 font-medium text-slate-900 dark:text-white">{formatMoney(d.amount)}</td>
                       {canManage && (
                         <td className="px-5 py-3 text-end">
-                          <button type="button" onClick={() => onDeleteDrawing(d._id)} className="rounded-md px-2 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/15">
-                            {t('common.close')}
+                           <button type="button" onClick={() => onDeleteDrawing(d._id)} className="rounded-md px-2 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/15">
+                            {t('common.archive')}
                           </button>
                         </td>
                       )}

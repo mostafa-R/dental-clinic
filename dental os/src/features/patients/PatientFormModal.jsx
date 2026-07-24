@@ -11,6 +11,7 @@ const GENDERS = [
   { value: 'male', key: 'patients.gender.male' },
   { value: 'female', key: 'patients.gender.female' },
   { value: 'other', key: 'patients.gender.other' },
+  { value: 'unknown', key: 'patients.gender.unknown' },
 ];
 
 const EMPTY = {
@@ -136,7 +137,7 @@ export default function PatientFormModal({ open, patient, onClose, onSaved }) {
           phone: patient.phone || '',
           email: patient.email || '',
           dateOfBirth: toDateInput(patient.dateOfBirth),
-          gender: patient.gender || 'unknown',
+          gender: patient.gender || 'male',
           address: patient.address || '',
           branch: patient.branch?._id || patient.branch || '',
           chronicConditions: patient.medicalHistory?.chronicConditions?.map((c) => ({ name: c.name })) || [],
@@ -144,11 +145,11 @@ export default function PatientFormModal({ open, patient, onClose, onSaved }) {
           notes: patient.medicalHistory?.notes || '',
         });
       } else {
-        setForm({ ...EMPTY, branch: branches[0]?._id || '' });
+        setForm((prev) => ({ ...EMPTY, branch: prev.branch || branches[0]?._id || '' }));
       }
       dispatch(resetFormState());
     }
-  }, [open, patient, dispatch, branches]);
+  }, [open, patient, dispatch]);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 

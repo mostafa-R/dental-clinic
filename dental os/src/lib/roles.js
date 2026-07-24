@@ -12,8 +12,16 @@ export function roleLabel(role) {
   return translated !== `role.${role}` ? translated : ROLE_LABELS[role] || role;
 }
 
-export function defaultRouteFor() {
-  return '/dashboard';
+export function defaultRouteFor(role) {
+  switch (role) {
+    case 'doctor':
+      return '/appointments';
+    case 'accountant':
+    case 'receptionist':
+      return '/billing';
+    default:
+      return '/dashboard';
+  }
 }
 
 function hasModuleAction(module, ...actions) {
@@ -24,7 +32,7 @@ function hasModuleAction(module, ...actions) {
   const perms = mp.permissions?.[module];
   if (!perms || perms.length === 0) return false;
   if (actions.length === 0) return perms.length > 0;
-  return actions.some((a) => perms.includes(a));
+  return actions.every((a) => perms.includes(a));
 }
 
 export function canManagePatients() {
