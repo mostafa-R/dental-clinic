@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
-import { useSelector } from 'react-redux';
-import { Link } from 'react-router-dom';
-import { doctorDashboardApi } from '../doctorDashboardApi';
-import Card from '../../../components/ui/Card';
-import EmptyState from '../../../components/ui/EmptyState';
-import Spinner from '../../../components/ui/Spinner';
-import { useT } from '../../../lib/i18n';
+import { useEffect, useState } from "react";
+import { useSelector } from "react-redux";
+import { Link } from "react-router-dom";
+import Card from "../../../components/ui/Card";
+import EmptyState from "../../../components/ui/EmptyState";
+import Spinner from "../../../components/ui/Spinner";
+import { useT } from "../../../lib/i18n";
+import { doctorDashboardApi } from "../doctorDashboardApi";
 
 export default function ActivePlans() {
   const { t } = useT();
@@ -14,7 +14,8 @@ export default function ActivePlans() {
   const [plans, setPlans] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const hasAccess = perms?.isSystemAdmin || perms?.permissions?.emr?.includes('read');
+  const hasAccess =
+    perms?.isSystemAdmin || perms?.permissions?.emr?.includes("read");
 
   useEffect(() => {
     if (!hasAccess || !user?._id) return;
@@ -38,12 +39,12 @@ export default function ActivePlans() {
         const recent = patientIds.slice(0, 10);
         const results = await Promise.all(
           recent.map((pid) =>
-            doctorDashboardApi.getTreatmentPlans(pid).catch(() => [])
+            doctorDashboardApi.getTreatmentPlans(pid).catch(() => []),
           ),
         );
 
         if (cancelled) return;
-        const all = results.flat().filter((p) => p.status === 'active');
+        const all = results.flat().filter((p) => p.status === "active");
         setPlans(all.slice(0, 8));
       })
       .catch(() => {
@@ -53,19 +54,21 @@ export default function ActivePlans() {
         if (!cancelled) setLoading(false);
       });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [hasAccess, user?._id]);
 
   if (!hasAccess) return null;
 
   return (
-    <Card title={t('doctorDashboard.activePlans')}>
-      {loading && !plans && <Spinner label={t('common.loading')} />}
+    <Card title={t("doctorDashboard.activePlans")}>
+      {loading && !plans && <Spinner label={t("common.loading")} />}
 
       {!loading && (!plans || plans.length === 0) && (
         <EmptyState
-          title={t('doctorDashboard.noActivePlans')}
-          message={t('doctorDashboard.noActivePlansHint')}
+          title={t("doctorDashboard.noActivePlans")}
+          message={t("doctorDashboard.noActivePlansHint")}
         />
       )}
 
@@ -85,7 +88,9 @@ export default function ActivePlans() {
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       {plan.patient?.firstName} {plan.patient?.lastName}
-                      <span className="mx-1.5 text-slate-300 dark:text-slate-600">·</span>
+                      <span className="mx-1.5 text-slate-300 dark:text-slate-600">
+                        ·
+                      </span>
                       {plan.planNo}
                     </p>
                   </div>
@@ -93,7 +98,7 @@ export default function ActivePlans() {
                     to={`/patients/${plan.patient?._id}/emr`}
                     className="shrink-0 text-xs font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
                   >
-                    {t('common.view')}
+                    {t("common.view")}
                   </Link>
                 </div>
 

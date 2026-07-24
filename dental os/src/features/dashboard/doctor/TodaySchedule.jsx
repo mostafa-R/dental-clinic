@@ -1,21 +1,26 @@
-import { useEffect, useState } from 'react';
-import { useSelector } from 'react-redux';
-import { doctorDashboardApi } from '../doctorDashboardApi';
-import Card from '../../../components/ui/Card';
-import EmptyState from '../../../components/ui/EmptyState';
-import Spinner from '../../../components/ui/Spinner';
-import { formatTime } from '../../../lib/format';
-import { useT } from '../../../lib/i18n';
-import { useSocketEvent } from '../../../lib/socket';
+import { useEffect, useState } from "react";
+import { useSelector } from "react-redux";
+import Card from "../../../components/ui/Card";
+import EmptyState from "../../../components/ui/EmptyState";
+import Spinner from "../../../components/ui/Spinner";
+import { formatTime } from "../../../lib/format";
+import { useT } from "../../../lib/i18n";
+import { useSocketEvent } from "../../../lib/socket";
+import { doctorDashboardApi } from "../doctorDashboardApi";
 
 const STATUS_COLORS = {
-  scheduled: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300',
-  confirmed: 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
-  checked_in: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
-  in_progress: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
-  completed: 'bg-slate-100 text-slate-600 dark:bg-slate-700/40 dark:text-slate-300',
-  cancelled: 'bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300',
-  no_show: 'bg-purple-50 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300',
+  scheduled:
+    "bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300",
+  confirmed: "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+  checked_in:
+    "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  in_progress:
+    "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+  completed:
+    "bg-slate-100 text-slate-600 dark:bg-slate-700/40 dark:text-slate-300",
+  cancelled: "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300",
+  no_show:
+    "bg-purple-50 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300",
 };
 
 export default function TodaySchedule() {
@@ -25,7 +30,8 @@ export default function TodaySchedule() {
   const [appointments, setAppointments] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const hasAccess = perms?.isSystemAdmin || perms?.permissions?.appointments?.includes('read');
+  const hasAccess =
+    perms?.isSystemAdmin || perms?.permissions?.appointments?.includes("read");
 
   const fetchAppointments = () => {
     if (!hasAccess || !user?._id) return;
@@ -41,9 +47,9 @@ export default function TodaySchedule() {
     fetchAppointments();
   }, [hasAccess, user?._id]);
 
-  useSocketEvent('appointment:created', fetchAppointments);
-  useSocketEvent('appointment:updated', fetchAppointments);
-  useSocketEvent('appointment:statusChanged', fetchAppointments);
+  useSocketEvent("appointment:created", fetchAppointments);
+  useSocketEvent("appointment:updated", fetchAppointments);
+  useSocketEvent("appointment:statusChanged", fetchAppointments);
 
   if (!hasAccess) return null;
 
@@ -52,13 +58,13 @@ export default function TodaySchedule() {
     : [];
 
   return (
-    <Card title={t('doctorDashboard.todaySchedule')}>
-      {loading && !appointments && <Spinner label={t('common.loading')} />}
+    <Card title={t("doctorDashboard.todaySchedule")}>
+      {loading && !appointments && <Spinner label={t("common.loading")} />}
 
       {!loading && sorted.length === 0 && (
         <EmptyState
-          title={t('doctorDashboard.noAppointments')}
-          message={t('doctorDashboard.noAppointmentsHint')}
+          title={t("doctorDashboard.noAppointments")}
+          message={t("doctorDashboard.noAppointmentsHint")}
         />
       )}
 
@@ -91,7 +97,7 @@ export default function TodaySchedule() {
               )}
 
               <span
-                className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[appt.status] || 'bg-slate-100 text-slate-600 dark:bg-slate-700/40 dark:text-slate-300'}`}
+                className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[appt.status] || "bg-slate-100 text-slate-600 dark:bg-slate-700/40 dark:text-slate-300"}`}
               >
                 {t(`appointment.status.${appt.status}`)}
               </span>
