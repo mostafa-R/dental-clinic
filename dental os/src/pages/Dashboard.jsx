@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchDashboardStats, resetDashboard } from '../features/dashboard/dashboardSlice';
 import BranchesList from '../features/dashboard/BranchesList';
@@ -157,8 +157,48 @@ function OwnerDashboard() {
 
 export default function Dashboard() {
   const user = useSelector((s) => s.auth.user);
-  const isDoctor = user?.role === 'doctor' || user?.isDoctor === true;
+  const { t } = useT();
 
-  if (isDoctor) return <DoctorDashboard />;
-  return <OwnerDashboard />;
+  const isPureDoctor = user?.role === 'doctor';
+  const canSwitchDashboard = user?.role === 'clinic_admin' && user?.isDoctor === true;
+
+  const [activeView, setActiveView] = useState(isPureDoctor ? 'doctor' : 'owner');
+
+  useEffect(() => {
+    if (isPureDoctor) setActiveView('doctor');
+  }, [isPureDoctor]);
+
+  if (isPureDoctor) return <DoctorDashboard />;
+
+  return (
+    <div className="space-y-6">
+      {canSwitchDashboard && (
+        <div className="flex items-center gap-2 self-end">
+          <button
+            type="button"
+            onClick={() => setActiveView('owner')}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+              activeView === 'owner'
+                ? 'bg-indigo-600 text-white dark:bg-indigo-500'
+                : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            {t('dashboard.viewOwner')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveView('doctor')}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+              activeView === 'doctor'
+                ? 'bg-indigo-600 text-white dark:bg-indigo-500'
+                : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            {t('dashboard.viewDoctor')}
+          </button>
+        </div>
+      )}
+      {activeView === 'doctor' ? <DoctorDashboard /> : <OwnerDashboard />}
+    </div>
+  );
 }

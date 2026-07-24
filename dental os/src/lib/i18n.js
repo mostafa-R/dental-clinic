@@ -178,6 +178,8 @@ const translations = {
     'dashboard.daysAgo': '{n}d ago',
     'dashboard.noStaffYet': 'No staff yet',
     'dashboard.noStaffHint': 'Staff will appear here once accounts are created.',
+    'dashboard.viewOwner': 'Admin',
+    'dashboard.viewDoctor': 'Doctor',
 
     'patients.title': 'Patients',
     'patients.subtitle': 'Manage patient records and medical history.',
@@ -1034,6 +1036,8 @@ const translations = {
     'dashboard.daysAgo': 'منذ {n} ي',
     'dashboard.noStaffYet': 'لا يوجد موظفون بعد',
     'dashboard.noStaffHint': 'سيظهر الموظفون هنا بمجرد إنشاء الحسابات.',
+    'dashboard.viewOwner': 'الإدارة',
+    'dashboard.viewDoctor': 'الطبيب',
 
     'patients.title': 'المرضى',
     'patients.subtitle': 'إدارة سجلات المرضى والتاريخ الطبي.',
