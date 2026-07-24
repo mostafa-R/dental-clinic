@@ -51,6 +51,14 @@ export default function ProtectedRoute() {
     return <Navigate to="/login" replace />;
   }
 
+  if (permissionsStatus === 'loading' || permissionsStatus === 'idle') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-100">
+        <div className="text-sm text-slate-500">Loading…</div>
+      </div>
+    );
+  }
+
   // Check tenant suspension
   const tenantStatus = user.tenant?.status;
   const tenantActive = user.tenant?.isActive;

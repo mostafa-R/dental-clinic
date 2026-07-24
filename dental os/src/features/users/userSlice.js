@@ -121,9 +121,15 @@ const userSlice = createSlice({
         const idx = state.items.findIndex((u) => u._id === action.payload._id);
         if (idx >= 0) state.items[idx] = action.payload;
       })
+      .addCase(fetchMyPermissions.pending, (state) => {
+        state.permissionsStatus = 'loading';
+      })
       .addCase(fetchMyPermissions.fulfilled, (state, action) => {
         state.myPermissions = action.payload;
         state.permissionsStatus = 'succeeded';
+      })
+      .addCase(fetchMyPermissions.rejected, (state) => {
+        state.permissionsStatus = 'failed';
       });
   },
 });

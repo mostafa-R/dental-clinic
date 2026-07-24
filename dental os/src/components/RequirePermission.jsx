@@ -5,7 +5,11 @@ export default function RequirePermission({ module, action, children }) {
   const myPermissions = useSelector((s) => s.users.myPermissions);
   const permissionsStatus = useSelector((s) => s.users.permissionsStatus);
 
-  if (permissionsStatus !== 'succeeded' || !myPermissions) return null;
+  if (permissionsStatus === 'loading' || permissionsStatus === 'idle') return null;
+
+  if (permissionsStatus === 'failed' || !myPermissions) {
+    return <Navigate to="/login" replace />;
+  }
 
   if (myPermissions.isSystemAdmin) return children;
 
