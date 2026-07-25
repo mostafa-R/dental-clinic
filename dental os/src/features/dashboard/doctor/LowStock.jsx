@@ -7,6 +7,15 @@ import { formatNumber } from "../../../lib/format";
 import { useT } from "../../../lib/i18n";
 import { doctorDashboardApi } from "../doctorDashboardApi";
 
+function AlertTriangleIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+      <path d="M12 9v4" /><path d="M12 17h.01" />
+    </svg>
+  );
+}
+
 export default function LowStock() {
   const { t } = useT();
   const perms = useSelector((s) => s.users.myPermissions);
@@ -36,10 +45,11 @@ export default function LowStock() {
   return (
     <Card
       title={t("doctorDashboard.lowStock")}
+      accent="rose"
       action={
         <Link
           to="/inventory"
-          className="text-xs font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
+          className="rounded-lg bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-100 dark:bg-rose-500/15 dark:text-rose-400 dark:hover:bg-rose-500/25"
         >
           {t("common.view")}
         </Link>
@@ -59,30 +69,52 @@ export default function LowStock() {
       )}
 
       {items && items.length > 0 && (
-        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-          {items.slice(0, 5).map((item) => (
-            <li
-              key={item._id}
-              className="flex items-center justify-between py-3"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-slate-900 dark:text-white">
-                  {item.name}
-                </p>
-                <p className="text-xs text-slate-400 dark:text-slate-500">
-                  {t("inventory.category." + item.category)} · {item.sku || "—"}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-semibold text-rose-600 dark:text-rose-400">
-                  {formatNumber(item.quantity)}
-                </p>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                  {t("doctorDashboard.reorderAt")} {item.reorderPoint}
-                </p>
-              </div>
-            </li>
-          ))}
+        <ul className="space-y-1">
+          {items.slice(0, 5).map((item) => {
+            const ratio = item.reorderPoint > 0 ? item.quantity / item.reorderPoint : 0;
+            const urgency = ratio <= 0.3 ? "critical" : ratio <= 0.6 ? "warning" : "low";
+            const urgencyStyles = {
+              critical: "border-l-rose-500 bg-rose-50/50 dark:bg-rose-500/5",
+              warning: "border-l-amber-500 bg-amber-50/50 dark:bg-amber-500/5",
+              low: "border-l-transparent",
+            };
+            return (
+              <li
+                key={item._id}
+                className={`group flex items-center justify-between rounded-xl border-l-2 p-3 transition-colors duration-150 hover:bg-slate-50 dark:hover:bg-slate-800/50 ${urgencyStyles[urgency]}`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  {urgency === "critical" && (
+                    <span className="shrink-0 text-rose-500 dark:text-rose-400">
+                      <AlertTriangleIcon />
+                    </span>
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-slate-900 dark:text-white">
+                      {item.name}
+                    </p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500">
+                      {t("inventory.category." + item.category)} · {item.sku || "—"}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className={`text-sm font-bold ${
+                    urgency === "critical"
+                      ? "text-rose-600 dark:text-rose-400"
+                      : urgency === "warning"
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-slate-600 dark:text-slate-300"
+                  }`}>
+                    {formatNumber(item.quantity)}
+                  </p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                    {t("doctorDashboard.reorderAt")} {item.reorderPoint}
+                  </p>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </Card>

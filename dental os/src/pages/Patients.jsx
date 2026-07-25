@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useSearchParams } from 'react-router-dom';
 import { fetchPatients, resetPatients, setPage } from '../features/patients/patientSlice';
 import PatientDetailModal from '../features/patients/PatientDetailModal';
 import PatientFormModal from '../features/patients/PatientFormModal';
@@ -16,12 +17,21 @@ import { useSocketEvent } from '../lib/socket';
 export default function Patients() {
   const dispatch = useDispatch();
   const { t } = useT();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { items, pagination, query, status, error } = useSelector((s) => s.patients);
   const canManage = canManagePatients();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
+
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setEditing(null);
+      setFormOpen(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
 
   useEffect(() => {
     dispatch(fetchPatients(query));

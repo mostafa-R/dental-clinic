@@ -62,7 +62,7 @@ export default function ActivePlans() {
   if (!hasAccess) return null;
 
   return (
-    <Card title={t("doctorDashboard.activePlans")}>
+    <Card title={t("doctorDashboard.activePlans")} accent="violet">
       {loading && !plans && <Spinner label={t("common.loading")} />}
 
       {!loading && (!plans || plans.length === 0) && (
@@ -73,14 +73,20 @@ export default function ActivePlans() {
       )}
 
       {plans && plans.length > 0 && (
-        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+        <ul className="space-y-1">
           {plans.map((plan) => {
             const total = plan.items?.length || 0;
             const done = plan.completedCount || 0;
             const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+            const progressColor =
+              pct >= 75
+                ? "from-emerald-500 to-teal-500"
+                : pct >= 40
+                  ? "from-indigo-500 to-blue-500"
+                  : "from-amber-500 to-orange-500";
 
             return (
-              <li key={plan._id} className="py-3">
+              <li key={plan._id} className="group rounded-xl p-3 transition-colors duration-150 hover:bg-slate-50 dark:hover:bg-slate-800/50">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-slate-900 dark:text-white">
@@ -88,29 +94,27 @@ export default function ActivePlans() {
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       {plan.patient?.firstName} {plan.patient?.lastName}
-                      <span className="mx-1.5 text-slate-300 dark:text-slate-600">
-                        ·
-                      </span>
+                      <span className="mx-1.5 text-slate-300 dark:text-slate-600">·</span>
                       {plan.planNo}
                     </p>
                   </div>
                   <Link
                     to={`/patients/${plan.patient?._id}/emr`}
-                    className="shrink-0 text-xs font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
+                    className="shrink-0 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-600 transition-colors hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-400 dark:hover:bg-indigo-500/25"
                   >
                     {t("common.view")}
                   </Link>
                 </div>
 
-                <div className="mt-2 flex items-center gap-3">
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                     <div
-                      className="h-full rounded-full bg-indigo-500 transition-all dark:bg-indigo-400"
+                      className={`h-full rounded-full bg-gradient-to-r ${progressColor} transition-all duration-500`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
-                  <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
-                    {done}/{total}
+                  <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    {pct}%
                   </span>
                 </div>
               </li>

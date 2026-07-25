@@ -132,6 +132,10 @@ const translations = {
     'topbar.unreadMessages': 'Unread messages',
     'topbar.viewChat': 'View Chat',
     'topbar.noNotifications': 'No new notifications',
+    'topbar.newPatient': 'New Patient',
+    'topbar.newAppointment': 'New Appointment',
+    'topbar.liveQueue': 'Live Queue',
+    'topbar.newInvoice': 'New Invoice',
 
     'sidebar.collapse': 'Collapse sidebar',
     'sidebar.expand': 'Expand sidebar',
@@ -990,6 +994,10 @@ const translations = {
     'topbar.unreadMessages': 'رسائل غير مقروءة',
     'topbar.viewChat': 'عرض المحادثة',
     'topbar.noNotifications': 'لا توجد إشعارات جديدة',
+    'topbar.newPatient': 'مريض جديد',
+    'topbar.newAppointment': 'موعد جديد',
+    'topbar.liveQueue': 'قائمة الانتظار',
+    'topbar.newInvoice': 'فاتورة جديدة',
 
     'sidebar.collapse': 'طي القائمة الجانبية',
     'sidebar.expand': 'توسيع القائمة الجانبية',

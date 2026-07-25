@@ -128,7 +128,13 @@ export async function getDashboardStats(branchFilter, user, isSystemAdmin = fals
       { key: 'patients', label: 'Patients', enabled: true },
       { key: 'appointments', label: 'Appointments', enabled: true },
       { key: 'billing', label: 'Billing', enabled: true },
-      { key: 'inventory', label: 'Inventory', enabled: false },
+      { key: 'accounting', label: 'Accounting', enabled: true },
+      { key: 'inventory', label: 'Inventory', enabled: true },
+      { key: 'branches', label: 'Branches', enabled: true },
+      { key: 'chat', label: 'Chat', enabled: true },
+      { key: 'users', label: 'Users', enabled: true },
+      { key: 'roles', label: 'Roles', enabled: true },
+      { key: 'settings', label: 'Settings', enabled: true },
     ],
   };
 }

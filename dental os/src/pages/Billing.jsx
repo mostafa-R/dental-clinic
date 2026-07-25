@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useSearchParams } from 'react-router-dom';
 import {
   fetchBillingSummary,
   fetchInvoices,
@@ -32,6 +33,7 @@ import { useT } from '../lib/i18n';
 export default function Billing() {
   const dispatch = useDispatch();
   const { t } = useT();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { items, pagination, query, status, error, summary, summaryStatus } = useSelector((s) => s.billing);
   const canManage = canManageBilling();
   const canViewSummary = canViewBilling();
@@ -44,6 +46,14 @@ export default function Billing() {
   const [voiding, setVoiding] = useState(null);
   const [agingOpen, setAgingOpen] = useState(false);
   const [voidLoading, setVoidLoading] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setEditing(null);
+      setFormOpen(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
 
   useEffect(() => {
     if (!canViewBilling()) return undefined;

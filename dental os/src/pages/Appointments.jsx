@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useSearchParams } from 'react-router-dom';
 import {
   fetchAppointments,
   resetAppointments,
@@ -36,6 +37,7 @@ export default function Appointments() {
   const { items, status, error, query } = useSelector((s) => s.appointments);
   const user = useSelector((s) => s.auth.user);
   const canManage = canManageAppointments();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [tab, setTab] = useState('calendar');
   const [view, setView] = useState('day');
@@ -45,6 +47,24 @@ export default function Appointments() {
   const [editing, setEditing] = useState(null);
   const [defaultStart, setDefaultStart] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  useEffect(() => {
+    const newParam = searchParams.get('new');
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'queue') {
+      setTab('queue');
+    }
+    if (newParam === '1') {
+      const withTime = new Date();
+      withTime.setHours(9, 0, 0, 0);
+      setDefaultStart(withTime);
+      setEditing(null);
+      setFormOpen(true);
+    }
+    if (newParam || tabParam) {
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
 
   useEffect(() => {
     api.get('/users/doctors').then((d) => setDoctors(d.data.data.doctors)).catch(() => {});
