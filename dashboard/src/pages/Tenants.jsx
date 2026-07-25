@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import AppLayout from "../components/layout/AppLayout";
-import Topbar from "../components/layout/Topbar";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
@@ -50,7 +48,6 @@ export default function Tenants() {
   const [selectedUserId, setSelectedUserId] = useState("");
   const [loadingUsers, setLoadingUsers] = useState(false);
 
-  // Open clinic frontend in new tab when impersonation starts
   useEffect(() => {
     if (impersonation.active && impersonation.token) {
       const clinicUrl = import.meta.env.VITE_CLINIC_URL || 'http://localhost:5173';
@@ -138,227 +135,219 @@ export default function Tenants() {
   };
 
   if (loading && !items.length) {
-    return (
-      <AppLayout>
-        <Topbar title={t("tenants", language)} />
-        <PageLoader />
-      </AppLayout>
-    );
+    return <PageLoader />;
   }
 
   return (
-    <AppLayout>
-      <Topbar title={t("tenants", language)} />
-      <div className="p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative">
-              <MagnifyingGlassIcon className="absolute start-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                type="text"
-                placeholder={t("searchTenants", language)}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                className="ps-10 pe-4 py-2 w-full sm:w-64 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-              />
-            </div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-            >
-              <option value="">{t("allStatus", language)}</option>
-              <option value={TENANT_STATUS.ACTIVE}>{t("statusActive", language)}</option>
-              <option value={TENANT_STATUS.TRIAL}>{t("statusTrial", language)}</option>
-              <option value={TENANT_STATUS.SUSPENDED}>{t("statusSuspended", language)}</option>
-              <option value={TENANT_STATUS.CANCELLED}>{t("statusCancelled", language)}</option>
-            </select>
-            <Button variant="secondary" onClick={handleSearch}>
-              {t("search", language)}
-            </Button>
+    <div className="p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative">
+            <MagnifyingGlassIcon className="absolute start-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <input
+              type="text"
+              placeholder={t("searchTenants", language)}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              className="ps-10 pe-4 py-2 w-full sm:w-64 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
           </div>
-          <Button onClick={() => setShowForm(true)}>
-            <PlusIcon className="w-4 h-4" />
-            {t("addTenant", language)}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+          >
+            <option value="">{t("allStatus", language)}</option>
+            <option value={TENANT_STATUS.ACTIVE}>{t("statusActive", language)}</option>
+            <option value={TENANT_STATUS.TRIAL}>{t("statusTrial", language)}</option>
+            <option value={TENANT_STATUS.SUSPENDED}>{t("statusSuspended", language)}</option>
+            <option value={TENANT_STATUS.CANCELLED}>{t("statusCancelled", language)}</option>
+          </select>
+          <Button variant="secondary" onClick={handleSearch}>
+            {t("search", language)}
           </Button>
         </div>
+        <Button onClick={() => setShowForm(true)}>
+          <PlusIcon className="w-4 h-4" />
+          {t("addTenant", language)}
+        </Button>
+      </div>
 
-        <Card padding="p-0">
-          {items.length === 0 ? (
-            <EmptyState
-              title={t("noTenantsFound", language)}
-              description={t("noTenantsDesc", language)}
-              icon={BuildingOfficeIcon}
-              action={
-                <Button onClick={() => setShowForm(true)}>
-                  <PlusIcon className="w-4 h-4" />
-                  {t("addTenant", language)}
-                </Button>
-              }
-            />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                    <th className="px-6 py-3 text-start text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                      {t("clinicName", language)}
-                    </th>
-                    <th className="px-6 py-3 text-start text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                      {t("plan", language)}
-                    </th>
-                    <th className="px-6 py-3 text-start text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                      {t("status", language)}
-                    </th>
-                    <th className="px-6 py-3 text-start text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                      {t("tenantBranches", language)}
-                    </th>
-                    <th className="px-6 py-3 text-start text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                      {t("tenantUsers", language)}
-                    </th>
-                    <th className="px-6 py-3 text-start text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                      {t("tenantCreated", language)}
-                    </th>
-                    <th className="px-6 py-3 text-end text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                      {t("actions", language)}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                  {items.map((tenant) => (
-                    <tr
-                      key={tenant._id}
-                      className="hover:bg-slate-50 dark:hover:bg-slate-700/50"
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <p className="font-medium text-slate-900 dark:text-white">
-                            {tenant.name}
-                          </p>
-                          <p className="text-sm text-slate-500 dark:text-slate-400">
-                            {tenant.email}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Badge variant="primary">
-                          {planName(tenant.plan)}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(tenant.status)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-slate-600 dark:text-slate-300">
-                        {tenant.branchesCount || 0}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-slate-600 dark:text-slate-300">
-                        {tenant.usersCount || 0}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-slate-600 dark:text-slate-300">
-                        {formatDate(tenant.createdAt, language)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-end">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-indigo-600 hover:text-indigo-700"
-                            onClick={() => setUsageTenant(tenant)}
-                          >
-                            {t("usage", language)}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-amber-600 hover:text-amber-700"
-                            onClick={() => handleImpersonateClick(tenant)}
-                          >
-                            {t("loginAs", language)}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedTenant(tenant);
-                              setShowForm(true);
-                            }}
-                          >
-                            {t("edit", language)}
-                          </Button>
-                          {tenant.status === TENANT_STATUS.ACTIVE && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-red-600 hover:text-red-700"
-                              onClick={() =>
-                                setConfirmAction({
-                                  type: "suspend",
-                                  id: tenant._id,
-                                })
-                              }
-                            >
-                              {t("suspendTenant", language)}
-                            </Button>
-                          )}
-                          {tenant.status === TENANT_STATUS.SUSPENDED && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-emerald-600 hover:text-emerald-700"
-                              onClick={() =>
-                                setConfirmAction({
-                                  type: "activate",
-                                  id: tenant._id,
-                                })
-                              }
-                            >
-                              {t("activateTenant", language)}
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-slate-500 hover:text-slate-700"
-                            onClick={() =>
-                              setConfirmAction({
-                                type: "archive",
-                                id: tenant._id,
-                              })
-                            }
-                          >
-                            {t("archiveTenant", language)}
-                          </Button>
+      <Card padding="p-0">
+        {items.length === 0 ? (
+          <EmptyState
+            title={t("noTenantsFound", language)}
+            description={t("noTenantsDesc", language)}
+            icon={BuildingOfficeIcon}
+            action={
+              <Button onClick={() => setShowForm(true)}>
+                <PlusIcon className="w-4 h-4" />
+                {t("addTenant", language)}
+              </Button>
+            }
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                  <th className="px-6 py-3 text-start text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                    {t("clinicName", language)}
+                  </th>
+                  <th className="px-6 py-3 text-start text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                    {t("plan", language)}
+                  </th>
+                  <th className="px-6 py-3 text-start text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                    {t("status", language)}
+                  </th>
+                  <th className="px-6 py-3 text-start text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                    {t("tenantBranches", language)}
+                  </th>
+                  <th className="px-6 py-3 text-start text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                    {t("tenantUsers", language)}
+                  </th>
+                  <th className="px-6 py-3 text-start text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                    {t("tenantCreated", language)}
+                  </th>
+                  <th className="px-6 py-3 text-end text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                    {t("actions", language)}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                {items.map((tenant) => (
+                  <tr
+                    key={tenant._id}
+                    className="hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        <p className="font-medium text-slate-900 dark:text-white">
+                          {tenant.name}
+                        </p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                          {tenant.email}
+                        </p>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Badge variant="primary">
+                        {planName(tenant.plan)}
+                      </Badge>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getStatusBadge(tenant.status)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-slate-600 dark:text-slate-300">
+                      {tenant.branchesCount || 0}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-slate-600 dark:text-slate-300">
+                      {tenant.usersCount || 0}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-slate-600 dark:text-slate-300">
+                      {formatDate(tenant.createdAt, language)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-end">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-indigo-600 hover:text-indigo-700"
+                          onClick={() => setUsageTenant(tenant)}
+                        >
+                          {t("usage", language)}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-amber-600 hover:text-amber-700"
+                          onClick={() => handleImpersonateClick(tenant)}
+                        >
+                          {t("loginAs", language)}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedTenant(tenant);
+                            setShowForm(true);
+                          }}
+                        >
+                          {t("edit", language)}
+                        </Button>
+                        {tenant.status === TENANT_STATUS.ACTIVE && (
                           <Button
                             variant="ghost"
                             size="sm"
                             className="text-red-600 hover:text-red-700"
                             onClick={() =>
                               setConfirmAction({
-                                type: "delete",
+                                type: "suspend",
                                 id: tenant._id,
                               })
                             }
                           >
-                            {t("deleteTenant", language)}
+                            {t("suspendTenant", language)}
                           </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {pagination.totalPages > 1 && (
-            <Pagination
-              currentPage={pagination.page}
-              totalPages={pagination.totalPages}
-              onPageChange={handlePageChange}
-            />
-          )}
-        </Card>
-      </div>
+                        )}
+                        {tenant.status === TENANT_STATUS.SUSPENDED && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-emerald-600 hover:text-emerald-700"
+                            onClick={() =>
+                              setConfirmAction({
+                                type: "activate",
+                                id: tenant._id,
+                              })
+                            }
+                          >
+                            {t("activateTenant", language)}
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-slate-500 hover:text-slate-700"
+                          onClick={() =>
+                            setConfirmAction({
+                              type: "archive",
+                              id: tenant._id,
+                            })
+                          }
+                        >
+                          {t("archiveTenant", language)}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700"
+                          onClick={() =>
+                            setConfirmAction({
+                              type: "delete",
+                              id: tenant._id,
+                            })
+                          }
+                        >
+                          {t("deleteTenant", language)}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {pagination.totalPages > 1 && (
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            onPageChange={handlePageChange}
+          />
+        )}
+      </Card>
 
       <TenantFormModal
         isOpen={showForm}
@@ -464,6 +453,6 @@ export default function Tenants() {
           </Button>
         </div>
       </Modal>
-    </AppLayout>
+    </div>
   );
 }

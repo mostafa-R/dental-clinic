@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
+import DashboardLayout from "./components/layout/DashboardLayout";
 import { PageLoader } from "./components/ui/Spinner";
 import { getCurrentUser } from "./features/auth/authSlice";
 
@@ -56,21 +57,23 @@ function App() {
         <Route path="/login" element={<Login />} />
 
         <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/tenants" element={<Tenants />} />
-          <Route path="/branches" element={<Branches />} />
-          <Route path="/billing" element={<Billing />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/admins" element={<Admins />} />
-          <Route path="/audit-logs" element={<AuditLogs />} />
-          <Route path="/error-logs" element={<ErrorLogs />} />
-          <Route path="/feature-flags" element={<FeatureFlags />} />
-          <Route path="/health" element={<Health />} />
-          <Route path="/plans" element={<Plans />} />
-          <Route path="/quarantine" element={<Quarantine />} />
-          <Route path="/backups" element={<Backups />} />
-          <Route path="/performance" element={<Performance />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route element={<DashboardLayout />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/tenants" element={<Tenants />} />
+            <Route path="/branches" element={<Branches />} />
+            <Route path="/billing" element={<Billing />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/admins" element={<Admins />} />
+            <Route path="/audit-logs" element={<AuditLogs />} />
+            <Route path="/error-logs" element={<ErrorLogs />} />
+            <Route path="/feature-flags" element={<FeatureFlags />} />
+            <Route path="/health" element={<Health />} />
+            <Route path="/plans" element={<Plans />} />
+            <Route path="/quarantine" element={<Quarantine />} />
+            <Route path="/backups" element={<Backups />} />
+            <Route path="/performance" element={<Performance />} />
+            <Route path="/settings" element={<Settings />} />
+          </Route>
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

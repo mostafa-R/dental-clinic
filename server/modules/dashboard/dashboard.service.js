@@ -51,7 +51,7 @@ export async function getDashboardStats(branchFilter, user, isSystemAdmin = fals
       .sort('-createdAt')
       .limit(5)
       .select('name email roleId isDoctor createdAt'),
-    isSystemAdmin
+    isSystemAdmin || user.tenant
       ? Branch.find(user.tenant ? { tenant: user.tenant } : { _id: { $in: [] } }).lean().sort('name')
       : Branch.find({ _id: user.branch }).lean(),
     Patient.countDocuments(branchFilter),

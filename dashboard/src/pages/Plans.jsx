@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import AppLayout from "../components/layout/AppLayout";
-import Topbar from "../components/layout/Topbar";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
@@ -169,156 +167,144 @@ export default function Plans() {
   };
 
   if (loading && !items.length) {
-    return (
-      <AppLayout>
-        <Topbar title={t("plans", language)} />
-        <PageLoader />
-      </AppLayout>
-    );
+    return <PageLoader />;
   }
 
   return (
-    <AppLayout>
-      <Topbar title={t("plans", language)} />
-      <div className="p-6">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
-            Subscription Plans
-          </h2>
-          <Button onClick={() => setShowForm(true)}>
-            <PlusIcon className="w-4 h-4" />
-            {t("addPlan", language)}
-          </Button>
-        </div>
-
-        {/* Plans Grid */}
-        {items.length === 0 ? (
-          <EmptyState
-            title="No plans found"
-            description="Create subscription plans for your platform."
-            icon={Squares2X2Icon}
-            action={
-              <Button onClick={() => setShowForm(true)}>
-                <PlusIcon className="w-4 h-4" />
-                {t("addPlan", language)}
-              </Button>
-            }
-          />
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {items.map((plan) => (
-              <Card key={plan._id} className="relative">
-                {!plan.isActive && (
-                  <div className="absolute top-4 end-4">
-                    <Badge variant="warning">Inactive</Badge>
-                  </div>
-                )}
-                <div className="text-center mb-6">
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white">
-                    {plan.name}
-                  </h3>
-                  <div className="mt-4">
-                    <span className="text-4xl font-bold text-slate-900 dark:text-white">
-                      {formatCurrency(plan.price)}
-                    </span>
-                    <span className="text-slate-500 dark:text-slate-400">
-                      /{plan.interval || "month"}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-4 mb-6">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600 dark:text-slate-300">
-                      {t("maxBranches", language)}
-                    </span>
-                    <span className="font-medium text-slate-900 dark:text-white">
-                      {plan.limits?.maxBranches || "Unlimited"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600 dark:text-slate-300">
-                      {t("maxDoctors", language)}
-                    </span>
-                    <span className="font-medium text-slate-900 dark:text-white">
-                      {plan.limits?.maxDoctors || "Unlimited"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600 dark:text-slate-300">
-                      {t("maxPatients", language)}
-                    </span>
-                    <span className="font-medium text-slate-900 dark:text-white">
-                      {plan.limits?.maxPatients || "Unlimited"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600 dark:text-slate-300">
-                      {t("storage", language)}
-                    </span>
-                    <span className="font-medium text-slate-900 dark:text-white">
-                      {plan.limits?.storage || "Unlimited"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600 dark:text-slate-300">
-                      {t("support", language)}
-                    </span>
-                    <span className="font-medium text-slate-900 dark:text-white">
-                      {plan.support}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600 dark:text-slate-300">
-                      Modules
-                    </span>
-                    <span className="font-medium text-slate-900 dark:text-white">
-                      {plan.modules?.length || 0}/12
-                    </span>
-                  </div>
-                </div>
-
-                {/* Features */}
-                {plan.features?.length > 0 && (
-                  <div className="border-t border-slate-200 dark:border-slate-700 pt-4 mb-6">
-                    <ul className="space-y-2">
-                      {plan.features.map((feature, index) => (
-                        <li
-                          key={index}
-                          className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300"
-                        >
-                          <CheckIcon className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                          {feature}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="secondary"
-                    className="flex-1"
-                    onClick={() => handleEdit(plan)}
-                  >
-                    {t("edit", language)}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="text-red-600 hover:text-red-700"
-                    onClick={() => setDeleteConfirm(plan)}
-                  >
-                    {t("delete", language)}
-                  </Button>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
+          Subscription Plans
+        </h2>
+        <Button onClick={() => setShowForm(true)}>
+          <PlusIcon className="w-4 h-4" />
+          {t("addPlan", language)}
+        </Button>
       </div>
 
-      {/* Plan Form Modal */}
+      {items.length === 0 ? (
+        <EmptyState
+          title="No plans found"
+          description="Create subscription plans for your platform."
+          icon={Squares2X2Icon}
+          action={
+            <Button onClick={() => setShowForm(true)}>
+              <PlusIcon className="w-4 h-4" />
+              {t("addPlan", language)}
+            </Button>
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {items.map((plan) => (
+            <Card key={plan._id} className="relative">
+              {!plan.isActive && (
+                <div className="absolute top-4 end-4">
+                  <Badge variant="warning">Inactive</Badge>
+                </div>
+              )}
+              <div className="text-center mb-6">
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+                  {plan.name}
+                </h3>
+                <div className="mt-4">
+                  <span className="text-4xl font-bold text-slate-900 dark:text-white">
+                    {formatCurrency(plan.price)}
+                  </span>
+                  <span className="text-slate-500 dark:text-slate-400">
+                    /{plan.interval || "month"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600 dark:text-slate-300">
+                    {t("maxBranches", language)}
+                  </span>
+                  <span className="font-medium text-slate-900 dark:text-white">
+                    {plan.limits?.maxBranches || "Unlimited"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600 dark:text-slate-300">
+                    {t("maxDoctors", language)}
+                  </span>
+                  <span className="font-medium text-slate-900 dark:text-white">
+                    {plan.limits?.maxDoctors || "Unlimited"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600 dark:text-slate-300">
+                    {t("maxPatients", language)}
+                  </span>
+                  <span className="font-medium text-slate-900 dark:text-white">
+                    {plan.limits?.maxPatients || "Unlimited"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600 dark:text-slate-300">
+                    {t("storage", language)}
+                  </span>
+                  <span className="font-medium text-slate-900 dark:text-white">
+                    {plan.limits?.storage || "Unlimited"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600 dark:text-slate-300">
+                    {t("support", language)}
+                  </span>
+                  <span className="font-medium text-slate-900 dark:text-white">
+                    {plan.support}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600 dark:text-slate-300">
+                    Modules
+                  </span>
+                  <span className="font-medium text-slate-900 dark:text-white">
+                    {plan.modules?.length || 0}/12
+                  </span>
+                </div>
+              </div>
+
+              {plan.features?.length > 0 && (
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-4 mb-6">
+                  <ul className="space-y-2">
+                    {plan.features.map((feature, index) => (
+                      <li
+                        key={index}
+                        className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300"
+                      >
+                        <CheckIcon className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => handleEdit(plan)}
+                >
+                  {t("edit", language)}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="text-red-600 hover:text-red-700"
+                  onClick={() => setDeleteConfirm(plan)}
+                >
+                  {t("delete", language)}
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
       <Modal
         isOpen={showForm}
         onClose={() => {
@@ -470,7 +456,6 @@ export default function Plans() {
             </div>
           </div>
 
-          {/* Modules */}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Modules (App Access)
@@ -504,7 +489,6 @@ export default function Plans() {
             </div>
           </div>
 
-          {/* Features */}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               {t("planFeatures", language)}
@@ -547,7 +531,6 @@ export default function Plans() {
             </div>
           </div>
 
-          {/* Active Status */}
           <div className="flex items-center gap-3">
             <input
               type="checkbox"
@@ -582,7 +565,6 @@ export default function Plans() {
         </form>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
       <Modal
         isOpen={!!deleteConfirm}
         onClose={() => setDeleteConfirm(null)}
@@ -603,6 +585,6 @@ export default function Plans() {
           </Button>
         </div>
       </Modal>
-    </AppLayout>
+    </div>
   );
 }

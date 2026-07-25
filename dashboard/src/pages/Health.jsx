@@ -1,7 +1,5 @@
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import AppLayout from "../components/layout/AppLayout";
-import Topbar from "../components/layout/Topbar";
 import Card from "../components/ui/Card";
 import StatCard from "../components/ui/StatCard";
 import { PageLoader } from "../components/ui/Spinner";
@@ -98,81 +96,78 @@ export default function Health() {
   }, [dispatch]);
 
   return (
-    <AppLayout>
-      <Topbar title={t("systemHealth", language)} />
-      <div className="p-6">
-        {loading && !data && <PageLoader />}
+    <div className="p-6">
+      {loading && !data && <PageLoader />}
 
-        {data && (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <StatCard
-                title={t("uptime", language)}
-                value={formatUptime(data.uptime)}
-                variant="info"
-              />
-              <StatCard
-                title={t("mongodb", language)}
-                value={data.mongodb === "connected" ? t("connected", language) : t("disconnected", language)}
-                variant={data.mongodb === "connected" ? "success" : "danger"}
-              />
-              <StatCard
-                title={t("nodeVersion", language)}
-                value={data.node}
-                variant="default"
-              />
-              <StatCard
-                title={t("platform", language)}
-                value={data.platform}
-                variant="default"
-              />
-            </div>
+      {data && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <StatCard
+              title={t("uptime", language)}
+              value={formatUptime(data.uptime)}
+              variant="info"
+            />
+            <StatCard
+              title={t("mongodb", language)}
+              value={data.mongodb === "connected" ? t("connected", language) : t("disconnected", language)}
+              variant={data.mongodb === "connected" ? "success" : "danger"}
+            />
+            <StatCard
+              title={t("nodeVersion", language)}
+              value={data.node}
+              variant="default"
+            />
+            <StatCard
+              title={t("platform", language)}
+              value={data.platform}
+              variant="default"
+            />
+          </div>
 
-            <div className="mb-6">
-              <RedisCard data={data.redis} language={language} />
-            </div>
+          <div className="mb-6">
+            <RedisCard data={data.redis} language={language} />
+          </div>
 
-            <div className="mb-6">
-              <TelemetryCard data={data.telemetry} language={language} />
-            </div>
+          <div className="mb-6">
+            <TelemetryCard data={data.telemetry} language={language} />
+          </div>
 
-            <Card>
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
-                {t("memory", language)}
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-slate-600 dark:text-slate-400">{t("rss", language)}</span>
-                    <span className="font-medium text-slate-900 dark:text-white">{data.memory.rss} MB</span>
-                  </div>
-                  <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5">
-                    <div className="h-2.5 rounded-full bg-indigo-500" style={{ width: `${Math.min((data.memory.rss / 1024) * 100, 100)}%` }} />
-                  </div>
+          <Card>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
+              {t("memory", language)}
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-slate-600 dark:text-slate-400">{t("rss", language)}</span>
+                  <span className="font-medium text-slate-900 dark:text-white">{data.memory.rss} MB</span>
                 </div>
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-slate-600 dark:text-slate-400">{t("heapTotal", language)}</span>
-                    <span className="font-medium text-slate-900 dark:text-white">{data.memory.heapTotal} MB</span>
-                  </div>
-                  <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5">
-                    <div className="h-2.5 rounded-full bg-emerald-500" style={{ width: `${Math.min((data.memory.heapTotal / 512) * 100, 100)}%` }} />
-                  </div>
+                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5">
+                  <div className="h-2.5 rounded-full bg-indigo-500" style={{ width: `${Math.min((data.memory.rss / 1024) * 100, 100)}%` }} />
                 </div>
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-slate-600 dark:text-slate-400">{t("heapUsed", language)}</span>
-                    <span className="font-medium text-slate-900 dark:text-white">{data.memory.heapUsed} MB</span>
-                  </div>
-                  <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5">
-                     <div className="h-2.5 rounded-full bg-sky-500" style={{ width: `${Math.min((data.memory.heapUsed / Math.max(data.memory.heapTotal || 1, 1)) * 100, 100)}%` }} />
-                   </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-slate-600 dark:text-slate-400">{t("heapTotal", language)}</span>
+                  <span className="font-medium text-slate-900 dark:text-white">{data.memory.heapTotal} MB</span>
+                </div>
+                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5">
+                  <div className="h-2.5 rounded-full bg-emerald-500" style={{ width: `${Math.min((data.memory.heapTotal / 512) * 100, 100)}%` }} />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-slate-600 dark:text-slate-400">{t("heapUsed", language)}</span>
+                  <span className="font-medium text-slate-900 dark:text-white">{data.memory.heapUsed} MB</span>
+                </div>
+                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5">
+                   <div className="h-2.5 rounded-full bg-sky-500" style={{ width: `${Math.min((data.memory.heapUsed / Math.max(data.memory.heapTotal || 1, 1)) * 100, 100)}%` }} />
                  </div>
               </div>
-            </Card>
-          </>
-        )}
-      </div>
-    </AppLayout>
+            </div>
+          </Card>
+        </>
+      )}
+    </div>
   );
 }
