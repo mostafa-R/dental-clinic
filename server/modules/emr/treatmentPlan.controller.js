@@ -74,7 +74,7 @@ export const createTreatmentPlan = asyncHandler(async (req, res) => {
   await plan.populate(POPULATE);
   emitPlan(patient.branch, 'treatment-plan:created', plan);
 
-  return sendSuccess(res, { plan }, 201);
+  return sendSuccess(res, { plan: req.isImpersonation ? stripPHI(plan.toJSON()) : plan }, 201);
 });
 
 export const updateTreatmentPlan = asyncHandler(async (req, res) => {
@@ -124,7 +124,7 @@ export const updateTreatmentPlan = asyncHandler(async (req, res) => {
   await plan.populate(POPULATE);
   emitPlan(patient.branch, 'treatment-plan:updated', plan);
 
-  return sendSuccess(res, { plan });
+  return sendSuccess(res, { plan: req.isImpersonation ? stripPHI(plan.toJSON()) : plan });
 });
 
 export const archiveTreatmentPlan = asyncHandler(async (req, res) => {
@@ -140,7 +140,7 @@ export const archiveTreatmentPlan = asyncHandler(async (req, res) => {
   await plan.populate(POPULATE);
   emitPlan(patient.branch, 'treatment-plan:updated', plan);
 
-  return sendSuccess(res, { plan });
+  return sendSuccess(res, { plan: req.isImpersonation ? stripPHI(plan.toJSON()) : plan });
 });
 
 export const addTreatmentItem = asyncHandler(async (req, res) => {
@@ -156,7 +156,7 @@ export const addTreatmentItem = asyncHandler(async (req, res) => {
   await plan.populate(POPULATE);
   emitPlan(patient.branch, 'treatment-plan:updated', plan);
 
-  return sendSuccess(res, { plan }, 201);
+  return sendSuccess(res, { plan: req.isImpersonation ? stripPHI(plan.toJSON()) : plan }, 201);
 });
 
 export const updateTreatmentItem = asyncHandler(async (req, res) => {
@@ -190,7 +190,7 @@ export const updateTreatmentItem = asyncHandler(async (req, res) => {
   await plan.populate(POPULATE);
   emitPlan(patient.branch, 'treatment-plan:updated', plan);
 
-  return sendSuccess(res, { plan });
+  return sendSuccess(res, { plan: req.isImpersonation ? stripPHI(plan.toJSON()) : plan });
 });
 
 export const removeTreatmentItem = asyncHandler(async (req, res) => {
@@ -220,7 +220,7 @@ export const removeTreatmentItem = asyncHandler(async (req, res) => {
   await plan.populate(POPULATE);
   emitPlan(patient.branch, 'treatment-plan:updated', plan);
 
-  return sendSuccess(res, { plan });
+  return sendSuccess(res, { plan: req.isImpersonation ? stripPHI(plan.toJSON()) : plan });
 });
 
 export const generateInvoice = asyncHandler(async (req, res) => {

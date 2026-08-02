@@ -1,7 +1,9 @@
 import fs from 'fs';
+import ApiError from '../utils/ApiError.js';
 import WhatsAppSetting from '../modules/whatsapp/whatsappSetting.model.js';
 
 const clients = new Map();
+const connecting = new Map();
 
 function getClientKey(tenantId) {
   return String(tenantId);
@@ -67,12 +69,28 @@ export async function connectWhatsApp(tenantId) {
     return { status: 'connected' };
   }
 
+  // Concurrency guard: two simultaneous connect requests must not both
+  // spawn a Chrome instance. The second caller awaits the first's promise.
+  if (connecting.has(key)) {
+    return connecting.get(key);
+  }
+
+  const promise = doConnect(tenantId, key);
+  connecting.set(key, promise);
+  try {
+    return await promise;
+  } finally {
+    connecting.delete(key);
+  }
+}
+
+async function doConnect(tenantId, key) {
   await WhatsAppSetting.findOneAndUpdate(
     { tenant: tenantId },
     { $set: { status: 'connecting', lastError: '' } },
   );
 
-  const { Client } = await import('whatsapp-web.js');
+  const { Client, LocalAuth } = await import('whatsapp-web.js');
   const chromePath = getChromePath();
   if (!chromePath) {
     const errMsg = 'Chrome/Chromium not found. Install Chrome or set CHROME_PATH env variable.';
@@ -80,12 +98,19 @@ export async function connectWhatsApp(tenantId) {
       { tenant: tenantId },
       { $set: { status: 'error', lastError: errMsg, qrCode: '' } },
     );
-    throw new Error(errMsg);
+    throw ApiError.internal(errMsg);
   }
 
   const client = new Client({
+    // Persist the authenticated session per tenant (clientId) so a restart
+    // does not force a new QR scan. LocalAuth stores the login state under
+    // .wwebjs_auth/<clientId> and restores it automatically on initialize().
+    authStrategy: new LocalAuth({ clientId: key }),
     puppeteer: {
       executablePath: chromePath,
+      headless: true,
+      // Isolated Chrome profile per tenant — no concurrent profile-lock races.
+      userDataDir: `./.wwebjs_chrome/${key}`,
       args: [
         '--disable-gpu',
         '--disable-dev-shm-usage',
@@ -189,9 +214,9 @@ export async function sendWhatsAppMessage(tenantId, to, message) {
   if (!client) {
     const settings = await WhatsAppSetting.findOne({ tenant: tenantId });
     if (!settings?.enabled) {
-      throw new Error('WhatsApp غير مفعل لهذه العيادة');
+      throw ApiError.badRequest('WhatsApp is not enabled for this clinic');
     }
-    throw new Error('WhatsApp client not connected');
+    throw ApiError.conflict('WhatsApp client not connected');
   }
 
   if (!client.info?.wid?.user) {
@@ -200,7 +225,7 @@ export async function sendWhatsAppMessage(tenantId, to, message) {
       { tenant: tenantId },
       { $set: { status: 'disconnected', lastError: 'Session expired — reconnect required', qrCode: '' } },
     );
-    throw new Error('WhatsApp session expired. Please disconnect and reconnect.');
+    throw ApiError.conflict('WhatsApp session expired. Please disconnect and reconnect.');
   }
 
   const chatId = to.includes('@c.us') ? to : `${to}@c.us`;
@@ -219,7 +244,7 @@ export async function sendWhatsAppMessage(tenantId, to, message) {
     const errorMsg = isFatal
       ? 'Browser engine error. Install Chrome 124+ or set CHROME_PATH env var.'
       : err.message;
-    throw new Error(errorMsg);
+    throw ApiError.internal(errorMsg);
   }
 }
 

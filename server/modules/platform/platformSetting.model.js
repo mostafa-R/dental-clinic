@@ -6,6 +6,7 @@ const platformSettingSchema = new mongoose.Schema(
     emailNotifications: { type: Boolean, default: true },
     maintenanceMode: { type: Boolean, default: false },
     allowedDomains: [{ type: String }],
+    allowedSiteIps: { type: String, default: "" },
     maxTenants: { type: Number, default: 1000 },
     defaultPlan: { type: String, default: "starter" },
     trialDays: { type: Number, default: 14 },

@@ -123,11 +123,29 @@ export async function createInvoice({ data, branch, tenant, userId }) {
     });
   }
 
+  let appointment = null;
+  if (data.appointment) {
+    // The appointment must exist in this branch AND belong to this patient;
+    // otherwise an invoice can be linked to another patient's visit.
+    appointment = await Appointment.findOne({
+      _id: toObjectId(data.appointment),
+      branch,
+      patient: toObjectId(data.patient),
+    })
+      .select('_id')
+      .lean();
+    if (!appointment) {
+      throw ApiError.badRequest('Appointment does not belong to this patient or branch', {
+        appointment: 'not found',
+      });
+    }
+  }
+
   const invoice = await Invoice.create({
     patient: toObjectId(data.patient),
     branch,
     tenant,
-    appointment: data.appointment ? toObjectId(data.appointment) : null,
+    appointment: appointment ? appointment._id : null,
     items: data.items,
     discount: data.discount || 0,
     discountType: data.discountType || 'fixed',

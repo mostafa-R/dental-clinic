@@ -1,8 +1,10 @@
 import PlatformSetting from './platformSetting.model.js';
+import { clearMaintenanceCache } from '../../middleware/maintenance.js';
+import { clearIpAllowlistCache } from '../../middleware/ipAllowlist.js';
 
 const ALLOWED_KEYS = [
   'autoSuspendDays', 'emailNotifications', 'maintenanceMode',
-  'allowedDomains', 'maxTenants', 'defaultPlan', 'trialDays',
+  'allowedDomains', 'allowedSiteIps', 'maxTenants', 'defaultPlan', 'trialDays',
   'backupEnabled', 'backupRetentionDays', 'backupTime',
 ];
 
@@ -24,5 +26,14 @@ export async function updateSettings(data) {
     }
     await settings.save();
   }
+
+  // Cached platform flags — drop them now so toggles apply immediately.
+  if (data.maintenanceMode !== undefined) {
+    await clearMaintenanceCache();
+  }
+  if (data.allowedSiteIps !== undefined) {
+    await clearIpAllowlistCache();
+  }
+
   return settings;
 }

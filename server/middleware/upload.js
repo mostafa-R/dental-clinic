@@ -5,7 +5,7 @@ import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const UPLOADS_ROOT = path.join(__dirname, '..', 'uploads', 'medical');
+export const UPLOADS_ROOT = path.join(__dirname, '..', 'uploads', 'medical');
 mkdirSync(UPLOADS_ROOT, { recursive: true });
 
 const ALLOWED_MIMES = new Set([

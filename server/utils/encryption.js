@@ -15,12 +15,10 @@ function deriveKey(password, salt) {
 
 function getPassword() {
   const key = process.env.BACKUP_ENCRYPTION_KEY;
-  if (key) return key;
-  if (process.env.JWT_SECRET) {
-    console.warn('[Encryption] BACKUP_ENCRYPTION_KEY not set — falling back to JWT_SECRET. Set BACKUP_ENCRYPTION_KEY for production.');
-    return process.env.JWT_SECRET;
+  if (!key) {
+    throw new Error('BACKUP_ENCRYPTION_KEY is required for file/backup encryption. Set it in .env — do NOT reuse JWT_SECRET.');
   }
-  throw new Error('BACKUP_ENCRYPTION_KEY or JWT_SECRET is required for backup encryption');
+  return key;
 }
 
 /**

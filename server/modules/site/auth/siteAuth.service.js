@@ -1,6 +1,8 @@
 import jwt from 'jsonwebtoken';
+import crypto from 'node:crypto';
 import SiteAdmin from '../admin/admin.model.js';
 import ApiError from '../../../utils/ApiError.js';
+import { bootstrap2fa } from './site2fa.service.js';
 
 export async function authenticateSiteAdmin(email, password) {
   const admin = await SiteAdmin.findOne({ email }).select('+password');
@@ -11,7 +13,7 @@ export async function authenticateSiteAdmin(email, password) {
   if (!isMatch) throw ApiError.unauthorized('Invalid email or password');
 
   if (admin.role === 'super_admin' && !admin.twoFactorEnabled) {
-    throw ApiError.forbidden('Super admin must enable 2FA before logging in. Contact another super admin or use recovery.');
+    throw ApiError.forbidden('Super admin must enable 2FA before logging in. Use the recovery endpoint or the seed bootstrap to configure it.');
   }
 
   return admin;
@@ -51,6 +53,26 @@ export async function createSiteAdmin({ name, email, password, role }) {
   const admin = new SiteAdmin({ name, email, password, role: role || 'support' });
   await admin.save();
   return admin;
+}
+
+export async function recoverSiteAdmin(email, recoveryKey) {
+  const expected = process.env.SITE_RECOVERY_KEY;
+  if (!expected) {
+    throw ApiError.forbidden('Recovery is not configured on this server');
+  }
+
+  const providedHash = crypto.createHash('sha256').update(String(recoveryKey || '')).digest();
+  const expectedHash = crypto.createHash('sha256').update(expected).digest();
+  if (providedHash.length !== expectedHash.length || !crypto.timingSafeEqual(providedHash, expectedHash)) {
+    throw ApiError.unauthorized('Invalid recovery key');
+  }
+
+  const admin = await SiteAdmin.findOne({ email: email.toLowerCase() });
+  if (!admin || !admin.isActive) throw ApiError.unauthorized('Admin not found or disabled');
+  if (admin.role !== 'super_admin') throw ApiError.forbidden('Recovery is only available for super admins');
+
+  const result = await bootstrap2fa(admin);
+  return { admin, ...result };
 }
 
 const SAFE_ADMIN_FIELDS = '-password -twoFactorSecret -twoFactorBackupCodes';

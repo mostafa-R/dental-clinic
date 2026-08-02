@@ -1,12 +1,17 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { siteLogin, getSiteMe, siteLogout, siteRefresh, createSiteAdmin } from './siteAuth.controller.js';
+import { siteLogin, getSiteMe, siteLogout, siteRefresh, createSiteAdmin, recoverSiteAdmin } from './siteAuth.controller.js';
 import { protectSite, authorizeSite } from '../../../middleware/siteAuth.js';
 import { validate } from '../../../middleware/validate.js';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(1, 'Password is required'),
+});
+
+const recoverySchema = z.object({
+  email: z.string().email('Invalid email address'),
+  recoveryKey: z.string().min(1, 'Recovery key is required'),
 });
 
 const createAdminSchema = z.object({
@@ -20,6 +25,7 @@ const router = Router();
 
 // Public routes
 router.post('/login', validate(loginSchema), siteLogin);
+router.post('/recover', validate(recoverySchema), recoverSiteAdmin);
 
 // Protected routes
 router.get('/me', protectSite, getSiteMe);

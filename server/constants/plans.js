@@ -27,6 +27,7 @@ export const DEFAULT_PLAN_MODULES = {
     'prescriptions',
     'users',
     'branches',
+    'chat',
   ],
   enterprise: [
     'dashboard',
@@ -41,6 +42,7 @@ export const DEFAULT_PLAN_MODULES = {
     'inventory',
     'roles',
     'settings',
+    'chat',
   ],
 };
 

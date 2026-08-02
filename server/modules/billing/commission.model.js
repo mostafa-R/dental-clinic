@@ -91,7 +91,7 @@ const commissionSchema = new mongoose.Schema(
 
 commissionSchema.pre('validate', async function assignCommissionNo() {
   if (!this.commissionNo) {
-    const nextSeq = await Counter.next('commission', this.tenant);
+    const nextSeq = await Counter.next('commission', this.tenant, this.$session?.());
     this.commissionNo = `COM-${String(nextSeq).padStart(5, '0')}`;
   }
   this.amount = round2((Number(this.baseAmount) || 0) * (Number(this.rate) || 0) / 100);

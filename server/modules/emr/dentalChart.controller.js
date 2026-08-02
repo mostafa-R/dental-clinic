@@ -78,7 +78,7 @@ export const updateDentalChart = asyncHandler(async (req, res) => {
   await chart.save();
   emitChart(patient.branch, chart);
 
-  return sendSuccess(res, { chart });
+  return sendSuccess(res, { chart: req.isImpersonation ? stripPHI(chart.toJSON()) : chart });
 });
 
 /**
@@ -115,5 +115,5 @@ export const updateTooth = asyncHandler(async (req, res) => {
   await chart.save();
   emitChart(patient.branch, chart);
 
-  return sendSuccess(res, { chart });
+  return sendSuccess(res, { chart: req.isImpersonation ? stripPHI(chart.toJSON()) : chart });
 });

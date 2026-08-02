@@ -242,7 +242,12 @@ export const updateUser = asyncHandler(async (req, res) => {
   if (data.isActive !== undefined) user.isActive = data.isActive;
   if (data.isDoctor !== undefined) user.isDoctor = data.isDoctor;
   if (data.commissionRate !== undefined) user.commissionRate = data.commissionRate;
-  if (data.password) user.password = data.password;
+  if (data.password) {
+    user.password = data.password;
+    // Revoke every existing session (access + refresh + socket tokens all carry
+    // tokenVersion) so old sessions die once the password changes.
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+  }
 
   await user.save();
   await user.populate(POPULATE);

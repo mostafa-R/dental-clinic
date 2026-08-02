@@ -13,7 +13,9 @@ import { httpLogger } from "./middleware/httpLogger.js";
 import { logError } from "./middleware/logError.js";
 import { requestId } from "./middleware/requestId.js";
 import { userRateLimit } from "./middleware/userRateLimit.js";
-import { sanitizeBody } from "./utils/sanitize.js";
+import { csrfProtection } from "./middleware/csrf.js";
+import { maintenance } from "./middleware/maintenance.js";
+import { ipAllowlist } from "./middleware/ipAllowlist.js";
 import apiRouter from "./routes/routes.js";
 import { perfMiddleware } from "./utils/perfMonitor.js";
 import { setupSwagger } from "./swagger.js";
@@ -79,7 +81,7 @@ app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
-app.use(sanitizeBody);
+app.use(csrfProtection(allowedOrigins));
 
 setupSwagger(app);
 
@@ -113,7 +115,7 @@ const generalLimiter = rateLimit({
   message: { success: false, message: "Too many requests, please slow down" },
 });
 
-app.use("/api", requestId, generalLimiter, perfMiddleware, abuseMonitor, userRateLimit({ windowMs: 60000, max: 200 }), apiRouter);
+app.use("/api", requestId, generalLimiter, perfMiddleware, abuseMonitor, userRateLimit({ windowMs: 60000, max: 200 }), maintenance, ipAllowlist, apiRouter);
 
 app.use(logError);
 app.use(notFound);

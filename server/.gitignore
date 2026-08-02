@@ -27,6 +27,10 @@ dist-ssr
 node_modules/
 .env
 
+# WhatsApp web session cache + per-tenant Chrome profiles
+.wwebjs_cache/
+.wwebjs_chrome/
+
 # Backup archives — sensitive clinic data
 backups/
 

@@ -71,3 +71,16 @@ export const createSiteAdmin = asyncHandler(async (req, res) => {
   const admin = await siteAuthService.createSiteAdmin({ name, email, password, role });
   return sendSuccess(res, { admin: admin.toSafeObject() }, 201);
 });
+
+export const recoverSiteAdmin = asyncHandler(async (req, res) => {
+  const { email, recoveryKey } = req.validatedBody;
+  const { admin, secret, otpauth, backupCodes } = await siteAuthService.recoverSiteAdmin(email, recoveryKey);
+  setAuthCookies(res, admin, 'site');
+  return sendSuccess(res, {
+    user: admin.toSafeObject(),
+    requires2faSetup: true,
+    secret,
+    otpauth,
+    backupCodes,
+  });
+});

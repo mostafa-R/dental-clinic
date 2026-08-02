@@ -21,8 +21,8 @@ const router = Router();
 
 router.get('/', protect, checkPermission('patients', 'read'), phiRestrict, validate(listPatientsQuerySchema, 'query'), listPatients);
 router.get('/:id', protect, checkPermission('patients', 'read'), phiRestrict, getPatient);
-router.post('/', protect, checkPermission('patients', 'create'), validate(createPatientSchema), createPatient);
-router.patch('/:id', protect, checkPermission('patients', 'update'), validate(updatePatientSchema), updatePatient);
-router.delete('/:id', protect, checkPermission('patients', 'delete'), archivePatient);
+router.post('/', protect, checkPermission('patients', 'create'), phiRestrict, validate(createPatientSchema), createPatient);
+router.patch('/:id', protect, checkPermission('patients', 'update'), phiRestrict, validate(updatePatientSchema), updatePatient);
+router.delete('/:id', protect, checkPermission('patients', 'delete'), phiRestrict, archivePatient);
 
 export default router;

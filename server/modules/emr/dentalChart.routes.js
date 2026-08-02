@@ -14,7 +14,7 @@ import { updateDentalChartSchema, updateToothSchema } from './emr.validator.js';
 const router = Router({ mergeParams: true });
 
 router.get('/', protect, checkPermission('emr', 'read'), phiRestrict, getDentalChart);
-router.patch('/', protect, checkPermission('emr', 'update'), validate(updateDentalChartSchema), updateDentalChart);
-router.patch('/teeth/:number', protect, checkPermission('emr', 'update'), validate(updateToothSchema), updateTooth);
+router.patch('/', protect, checkPermission('emr', 'update'), phiRestrict, validate(updateDentalChartSchema), updateDentalChart);
+router.patch('/teeth/:number', protect, checkPermission('emr', 'update'), phiRestrict, validate(updateToothSchema), updateTooth);
 
 export default router;

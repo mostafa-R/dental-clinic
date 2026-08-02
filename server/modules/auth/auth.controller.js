@@ -5,6 +5,7 @@ import {
   ACCESS_COOKIE,
   REFRESH_COOKIE,
   clearAuthCookies,
+  cookieOptions,
   setAuthCookies,
   verifyAccessToken,
   verifyRefreshToken,
@@ -124,6 +125,12 @@ export const verifyImpersonation = asyncHandler(async (req, res) => {
   if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== user.tokenVersion) {
     throw ApiError.unauthorized('Token revoked — please request a new impersonation token');
   }
+
+  // Establish the impersonation session by reusing the signed impersonation token as
+  // the access cookie. Downstream clinic calls then authenticate through `protect`,
+  // which marks the request `_impersonating` so `phiRestrict` can mask patient PHI.
+  const maxAge = Math.max(0, (decoded.exp ?? 0) * 1000 - Date.now());
+  res.cookie(ACCESS_COOKIE, token, { ...cookieOptions, maxAge });
 
   const safe = user.toSafeObject();
   return sendSuccess(res, {

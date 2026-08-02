@@ -1,11 +1,12 @@
 import Tenant from '../tenant/tenant.model.js';
 import ApiError from '../../../utils/ApiError.js';
-import { cacheGet, cacheSet, cacheDel } from '../../../utils/cache.js';
+import { cacheGet, cacheSet, cacheDel, invalidateTenant } from '../../../utils/cache.js';
 
 const AVAILABLE_MODULES = [
   'dashboard', 'patients', 'appointments', 'billing',
   'accounting', 'emr', 'prescriptions', 'users',
   'branches', 'inventory', 'roles', 'settings',
+  'chat', 'search',
 ];
 
 export async function getTenantModules(tenantId) {
@@ -42,6 +43,7 @@ export async function toggleModule(tenantId, { module, enabled }) {
 
   await tenant.save();
   await cacheDel('modules', tenantId);
+  await invalidateTenant(String(tenantId));
 
   return { tenantId: tenant._id, enabledModules: tenant.planModules, tenantName: tenant.name };
 }
@@ -58,6 +60,7 @@ export async function setModules(tenantId, { modules }) {
   tenant.planModules = modules;
   await tenant.save();
   await cacheDel('modules', tenantId);
+  await invalidateTenant(String(tenantId));
 
   return { tenantId: tenant._id, enabledModules: tenant.planModules, tenantName: tenant.name };
 }

@@ -120,6 +120,20 @@ appointmentSchema.index({ branch: 1, start: 1 });
 appointmentSchema.index({ doctor: 1, start: 1 });
 appointmentSchema.index({ branch: 1, status: 1, start: 1 });
 
+// Double-booking guard: a doctor cannot hold two live appointments at the same
+// start time. The partial filter keeps cancelled/completed/no-show records out
+// of the constraint so the same slot can be reused later.
+appointmentSchema.index(
+  { branch: 1, doctor: 1, start: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      start: { $type: "date" },
+      status: { $in: ["scheduled", "confirmed", "checked_in", "in_progress"] },
+    },
+  },
+);
+
 const Appointment = mongoose.model("Appointment", appointmentSchema);
 
 export default Appointment;

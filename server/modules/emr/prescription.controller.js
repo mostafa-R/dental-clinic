@@ -91,7 +91,7 @@ export const createPrescription = asyncHandler(async (req, res) => {
   await rx.populate(POPULATE);
   emitRx(patient.branch, 'prescription:created', rx);
 
-  return sendSuccess(res, { prescription: rx }, 201);
+  return sendSuccess(res, { prescription: req.isImpersonation ? stripPHI(rx.toJSON()) : rx }, 201);
 });
 
 export const updatePrescription = asyncHandler(async (req, res) => {
@@ -110,7 +110,7 @@ export const updatePrescription = asyncHandler(async (req, res) => {
   await rx.populate(POPULATE);
   emitRx(patient.branch, 'prescription:updated', rx);
 
-  return sendSuccess(res, { prescription: rx });
+  return sendSuccess(res, { prescription: req.isImpersonation ? stripPHI(rx.toJSON()) : rx });
 });
 
 export const deletePrescription = asyncHandler(async (req, res) => {

@@ -114,7 +114,7 @@ export const createClinicalNote = asyncHandler(async (req, res) => {
   await note.populate(POPULATE);
   emitNote(patient.branch, 'clinical-note:created', note);
 
-  return sendSuccess(res, { note }, 201);
+  return sendSuccess(res, { note: req.isImpersonation ? stripPHI(note.toJSON()) : note }, 201);
 });
 
 export const updateClinicalNote = asyncHandler(async (req, res) => {
@@ -160,7 +160,7 @@ export const updateClinicalNote = asyncHandler(async (req, res) => {
   await note.populate(POPULATE);
   emitNote(patient.branch, 'clinical-note:updated', note);
 
-  return sendSuccess(res, { note });
+  return sendSuccess(res, { note: req.isImpersonation ? stripPHI(note.toJSON()) : note });
 });
 
 export const deleteClinicalNote = asyncHandler(async (req, res) => {

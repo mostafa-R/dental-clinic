@@ -6,6 +6,14 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, "..", ".env") });
 
+function print2faBootstrap(admin, result) {
+  console.log(`2FA enabled for ${admin.email}`);
+  console.log(`  TOTP secret: ${result.secret}`);
+  console.log(`  Authenticator URI: ${result.otpauth}`);
+  console.log("  Recovery codes (each usable once, store them safely):");
+  result.backupCodes.forEach((code, i) => console.log(`    ${i + 1}. ${code}`));
+}
+
 async function seed() {
   const uri = process.env.MONGO_URI;
   if (!uri) {
@@ -24,14 +32,22 @@ async function seed() {
   await mongoose.connect(uri);
   console.log("Connected to MongoDB");
 
-  // Import the actual SiteAdmin model
   const { default: SiteAdmin } = await import("../modules/site/admin/admin.model.js");
+  const { bootstrap2fa } = await import("../modules/site/auth/site2fa.service.js");
 
   const existing = await SiteAdmin.findOne({ email: email.toLowerCase() });
+
   if (existing) {
     console.log(`Site admin already exists: ${existing.email}`);
+    if (existing.role === "super_admin" && !existing.twoFactorEnabled && process.env.SEED_BOOTSTRAP_2FA === "true") {
+      const result = await bootstrap2fa(existing);
+      print2faBootstrap(existing, result);
+      console.warn("WARNING: 2FA was re-bootstrapped for the existing admin. Previous codes are no longer valid.");
+    } else if (existing.role === "super_admin" && !existing.twoFactorEnabled) {
+      console.warn("WARNING: super admin has 2FA disabled and cannot log in. Re-run with SEED_BOOTSTRAP_2FA=true or use the recovery endpoint.");
+    }
   } else {
-    await SiteAdmin.create({
+    const admin = await SiteAdmin.create({
       name: "Site Admin",
       email,
       password,
@@ -39,6 +55,9 @@ async function seed() {
       isActive: true,
     });
     console.log(`Created site admin: ${email}`);
+
+    const result = await bootstrap2fa(admin);
+    print2faBootstrap(admin, result);
   }
 
   await mongoose.disconnect();

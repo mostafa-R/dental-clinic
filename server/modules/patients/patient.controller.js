@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 import Patient from './patient.model.js';
 import Tenant from '../site/tenant/tenant.model.js';
+import Counter from '../../core/counters.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { currentTenant, filterByBranch, resolveBranchForCreate, toObjectId } from '../../utils/branchScope.js';
@@ -89,23 +90,52 @@ export const createPatient = asyncHandler(async (req, res) => {
   const payload = normalizePayload(req.validatedBody);
   delete payload.branch;
 
-  // Plan limit: enforce maxPatients
+  // Plan limit: enforce maxPatients. The slot is claimed with an atomic
+  // per-tenant $inc so two concurrent creates can never both pass a naive
+  // count-then-create check and push the clinic over its limit. The claim is
+  // rolled back when the create fails or the cap is already exhausted.
+  let releaseSlot = null;
   if (tenant) {
     const tenantDoc = await Tenant.findById(tenant).select('settings');
-    const patientCount = await Patient.countDocuments({ tenant });
     const maxPatients = tenantDoc?.settings?.maxPatients ?? 999999;
-    if (patientCount >= maxPatients) {
+
+    const slotDoc = await Counter.findOneAndUpdate(
+      { _id: `patient_slots:${String(tenant)}` },
+      { $inc: { seq: 1 } },
+      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
+    );
+    const used = slotDoc?.seq ?? 1;
+    if (used > maxPatients) {
+      await Counter.updateOne(
+        { _id: `patient_slots:${String(tenant)}`, seq: { $gt: 0 } },
+        { $inc: { seq: -1 } },
+      );
       throw ApiError.conflict(
         `Your plan allows a maximum of ${maxPatients} patients. Upgrade your plan to add more.`,
       );
     }
+    releaseSlot = () =>
+      Counter.updateOne(
+        { _id: `patient_slots:${String(tenant)}`, seq: { $gt: 0 } },
+        { $inc: { seq: -1 } },
+      );
   }
 
-  const patient = await Patient.create({ ...payload, branch, tenant });
-  await patient.populate('branch', 'name');
+  try {
+    const patient = await Patient.create({ ...payload, branch, tenant });
+    await patient.populate('branch', 'name');
 
-  emitToBranch(String(branch), 'patient:created', { patient });
-  return sendSuccess(res, { patient }, 201);
+    emitToBranch(String(branch), 'patient:created', { patient });
+    return sendSuccess(
+      res,
+      { patient: req.isImpersonation ? stripPHI(patient.toJSON()) : patient },
+      201,
+    );
+  } catch (err) {
+    // Release the claimed slot — nothing was persisted.
+    if (releaseSlot) await releaseSlot();
+    throw err;
+  }
 });
 
 export const updatePatient = asyncHandler(async (req, res) => {
@@ -136,7 +166,7 @@ export const updatePatient = asyncHandler(async (req, res) => {
   }
 
   emitToBranch(String(patient.branch?._id ?? patient.branch), 'patient:updated', { patient });
-  return sendSuccess(res, { patient });
+  return sendSuccess(res, { patient: req.isImpersonation ? stripPHI(patient.toJSON()) : patient });
 });
 
 export const archivePatient = asyncHandler(async (req, res) => {

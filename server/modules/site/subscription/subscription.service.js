@@ -1,9 +1,10 @@
 import ApiError from '../../../utils/ApiError.js';
+import { cacheDel, invalidateTenant } from '../../../utils/cache.js';
 import Plan from '../../platform/plan.model.js';
 import Subscription from '../tenant/subscription.model.js';
 import Tenant from '../tenant/tenant.model.js';
 
-async function getPlanPrice(planKey, billingCycle) {
+export async function getPlanPrice(planKey, billingCycle) {
   const planDoc = await Plan.findOne({ key: planKey, isActive: true }).lean();
   const price = planDoc?.price ?? 99;
 
@@ -103,9 +104,9 @@ export async function updateSubscription(id, { plan, billingCycle, status }) {
   if (!subscription) throw ApiError.notFound('Subscription not found');
 
   if (plan) subscription.plan = plan;
-  if (billingCycle) {
-    subscription.billingCycle = billingCycle;
-    subscription.amount = await getPlanPrice(plan || subscription.plan, billingCycle);
+  if (billingCycle) subscription.billingCycle = billingCycle;
+  if (plan || billingCycle) {
+    subscription.amount = await getPlanPrice(subscription.plan, subscription.billingCycle);
   }
   if (status) subscription.status = status;
 
@@ -117,6 +118,10 @@ export async function updateSubscription(id, { plan, billingCycle, status }) {
     if (tenant) {
       tenant.updatePlanSettings(planDoc);
       await tenant.save();
+      // The cached tenant config (protect middleware) and module flag are
+      // stale after a plan reassignment — drop both.
+      await invalidateTenant(String(tenant._id));
+      await cacheDel('modules', String(tenant._id));
     }
   }
 

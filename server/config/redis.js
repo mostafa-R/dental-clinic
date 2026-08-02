@@ -19,7 +19,12 @@ export function getRedis() {
     });
 
     redis.on('connect', () => { isConnected = true; });
-    redis.on('close', () => { isConnected = false; });
+    redis.on('close', () => {
+      if (isConnected) {
+        console.warn('[Redis] Connection lost — caching, distributed rate limits, and abuse detection are degraded. Health: /api/site/health reports connected=false.');
+      }
+      isConnected = false;
+    });
     redis.on('error', (err) => { console.warn('[Redis]', err.message); });
   }
   return redis;
@@ -32,8 +37,11 @@ export async function connectRedis() {
     isConnected = true;
     console.log('Redis connected');
   } catch (err) {
-    console.warn('Redis not available — running without cache:', err.message);
     isConnected = false;
+    const severity = process.env.NODE_ENV === 'production' ? 'ERROR' : 'WARN';
+    console[severity === 'ERROR' ? 'error' : 'warn'](
+      `[Redis] ${severity}: Redis unavailable (${err.message}). Caching, distributed rate limits, and abuse detection are DISABLED — running on in-memory fallback. Check REDIS_URL=${REDIS_URL}`,
+    );
   }
 }
 

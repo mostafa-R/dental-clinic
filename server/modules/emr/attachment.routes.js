@@ -1,9 +1,8 @@
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Router } from 'express';
 import { protect } from '../../middleware/auth.js';
 import { checkPermission } from '../../middleware/checkPermission.js';
-import { uploadMedicalFile } from '../../middleware/upload.js';
+import { uploadMedicalFile, UPLOADS_ROOT } from '../../middleware/upload.js';
 import { encryptFile, decryptFile, isEncrypted } from '../../utils/encryption.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
@@ -12,8 +11,6 @@ import { unlink, access, readFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import crypto from 'node:crypto';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const UPLOADS_DIR = path.join(__dirname, '..', 'uploads', 'medical');
 const ENCRYPTED_SUFFIX = '.enc';
 
 const router = Router();
@@ -62,9 +59,9 @@ router.get(
   asyncHandler(async (req, res) => {
     const { filename } = req.params;
     const safeName = path.basename(filename);
-    const encryptedPath = path.join(UPLOADS_DIR, safeName + ENCRYPTED_SUFFIX);
-    const plainPath = path.join(UPLOADS_DIR, safeName);
-    const tmpPath = path.join(UPLOADS_DIR, `.tmp_${crypto.randomUUID()}_${safeName}`);
+    const encryptedPath = path.join(UPLOADS_ROOT, safeName + ENCRYPTED_SUFFIX);
+    const plainPath = path.join(UPLOADS_ROOT, safeName);
+    const tmpPath = path.join(UPLOADS_ROOT, `.tmp_${crypto.randomUUID()}_${safeName}`);
 
     let fileExists = false;
     try {

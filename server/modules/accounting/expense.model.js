@@ -69,7 +69,7 @@ const expenseSchema = new mongoose.Schema(
 
 expenseSchema.pre('validate', async function assignExpenseNo() {
   if (!this.expenseNo) {
-    const nextSeq = await Counter.next('expense', this.tenant);
+    const nextSeq = await Counter.next('expense', this.tenant, this.$session?.());
     this.expenseNo = `EXP-${String(nextSeq).padStart(5, '0')}`;
   }
 });

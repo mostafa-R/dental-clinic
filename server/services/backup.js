@@ -86,10 +86,14 @@ export async function performBackup(type = "scheduled", triggeredBy = null) {
     
     await runMongodump(mongodumpBin, uri, archivePath);
 
-    // Encrypt the backup if BACKUP_ENCRYPTION_KEY is set
-    const encryptionEnabled = process.env.BACKUP_ENCRYPTION_KEY || process.env.BACKUP_ENCRYPT === 'true';
+    // Encrypt the backup if BACKUP_ENCRYPT=true (or a key is configured).
+    // Explicitly required: never silently save an unencrypted backup when encryption is requested.
+    const encryptionEnabled = process.env.BACKUP_ENCRYPT === 'true' || process.env.BACKUP_ENCRYPTION_KEY;
 
     if (encryptionEnabled) {
+      if (!process.env.BACKUP_ENCRYPTION_KEY) {
+        throw new Error('BACKUP_ENCRYPT=true but BACKUP_ENCRYPTION_KEY is not set in .env');
+      }
       try {
         const encryptedPath = archivePath + '.enc';
         await encryptFile(archivePath, encryptedPath);
@@ -98,7 +102,8 @@ export async function performBackup(type = "scheduled", triggeredBy = null) {
         encrypted = true;
         console.log('[Backup] Backup encrypted successfully');
       } catch (encErr) {
-        console.error('[Backup] Encryption failed, saving unencrypted:', encErr.message);
+        console.error('[Backup] Encryption failed:', encErr.message);
+        throw encErr;
       }
     }
 

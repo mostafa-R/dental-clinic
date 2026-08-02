@@ -1,16 +1,30 @@
 import crypto from 'crypto';
 import ApiError from '../../../utils/ApiError.js';
 import { cacheDelPattern, invalidateTenant, invalidateTenantRoles } from '../../../utils/cache.js';
+import { withTransaction } from '../../../core/transaction.js';
+import Counter from '../../../core/counters.js';
+import OwnerDrawing from '../../accounting/ownerDrawing.model.js';
+import Expense from '../../accounting/expense.model.js';
 import Appointment from '../../appointments/appointment.model.js';
 import Invoice from '../../billing/invoice.model.js';
+import Commission from '../../billing/commission.model.js';
+import Message from '../../chat/message.model.js';
+import ChannelRead from '../../chat/channelRead.model.js';
 import ClinicalNote from '../../emr/clinicalNote.model.js';
 import DentalChart from '../../emr/dentalChart.model.js';
+import Prescription from '../../emr/prescription.model.js';
+import TreatmentPlan from '../../emr/treatmentPlan.model.js';
+import Inventory from '../../inventory/inventory.model.js';
 import Patient from '../../patients/patient.model.js';
+import Installment from '../../patients/installment.model.js';
+import Wallet from '../../patients/wallet.model.js';
 import Plan from '../../platform/plan.model.js';
 import PlatformSetting from '../../platform/platformSetting.model.js';
+import ErrorLog from '../../site/errorLog/errorLog.model.js';
 import Branch from '../../users/branch.model.js';
 import Role from '../../users/role.model.js';
 import User from '../../users/user.model.js';
+import WhatsappSetting from '../../whatsapp/whatsappSetting.model.js';
 import Subscription from './subscription.model.js';
 import Tenant from './tenant.model.js';
 
@@ -276,17 +290,35 @@ export async function deleteTenant(id) {
   const tenant = await Tenant.findById(id);
   if (!tenant) throw ApiError.notFound('Tenant not found');
 
-  await Promise.all([
-    User.deleteMany({ tenant: id }),
-    Branch.deleteMany({ tenant: id }),
-    Patient.deleteMany({ tenant: id }),
-    Appointment.deleteMany({ tenant: id }),
-    Invoice.deleteMany({ tenant: id }),
-    Subscription.deleteMany({ tenant: id }),
-    ClinicalNote.deleteMany({ tenant: id }),
-    DentalChart.deleteMany({ tenant: id }),
-    Tenant.findByIdAndDelete(id),
-  ]);
+  // All tenant-scoped collections are wiped in a single MongoDB transaction so a
+  // mid-delete failure rolls back everything and never leaves orphaned PHI.
+  await withTransaction(async (session) => {
+    await Promise.all([
+      User.deleteMany({ tenant: id }, { session }),
+      Branch.deleteMany({ tenant: id }, { session }),
+      Role.deleteMany({ tenant: id }, { session }),
+      Patient.deleteMany({ tenant: id }, { session }),
+      Appointment.deleteMany({ tenant: id }, { session }),
+      Invoice.deleteMany({ tenant: id }, { session }),
+      Subscription.deleteMany({ tenant: id }, { session }),
+      ClinicalNote.deleteMany({ tenant: id }, { session }),
+      DentalChart.deleteMany({ tenant: id }, { session }),
+      TreatmentPlan.deleteMany({ tenant: id }, { session }),
+      Prescription.deleteMany({ tenant: id }, { session }),
+      Wallet.deleteMany({ tenant: id }, { session }),
+      Installment.deleteMany({ tenant: id }, { session }),
+      Message.deleteMany({ tenant: id }, { session }),
+      ChannelRead.deleteMany({ tenant: id }, { session }),
+      Inventory.deleteMany({ tenant: id }, { session }),
+      Commission.deleteMany({ tenant: id }, { session }),
+      OwnerDrawing.deleteMany({ tenant: id }, { session }),
+      Expense.deleteMany({ tenant: id }, { session }),
+      ErrorLog.deleteMany({ tenant: id }, { session }),
+      WhatsappSetting.deleteMany({ tenant: id }, { session }),
+      Counter.deleteMany({ _id: new RegExp(`:${String(id)}$`) }, { session }),
+      Tenant.findByIdAndDelete(id, { session }),
+    ]);
+  });
 
   // Invalidate all cached data for this tenant
   await invalidateTenant(String(id));

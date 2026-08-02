@@ -20,9 +20,9 @@ import {
 const router = Router({ mergeParams: true });
 
 router.get('/', protect, checkPermission('emr', 'read'), phiRestrict, validate(listEmrQuerySchema, 'query'), listClinicalNotes);
-router.post('/', protect, checkPermission('emr', 'create'), validate(createClinicalNoteSchema), createClinicalNote);
+router.post('/', protect, checkPermission('emr', 'create'), phiRestrict, validate(createClinicalNoteSchema), createClinicalNote);
 router.get('/:noteId', protect, checkPermission('emr', 'read'), phiRestrict, getClinicalNote);
-router.patch('/:noteId', protect, checkPermission('emr', 'update'), validate(updateClinicalNoteSchema), updateClinicalNote);
-router.delete('/:noteId', protect, checkPermission('emr', 'delete'), deleteClinicalNote);
+router.patch('/:noteId', protect, checkPermission('emr', 'update'), phiRestrict, validate(updateClinicalNoteSchema), updateClinicalNote);
+router.delete('/:noteId', protect, checkPermission('emr', 'delete'), phiRestrict, deleteClinicalNote);
 
 export default router;

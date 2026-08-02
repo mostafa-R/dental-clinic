@@ -392,7 +392,10 @@ export const getAccountingSummary = asyncHandler(async (req, res) => {
   const totalExpenses = round2(expenses);
   const totalDrawings = round2(drawings);
   const pendingCommissions = round2(commissions.pending?.total || 0);
-  const netProfit = round2(totalRevenue - totalExpenses - totalDrawings - pendingCommissions);
+  const paidCommissions = round2(commissions.paid?.total || 0);
+  // Paid commissions are money already paid out to doctors — they must reduce
+  // net profit too, otherwise profit is overstated once a commission is marked paid.
+  const netProfit = round2(totalRevenue - totalExpenses - totalDrawings - pendingCommissions - paidCommissions);
 
   return sendSuccess(res, {
     summary: {
@@ -401,7 +404,7 @@ export const getAccountingSummary = asyncHandler(async (req, res) => {
       totalExpenses,
       totalDrawings,
       pendingCommissions,
-      paidCommissions: round2(commissions.paid?.total || 0),
+      paidCommissions,
       netProfit,
     },
     expenseByCategory: expenseByCategory.map((c) => ({

@@ -22,7 +22,17 @@ const invoiceItemSchema = new mongoose.Schema(
 
 const paymentSchema = new mongoose.Schema(
   {
-    amount: { type: Number, required: true, min: 0.01 },
+    amount: {
+      type: Number,
+      required: true,
+      validate: {
+        validator(value) {
+          if (this.isRefund) return value < 0 && Math.abs(value) >= 0.01;
+          return value >= 0.01;
+        },
+        message: 'Amount must be greater than 0',
+      },
+    },
     method: { type: String, enum: PAYMENT_METHODS, required: true },
     reference: { type: String, trim: true, default: "" },
     idempotencyKey: { type: String, trim: true, default: null, index: true },
@@ -184,7 +194,7 @@ function computeTotals(doc) {
 
 invoiceSchema.pre("validate", async function assignInvoiceNo() {
   if (!this.invoiceNo) {
-    const nextSeq = await Counter.next("invoice", this.tenant);
+    const nextSeq = await Counter.next('invoice', this.tenant, this.$session?.());
     this.invoiceNo = `INV-${String(nextSeq).padStart(5, "0")}`;
   }
   const financialFields = ['items', 'discount', 'discountType', 'discountRate', 'tax', 'taxRate', 'payments'];

@@ -20,9 +20,9 @@ import {
 const router = Router({ mergeParams: true });
 
 router.get('/', protect, checkPermission('prescriptions', 'read'), phiRestrict, validate(listEmrQuerySchema, 'query'), listPrescriptions);
-router.post('/', protect, checkPermission('prescriptions', 'create'), validate(createPrescriptionSchema), createPrescription);
+router.post('/', protect, checkPermission('prescriptions', 'create'), phiRestrict, validate(createPrescriptionSchema), createPrescription);
 router.get('/:rxId', protect, checkPermission('prescriptions', 'read'), phiRestrict, getPrescription);
-router.patch('/:rxId', protect, checkPermission('prescriptions', 'update'), validate(updatePrescriptionSchema), updatePrescription);
-router.delete('/:rxId', protect, checkPermission('prescriptions', 'delete'), deletePrescription);
+router.patch('/:rxId', protect, checkPermission('prescriptions', 'update'), phiRestrict, validate(updatePrescriptionSchema), updatePrescription);
+router.delete('/:rxId', protect, checkPermission('prescriptions', 'delete'), phiRestrict, deletePrescription);
 
 export default router;

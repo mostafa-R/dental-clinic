@@ -73,7 +73,7 @@ const ownerDrawingSchema = new mongoose.Schema(
 
 ownerDrawingSchema.pre('validate', async function assignDrawingNo() {
   if (!this.drawingNo) {
-    const nextSeq = await Counter.next('owner_drawing', this.tenant);
+    const nextSeq = await Counter.next('owner_drawing', this.tenant, this.$session?.());
     this.drawingNo = `DRW-${String(nextSeq).padStart(5, '0')}`;
   }
 });
