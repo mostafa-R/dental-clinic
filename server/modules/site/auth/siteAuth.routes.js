@@ -1,17 +1,23 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { siteLogin, getSiteMe, siteLogout, siteRefresh, createSiteAdmin, recoverSiteAdmin } from './siteAuth.controller.js';
-import { protectSite, authorizeSite } from '../../../middleware/siteAuth.js';
+import { authorizeSite, protectSite } from '../../../middleware/siteAuth.js';
 import { validate } from '../../../middleware/validate.js';
+import { createSiteAdmin, getSiteMe, initiateRecovery, siteLogin, siteLogout, siteRefresh, verifyRecoveryOtp } from './siteAuth.controller.js';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
-  password: z.string().min(1, 'Password is required'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
-const recoverySchema = z.object({
+const recoveryInitSchema = z.object({
   email: z.string().email('Invalid email address'),
   recoveryKey: z.string().min(1, 'Recovery key is required'),
+});
+
+const recoveryVerifySchema = z.object({
+  email: z.string().email('Invalid email address'),
+  otp: z.string().length(6, 'OTP must be 6 digits'),
+  recoveryToken: z.string().min(1, 'Recovery token is required'),
 });
 
 const createAdminSchema = z.object({
@@ -25,7 +31,9 @@ const router = Router();
 
 // Public routes
 router.post('/login', validate(loginSchema), siteLogin);
-router.post('/recover', validate(recoverySchema), recoverSiteAdmin);
+// Recovery is now a two-step process: initiate -> verify OTP
+router.post('/recover/initiate', validate(recoveryInitSchema), initiateRecovery);
+router.post('/recover/verify', validate(recoveryVerifySchema), verifyRecoveryOtp);
 
 // Protected routes
 router.get('/me', protectSite, getSiteMe);

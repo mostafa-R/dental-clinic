@@ -9,7 +9,10 @@ export const getUsersByTenant = asyncHandler(async (req, res) => {
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
   const skip = (pageNum - 1) * limitNum;
 
+  // Tenant is already validated by requireTenantAccess middleware
+  // and available as req.targetTenant
   const filter = { tenant: tenantId, isActive: true };
+
   const [users, total] = await Promise.all([
     User.find(filter)
       .select('name email role branch isActive')

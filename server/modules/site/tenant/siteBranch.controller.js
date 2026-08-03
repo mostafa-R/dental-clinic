@@ -4,7 +4,6 @@ import { escapeRegex } from "../../../utils/escapeRegex.js";
 import { sendSuccess } from "../../../utils/sendSuccess.js";
 import Branch from "../../users/branch.model.js";
 import User from "../../users/user.model.js";
-import Tenant from "./tenant.model.js";
 
 // Get all branches with pagination and filtering
 export const getBranches = asyncHandler(async (req, res) => {
@@ -59,43 +58,37 @@ export const getBranches = asyncHandler(async (req, res) => {
   });
 });
 
-// Get single branch by ID
+// Get single branch by ID - branch already validated by requireBranchAccess
 export const getBranch = asyncHandler(async (req, res) => {
-  const { id } = req.params;
+  // Branch is already loaded by requireBranchAccess middleware
+  const branch = req.targetBranch;
 
-  const branch = await Branch.findById(id)
+  // Get full branch details with tenant populated
+  const fullBranch = await Branch.findById(branch._id)
     .populate("tenant", "name email slug")
     .lean();
-  if (!branch) {
-    throw ApiError.notFound("Branch not found");
-  }
 
   const usersCount = await User.countDocuments({ branch: branch._id });
 
   return sendSuccess(res, {
-    ...branch,
+    ...fullBranch,
     usersCount,
   });
 });
 
-// Create branch for a tenant
+// Create branch for a tenant - tenant already validated by requireTenantAccess
 export const createBranch = asyncHandler(async (req, res) => {
   const { tenant: tenantId, name, address, phone } = req.validatedBody;
 
-  const tenant = await Tenant.findById(tenantId);
-  if (!tenant) {
-    throw ApiError.notFound("Tenant not found");
-  }
-
-  if (!tenant.isActive || tenant.status === "suspended" || tenant.status === "archived") {
-    throw ApiError.badRequest("Cannot create branch for an inactive tenant");
-  }
+  // Tenant is already validated by requireTenantAccess middleware
+  const tenant = req.targetTenant;
 
   // Check branch limit
   const branchCount = await Branch.countDocuments({ tenant: tenantId });
-  if (branchCount >= tenant.settings.maxBranches) {
+  if (branchCount >= tenant.settings?.maxBranches || branchCount >= 10) {
+    const maxBranches = tenant.settings?.maxBranches || 10;
     throw ApiError.badRequest(
-      `Branch limit reached (${tenant.settings.maxBranches}). Upgrade the plan to add more branches.`,
+      `Branch limit reached (${maxBranches}). Upgrade the plan to add more branches.`,
     );
   }
 
@@ -108,15 +101,12 @@ export const createBranch = asyncHandler(async (req, res) => {
   return sendSuccess(res, populated, 201);
 });
 
-// Update branch
+// Update branch - branch already validated by requireBranchAccess
 export const updateBranch = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { name, address, phone, isActive } = req.validatedBody;
+  // Branch is already loaded by requireBranchAccess middleware
+  const branch = await Branch.findById(req.targetBranch._id);
 
-  const branch = await Branch.findById(id);
-  if (!branch) {
-    throw ApiError.notFound("Branch not found");
-  }
+  const { name, address, phone, isActive } = req.validatedBody;
 
   if (name !== undefined) branch.name = name;
   if (address !== undefined) branch.address = address;
@@ -132,14 +122,10 @@ export const updateBranch = asyncHandler(async (req, res) => {
   return sendSuccess(res, populated);
 });
 
-// Delete branch
+// Delete branch - branch already validated by requireBranchAccess
 export const deleteBranch = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-
-  const branch = await Branch.findById(id);
-  if (!branch) {
-    throw ApiError.notFound("Branch not found");
-  }
+  // Branch is already loaded by requireBranchAccess middleware
+  const branch = req.targetBranch;
 
   // Check if branch has users
   const usersCount = await User.countDocuments({ branch: branch._id });
@@ -149,7 +135,7 @@ export const deleteBranch = asyncHandler(async (req, res) => {
     );
   }
 
-  await Branch.findByIdAndDelete(id);
+  await Branch.findByIdAndDelete(branch._id);
 
   return sendSuccess(res, { message: "Branch deleted" });
 });

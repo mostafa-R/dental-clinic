@@ -1,9 +1,9 @@
 import jwt from 'jsonwebtoken';
-import User from "../../users/user.model.js";
-import Tenant from "../tenant/tenant.model.js";
 import ApiError from "../../../utils/ApiError.js";
 import asyncHandler from "../../../utils/asyncHandler.js";
 import { sendSuccess } from "../../../utils/sendSuccess.js";
+import User from "../../users/user.model.js";
+import Tenant from "../tenant/tenant.model.js";
 
 /**
  * POST /site/impersonation/start
@@ -12,6 +12,7 @@ import { sendSuccess } from "../../../utils/sendSuccess.js";
  *
  * Security measures:
  * - Only super_admin / admin roles can impersonate.
+ * - 2FA must be enabled (enforced by require2fa middleware).
  * - The impersonation session is logged in AuditLog.
  * - The generated token is short-lived (30 min).
  * - PHI-sensitive routes check `req.isImpersonation` and can limit exposure.
@@ -19,9 +20,7 @@ import { sendSuccess } from "../../../utils/sendSuccess.js";
 export const startImpersonation = asyncHandler(async (req, res) => {
   const { userId, tenantId } = req.validatedBody;
 
-  if (!req.siteAdmin.twoFactorEnabled) {
-    throw ApiError.forbidden('Two-factor authentication must be enabled to use impersonation');
-  }
+  // 2FA check is now handled by require2fa middleware
 
   const tenant = await Tenant.findById(tenantId).select('name status isActive');
   if (!tenant) throw ApiError.notFound('Tenant not found');
