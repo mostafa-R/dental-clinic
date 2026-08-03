@@ -1,19 +1,21 @@
 import mongoose from 'mongoose';
 
-import Appointment, { canTransition } from './appointment.model.js';
-import Patient from '../patients/patient.model.js';
-import User from '../users/user.model.js';
+import { emitToBranch } from '../../socket/index.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { currentTenant, filterByBranch, resolveBranchForCreate, toObjectId } from '../../utils/branchScope.js';
 import { escapeRegex } from '../../utils/escapeRegex.js';
-import { emitToBranch } from '../../socket/index.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
+import Patient from '../patients/patient.model.js';
+import Branch from '../users/branch.model.js';
+import DoctorAvailability, { AVAILABILITY_TYPE } from '../users/doctorAvailability.model.js';
+import User from '../users/user.model.js';
+import Appointment, { canTransition } from './appointment.model.js';
 
 const POPULATE = [
   { path: 'patient', select: 'patientId firstName lastName phone' },
-  { path: 'doctor', select: 'name roleId isDoctor' },
-  { path: 'branch', select: 'name' },
+  { path: 'doctor', select: 'name roleId isDoctor workingHours appointmentSettings' },
+  { path: 'branch', select: 'name workingHours breakStart breakEnd' },
 ];
 
 function toObjectIdList(value) {
@@ -124,11 +126,16 @@ async function assertReferences(payload, branchFilter) {
   if (!doctor || !doctor.isDoctor) {
     throw ApiError.badRequest('Referenced doctor does not exist or is not a doctor', { doctor: 'not found' });
   }
+
+  return { patient, doctor };
 }
 
 const ACTIVE_STATUSES = ['scheduled', 'confirmed', 'checked_in', 'in_progress'];
 
-async function assertNoOverlap({ doctor, branch, start, end, chair, excludeId }) {
+/**
+ * Check for doctor appointment overlaps
+ */
+async function assertNoDoctorOverlap({ doctor, branch, start, end, excludeId }) {
   if (!start || !end) return;
   const filter = {
     doctor: toObjectId(doctor),
@@ -137,13 +144,96 @@ async function assertNoOverlap({ doctor, branch, start, end, chair, excludeId })
     start: { $lt: end },
     end: { $gt: start },
   };
-  if (chair) filter.chair = chair;
   if (excludeId) filter._id = { $ne: toObjectId(excludeId) };
-  const conflict = await Appointment.findOne(filter).select('_id').lean();
+  const conflict = await Appointment.findOne(filter).select('_id start end').lean();
   if (conflict) {
     throw ApiError.conflict('The doctor already has an appointment in this time slot', {
       overlappingAppointment: conflict._id,
+      overlappingTime: { start: conflict.start, end: conflict.end },
     });
+  }
+}
+
+/**
+ * Check for patient appointment overlaps (same patient can't have overlapping appointments)
+ */
+async function assertNoPatientOverlap({ patient, branch, start, end, excludeId }) {
+  if (!start || !end) return;
+  const filter = {
+    patient: toObjectId(patient),
+    branch: toObjectId(branch),
+    status: { $in: ACTIVE_STATUSES },
+    start: { $lt: end },
+    end: { $gt: start },
+  };
+  if (excludeId) filter._id = { $ne: toObjectId(excludeId) };
+  const conflict = await Appointment.findOne(filter).select('_id start end doctor').populate('doctor', 'name').lean();
+  if (conflict) {
+    throw ApiError.conflict('The patient already has an appointment in this time slot', {
+      overlappingAppointment: conflict._id,
+      overlappingTime: { start: conflict.start, end: conflict.end },
+      withDoctor: conflict.doctor?.name || 'Unknown',
+    });
+  }
+}
+
+/**
+ * Check if appointment falls within clinic working hours
+ */
+async function assertClinicHours(branch, start, end) {
+  if (!start || !end) return;
+
+  // Reload branch with working hours if not populated
+  const branchDoc = branch.workingHours
+    ? branch
+    : await Branch.findById(branch._id || branch).lean();
+
+  if (!branchDoc) return;
+
+  const result = branchDoc.isWithinWorkingHours?.(start, end);
+  if (result && !result.valid) {
+    throw ApiError.badRequest(result.reason || 'Appointment is outside clinic working hours');
+  }
+}
+
+/**
+ * Check if doctor is available (working hours and availability exceptions)
+ */
+async function assertDoctorAvailability(doctor, branch, start, end) {
+  if (!start || !end) return;
+
+  // Check doctor's working hours
+  const doctorDoc = doctor.workingHours
+    ? doctor
+    : await User.findById(doctor._id || doctor).select('workingHours appointmentSettings isDoctor').lean();
+
+  if (!doctorDoc) return;
+
+  const availability = doctorDoc.isAvailableAt?.(start, end);
+  if (availability && !availability.available) {
+    throw ApiError.badRequest(availability.reason || 'Doctor is not available at this time');
+  }
+
+  // Check for availability exceptions (time off, vacation, etc.)
+  const exception = await DoctorAvailability.findOne({
+    doctor: toObjectId(doctorDoc._id),
+    branch: toObjectId(branch._id || branch),
+    start: { $lt: end },
+    end: { $gt: start },
+    type: { $in: [AVAILABILITY_TYPE.TIME_OFF, AVAILABILITY_TYPE.VACATION, AVAILABILITY_TYPE.SICK_LEAVE, AVAILABILITY_TYPE.BLOCKED] },
+  }).select('_id type reason').lean();
+
+  if (exception) {
+    const reasonText = {
+      [AVAILABILITY_TYPE.TIME_OFF]: 'Time off',
+      [AVAILABILITY_TYPE.VACATION]: 'Vacation',
+      [AVAILABILITY_TYPE.SICK_LEAVE]: 'Sick leave',
+      [AVAILABILITY_TYPE.BLOCKED]: 'Blocked',
+    };
+    throw ApiError.conflict(
+      `Doctor is unavailable: ${reasonText[exception.type] || 'Unavailable'}${exception.reason ? ` (${exception.reason})` : ''}`,
+      { availabilityException: exception._id }
+    );
   }
 }
 
@@ -152,28 +242,49 @@ export const createAppointment = asyncHandler(async (req, res) => {
   const branch = await resolveBranchForCreate(req, data.branch);
   const tenant = currentTenant(req);
 
-  await assertReferences({ patient: data.patient, doctor: data.doctor }, filterByBranch(req));
+  // Validate references and get populated documents
+  const { patient, doctor } = await assertReferences(
+    { patient: data.patient, doctor: data.doctor },
+    filterByBranch(req)
+  );
+
+  const start = data.start ? new Date(data.start) : null;
+  const end = data.end ? new Date(data.end) : null;
+
+  // Validate clinic working hours
+  await assertClinicHours(branch, start, end);
+
+  // Validate doctor availability
+  await assertDoctorAvailability(doctor, branch, start, end);
+
+  // Check for doctor double-booking
+  await assertNoDoctorOverlap({
+    doctor: data.doctor,
+    branch,
+    start,
+    end,
+  });
+
+  // Check for patient double-booking
+  await assertNoPatientOverlap({
+    patient: data.patient,
+    branch,
+    start,
+    end,
+  });
 
   const session = await mongoose.startSession();
   let appointment;
   try {
     await session.withTransaction(async () => {
-      await assertNoOverlap({
-        doctor: data.doctor,
-        branch,
-        start: data.start ? new Date(data.start) : null,
-        end: data.end ? new Date(data.end) : null,
-        chair: data.chair,
-      });
-
       const docs = await Appointment.create([{
         patient: toObjectId(data.patient),
         doctor: toObjectId(data.doctor),
         branch,
         tenant,
         chair: data.chair || '',
-        start: data.start ? new Date(data.start) : undefined,
-        end: data.end ? new Date(data.end) : undefined,
+        start,
+        end,
         status: data.status || 'scheduled',
         reason: data.reason || '',
         notes: data.notes || '',
@@ -205,15 +316,56 @@ export const updateAppointment = asyncHandler(async (req, res) => {
     throw ApiError.notFound('Appointment not found');
   }
 
+  // Determine new values
+  const newStart = data.start ? new Date(data.start) : existing.start;
+  const newEnd = data.end ? new Date(data.end) : existing.end;
+  const newDoctor = data.doctor ? toObjectId(data.doctor) : existing.doctor;
+  const newPatient = data.patient ? toObjectId(data.patient) : existing.patient;
+
+  // Validate patient if changing
+  let patient = null;
   if (data.patient) {
-    const p = await Patient.findOne({ _id: data.patient, ...branchFilter });
-    if (!p) throw ApiError.badRequest('Referenced patient does not exist in this branch', { patient: 'not found' });
+    patient = await Patient.findOne({ _id: data.patient, ...branchFilter });
+    if (!patient) throw ApiError.badRequest('Referenced patient does not exist in this branch', { patient: 'not found' });
   }
+
+  // Validate doctor if changing
+  let doctor = null;
   if (data.doctor) {
-    const d = await User.findOne({ _id: data.doctor, ...branchFilter });
-    if (!d || !d.isDoctor) {
+    doctor = await User.findOne({ _id: data.doctor, ...branchFilter });
+    if (!doctor || !doctor.isDoctor) {
       throw ApiError.badRequest('Referenced doctor does not exist or is not a doctor', { doctor: 'not found' });
     }
+  }
+
+  // Only run availability checks if time, doctor, or patient changes
+  if (data.start || data.end || data.doctor || data.patient) {
+    const branch = await Branch.findById(existing.branch).lean();
+    const doctorToCheck = doctor || await User.findById(existing.doctor).select('workingHours appointmentSettings isDoctor').lean();
+
+    // Validate clinic working hours
+    await assertClinicHours(branch, newStart, newEnd);
+
+    // Validate doctor availability
+    await assertDoctorAvailability(doctorToCheck, branch, newStart, newEnd);
+
+    // Check for doctor double-booking
+    await assertNoDoctorOverlap({
+      doctor: newDoctor,
+      branch: existing.branch,
+      start: newStart,
+      end: newEnd,
+      excludeId: id,
+    });
+
+    // Check for patient double-booking
+    await assertNoPatientOverlap({
+      patient: newPatient,
+      branch: existing.branch,
+      start: newStart,
+      end: newEnd,
+      excludeId: id,
+    });
   }
 
   const setPayload = { ...data };
@@ -222,22 +374,6 @@ export const updateAppointment = asyncHandler(async (req, res) => {
   if (setPayload.start) setPayload.start = new Date(setPayload.start);
   if (setPayload.end) setPayload.end = new Date(setPayload.end);
   delete setPayload.branch;
-
-  // Check for double-booking when scheduling fields change.
-  const newStart = setPayload.start || existing.start;
-  const newEnd = setPayload.end || existing.end;
-  const newDoctor = setPayload.doctor || existing.doctor;
-  const newChair = setPayload.chair !== undefined ? setPayload.chair : existing.chair;
-  if (setPayload.start || setPayload.end || setPayload.doctor) {
-    await assertNoOverlap({
-      doctor: newDoctor,
-      branch: existing.branch,
-      start: newStart,
-      end: newEnd,
-      chair: newChair,
-      excludeId: id,
-    });
-  }
 
   const appointment = await Appointment.findOneAndUpdate(
     { _id: id, ...branchFilter },

@@ -34,9 +34,23 @@ export async function loadPlan(patientId, planId, branchFilter) {
 }
 
 export async function generateInvoiceFromPlan(plan, patient, { itemIds, discount, tax, notes, userId }) {
-  const selectedItems = plan.items.filter((item) => itemIds.includes(item._id.toString()));
+  // Filter to the requested items, or default to all pending, un-invoiced items.
+  const selectedItems = itemIds?.length
+    ? plan.items.filter((item) => itemIds.includes(item._id.toString()))
+    : plan.items.filter((item) => item.status === 'pending' && !item.invoice);
+
   if (selectedItems.length === 0) {
     throw ApiError.badRequest('No valid items selected');
+  }
+
+  // An item can only be billed once. Re-invoicing an item would overwrite its
+  // invoice link and orphan the previous invoice — leaving that invoice without
+  // its linked items (ISSUE-021).
+  const alreadyInvoiced = selectedItems.find((item) => item.invoice);
+  if (alreadyInvoiced) {
+    throw ApiError.conflict(
+      `"${alreadyInvoiced.procedureName}" has already been invoiced`,
+    );
   }
 
   const invoiceItems = selectedItems.map((item) => ({

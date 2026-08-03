@@ -17,6 +17,13 @@ vi.mock("../core/counters.js", () => ({
   default: { findOneAndUpdate: vi.fn(), updateOne: vi.fn() },
 }));
 
+vi.mock("../core/transaction.js", () => ({
+  withTransaction: vi.fn(async (fn) => {
+    const session = { mock: true };
+    return fn(session);
+  }),
+}));
+
 vi.mock("../utils/branchScope.js", () => ({
   currentTenant: (req) => req.user.tenant ?? null,
   resolveBranchForCreate: async (_req, bodyBranch) => bodyBranch || "b1",
@@ -34,6 +41,7 @@ import { createPatient } from "../modules/patients/patient.controller.js";
 import Patient from "../modules/patients/patient.model.js";
 import Tenant from "../modules/site/tenant/tenant.model.js";
 import Counter from "../core/counters.js";
+import { withTransaction } from "../core/transaction.js";
 import { sendSuccess } from "../utils/sendSuccess.js";
 import { emitToBranch } from "../socket/index.js";
 
@@ -77,21 +85,20 @@ describe("createPatient — atomic maxPatients enforcement", () => {
     const res = makeRes();
     const { next } = await runCreatePatient(makeReq("t1"), res);
 
+    expect(withTransaction).toHaveBeenCalledTimes(1);
     expect(Counter.findOneAndUpdate).toHaveBeenCalledWith(
       { _id: "patient_slots:t1" },
       { $inc: { seq: 1 } },
-      expect.objectContaining({ upsert: true, returnDocument: "after" }),
+      expect.objectContaining({ upsert: true, returnDocument: "after", session: { mock: true } }),
     );
-    expect(Counter.updateOne).toHaveBeenCalledWith(
-      { _id: "patient_slots:t1", seq: { $gt: 0 } },
-      { $inc: { seq: -1 } },
-    );
+    // No manual decrement — the aborting transaction rolls the claim back.
+    expect(Counter.updateOne).not.toHaveBeenCalled();
     expect(Patient.create).not.toHaveBeenCalled();
     expect(next.mock.calls[0][0]).toMatchObject({ statusCode: 409 });
     expect(next.mock.calls[0][0].message).toContain("maximum of 500 patients");
   });
 
-  it("releases the claimed slot when the create fails", async () => {
+  it("rolls back the claimed slot when the create fails", async () => {
     vi.mocked(Tenant.findById).mockReturnValue({
       select: vi.fn().mockResolvedValue({ settings: { maxPatients: 500 } }),
     });
@@ -101,10 +108,14 @@ describe("createPatient — atomic maxPatients enforcement", () => {
     const res = makeRes();
     const { next } = await runCreatePatient(makeReq("t1"), res);
 
-    expect(Counter.updateOne).toHaveBeenCalledWith(
-      { _id: "patient_slots:t1", seq: { $gt: 0 } },
-      { $inc: { seq: -1 } },
+    expect(withTransaction).toHaveBeenCalledTimes(1);
+    expect(Counter.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: "patient_slots:t1" },
+      { $inc: { seq: 1 } },
+      expect.objectContaining({ session: { mock: true } }),
     );
+    // The failed transaction aborts — the $inc is rolled back, no manual release.
+    expect(Counter.updateOne).not.toHaveBeenCalled();
     expect(next.mock.calls[0][0]).toMatchObject({ message: "db down" });
   });
 
@@ -114,14 +125,21 @@ describe("createPatient — atomic maxPatients enforcement", () => {
     });
     vi.mocked(Counter.findOneAndUpdate).mockResolvedValue({ seq: 4 });
     const doc = makePatientDoc();
-    vi.mocked(Patient.create).mockResolvedValue(doc);
+    vi.mocked(Patient.create).mockResolvedValue([doc]);
 
     const res = makeRes();
     const { next } = await runCreatePatient(makeReq("t1"), res);
 
+    expect(withTransaction).toHaveBeenCalledTimes(1);
+    expect(Counter.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: "patient_slots:t1" },
+      { $inc: { seq: 1 } },
+      expect.objectContaining({ session: { mock: true } }),
+    );
     expect(Counter.updateOne).not.toHaveBeenCalled();
     expect(Patient.create).toHaveBeenCalledWith(
-      expect.objectContaining({ branch: "b1", tenant: "t1" }),
+      [expect.objectContaining({ branch: "b1", tenant: "t1" })],
+      expect.objectContaining({ session: { mock: true } }),
     );
     expect(emitToBranch).toHaveBeenCalledWith("b1", "patient:created", { patient: doc });
     expect(sendSuccess).toHaveBeenCalledWith(res, { patient: doc }, 201);
@@ -130,14 +148,18 @@ describe("createPatient — atomic maxPatients enforcement", () => {
 
   it("skips the slot claim entirely for non-tenant creators", async () => {
     const doc = makePatientDoc();
-    vi.mocked(Patient.create).mockResolvedValue(doc);
+    vi.mocked(Patient.create).mockResolvedValue([doc]);
 
     const res = makeRes();
     const { next } = await runCreatePatient(makeReq(null), res);
 
+    expect(withTransaction).toHaveBeenCalledTimes(1);
     expect(Tenant.findById).not.toHaveBeenCalled();
     expect(Counter.findOneAndUpdate).not.toHaveBeenCalled();
-    expect(Patient.create).toHaveBeenCalled();
+    expect(Patient.create).toHaveBeenCalledWith(
+      [expect.objectContaining({ branch: "b1", tenant: null })],
+      expect.objectContaining({ session: { mock: true } }),
+    );
     expect(next.mock.calls.length).toBe(0);
   });
 });

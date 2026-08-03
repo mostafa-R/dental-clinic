@@ -116,6 +116,7 @@ export async function getInvoice(id, branchFilter) {
 }
 
 export async function createInvoice({ data, branch, tenant, userId }) {
+  // Pre-validate patient and appointment before starting transaction
   const patient = await Patient.findOne({ _id: toObjectId(data.patient), branch });
   if (!patient) {
     throw ApiError.badRequest('Referenced patient does not exist in this branch', {
@@ -141,24 +142,42 @@ export async function createInvoice({ data, branch, tenant, userId }) {
     }
   }
 
-  const invoice = await Invoice.create({
-    patient: toObjectId(data.patient),
-    branch,
-    tenant,
-    appointment: appointment ? appointment._id : null,
-    items: data.items,
-    discount: data.discount || 0,
-    discountType: data.discountType || 'fixed',
-    discountRate: data.discountRate || 0,
-    tax: data.tax || 0,
-    taxRate: data.taxRate || 0,
-    dueDate: data.dueDate ? new Date(data.dueDate) : null,
-    notes: data.notes || '',
-    createdBy: userId,
+  // Create invoice within a transaction to ensure counter and invoice are atomic
+  // This prevents invoice number gaps if creation fails after counter increment
+  const result = await withTransaction(async (session) => {
+    // Get the next invoice number within the transaction
+    const Counter = (await import('../../core/counters.js')).default;
+    const nextSeq = await Counter.next('invoice', tenant, session);
+    const invoiceNo = `INV-${String(nextSeq).padStart(5, '0')}`;
+
+    // Create the invoice with the pre-generated invoice number
+    const [invoice] = await Invoice.create(
+      [
+        {
+          patient: toObjectId(data.patient),
+          branch,
+          tenant,
+          appointment: appointment ? appointment._id : null,
+          items: data.items,
+          discount: data.discount || 0,
+          discountType: data.discountType || 'fixed',
+          discountRate: data.discountRate || 0,
+          tax: data.tax || 0,
+          taxRate: data.taxRate || 0,
+          dueDate: data.dueDate ? new Date(data.dueDate) : null,
+          notes: data.notes || '',
+          createdBy: userId,
+          invoiceNo, // Pre-assigned invoice number
+        },
+      ],
+      { session }
+    );
+
+    return invoice;
   });
 
-  await invoice.populate(POPULATE);
-  return invoice;
+  await result.populate(POPULATE);
+  return result;
 }
 
 export async function updateInvoice(id, branchFilter, data, userId) {
@@ -308,8 +327,10 @@ export async function addPayment(id, branchFilter, { amount, method, reference, 
       }, userId, session);
     }
 
-    // Commission — one per invoice, update-or-create inside the transaction
-    if (fresh.appointment) {
+    // Commission — accrue ONCE, when the invoice is FULLY paid, based on the
+    // full invoice total. Partial payments never create or grow a commission,
+    // so totals can't over/under-accrue across instalments (ISSUE-014).
+    if (fresh.status === 'paid' && fresh.appointment) {
       const appt = await Appointment.findById(fresh.appointment)
         .select('doctor')
         .session(session)
@@ -320,35 +341,44 @@ export async function addPayment(id, branchFilter, { amount, method, reference, 
           .session(session)
           .lean();
         if (doctor && (doctor.commissionRate || 0) > 0) {
-          const existing = await Commission.findOne({
-            invoice: fresh._id,
-            doctor: doctor._id,
-          }).session(session);
+          const baseAmount = round2(fresh.total || 0);
+          if (baseAmount > 0) {
+            const existing = await Commission.findOne({
+              invoice: fresh._id,
+              doctor: doctor._id,
+            }).session(session);
 
-          if (existing) {
-            existing.baseAmount = round2(existing.baseAmount + amount);
-            existing.amount = round2(existing.baseAmount * (existing.rate || 0) / 100);
-            await existing.save({ session });
-          } else {
-            try {
-              await Commission.create(
-                [
-                  {
-                    tenant: fresh.tenant,
-                    branch: fresh.branch,
-                    doctor: doctor._id,
-                    patient: fresh.patient,
-                    invoice: fresh._id,
-                    procedureName: `Invoice payment — ${fresh.invoiceNo}`,
-                    baseAmount: amount,
-                    rate: doctor.commissionRate,
-                    createdBy: userId,
-                  },
-                ],
-                { session },
-              );
-            } catch (err) {
-              // ignore duplicate key errors (race condition)
+            if (existing) {
+              existing.baseAmount = baseAmount;
+              existing.amount = round2(baseAmount * (existing.rate || 0) / 100);
+              // A fully refunded invoice voids its commission; if it is paid
+              // in full again, the commission is earned again.
+              if (existing.status === 'void') {
+                existing.status = 'pending';
+                existing.paidDate = null;
+              }
+              await existing.save({ session });
+            } else {
+              try {
+                await Commission.create(
+                  [
+                    {
+                      tenant: fresh.tenant,
+                      branch: fresh.branch,
+                      doctor: doctor._id,
+                      patient: fresh.patient,
+                      invoice: fresh._id,
+                      procedureName: `Invoice payment — ${fresh.invoiceNo}`,
+                      baseAmount,
+                      rate: doctor.commissionRate,
+                      createdBy: userId,
+                    },
+                  ],
+                  { session },
+                );
+              } catch (err) {
+                // ignore duplicate key errors (race condition)
+              }
             }
           }
         }

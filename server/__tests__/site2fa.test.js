@@ -19,6 +19,17 @@ vi.mock("../modules/site/admin/admin.model.js", () => {
   return { default: MockSiteAdmin };
 });
 
+vi.mock("../config/redis.js", () => ({
+  getRedis: vi.fn(() => null),
+}));
+
+vi.mock("../utils/logger.js", () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  logInfo: vi.fn(),
+  logWarn: vi.fn(),
+  logError: vi.fn(),
+}));
+
 vi.mock("../modules/site/auth/siteAuth.service.js", () => ({
   authenticateSiteAdmin: vi.fn(),
   create2faChallenge: vi.fn(),
@@ -27,6 +38,10 @@ vi.mock("../modules/site/auth/siteAuth.service.js", () => ({
   rotateSiteAdminToken: vi.fn(),
   createSiteAdmin: vi.fn(),
   recoverSiteAdmin: vi.fn(),
+  initiateRecovery: vi.fn(),
+  verifyRecoveryOtp: vi.fn(),
+  logRecoveryAttempt: vi.fn(),
+  alertRecoveryComplete: vi.fn(),
 }));
 
 import { bootstrap2fa, verify2faLogin } from "../modules/site/auth/site2fa.service.js";
@@ -139,13 +154,64 @@ describe("site2fa.service — verify2faLogin", () => {
   });
 });
 
-describe("POST /api/site/auth/recover (B2 recovery route)", () => {
+describe("Site recovery (two-step OTP flow)", () => {
   beforeEach(() => {
-    vi.mocked(siteAuthService.recoverSiteAdmin).mockReset();
+    vi.mocked(siteAuthService.initiateRecovery).mockReset();
+    vi.mocked(siteAuthService.verifyRecoveryOtp).mockReset();
+    vi.mocked(siteAuthService.logRecoveryAttempt).mockReset();
+    vi.mocked(siteAuthService.alertRecoveryComplete).mockReset();
   });
 
-  it("returns the new secret and codes for a super admin", async () => {
-    vi.mocked(siteAuthService.recoverSiteAdmin).mockResolvedValue({
+  it("initiates recovery and returns a recovery token", async () => {
+    vi.mocked(siteAuthService.initiateRecovery).mockResolvedValue({
+      recoveryToken: "recovery-token-123",
+    });
+
+    const res = await request(makeSiteApp())
+      .post("/api/site/auth/recover/initiate")
+      .send({ email: "root@dentalos.app", recoveryKey: "some-recovery-key" });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.recoveryToken).toBe("recovery-token-123");
+    expect(res.body.data.expiresIn).toBe(300);
+    expect(siteAuthService.initiateRecovery).toHaveBeenCalledWith(
+      "root@dentalos.app",
+      "some-recovery-key",
+      expect.objectContaining({ ip: expect.any(String), userAgent: expect.any(String) }),
+    );
+  });
+
+  it("returns 400 when the recovery key is missing", async () => {
+    const res = await request(makeSiteApp())
+      .post("/api/site/auth/recover/initiate")
+      .send({ email: "root@dentalos.app" });
+    expect(res.status).toBe(400);
+    expect(siteAuthService.initiateRecovery).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 for an invalid recovery key", async () => {
+    vi.mocked(siteAuthService.initiateRecovery).mockRejectedValue(
+      ApiError.unauthorized("Invalid recovery key"),
+    );
+    const res = await request(makeSiteApp())
+      .post("/api/site/auth/recover/initiate")
+      .send({ email: "root@dentalos.app", recoveryKey: "wrong-key" });
+    expect(res.status).toBe(401);
+    expect(res.body.message).toBe("Invalid recovery key");
+  });
+
+  it("returns 403 when the admin is not a super admin", async () => {
+    vi.mocked(siteAuthService.initiateRecovery).mockRejectedValue(
+      ApiError.forbidden("Recovery is only available for super admins"),
+    );
+    const res = await request(makeSiteApp())
+      .post("/api/site/auth/recover/initiate")
+      .send({ email: "support@dentalos.app", recoveryKey: "some-recovery-key" });
+    expect(res.status).toBe(403);
+  });
+
+  it("completes recovery with a valid OTP and returns the new secret and codes", async () => {
+    vi.mocked(siteAuthService.verifyRecoveryOtp).mockResolvedValue({
       admin: {
         _id: "a1",
         roleId: null,
@@ -159,39 +225,25 @@ describe("POST /api/site/auth/recover (B2 recovery route)", () => {
     });
 
     const res = await request(makeSiteApp())
-      .post("/api/site/auth/recover")
-      .send({ email: "root@dentalos.app", recoveryKey: "some-recovery-key" });
+      .post("/api/site/auth/recover/verify")
+      .send({ email: "root@dentalos.app", otp: "123456", recoveryToken: "recovery-token-123" });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data.requires2faSetup).toBe(true);
     expect(res.body.data.secret).toBe("SECRETBASE32");
     expect(res.body.data.backupCodes).toHaveLength(8);
     expect(res.headers["set-cookie"]).toBeDefined();
+    expect(siteAuthService.alertRecoveryComplete).toHaveBeenCalledTimes(1);
   });
 
-  it("returns 400 when the recovery key is missing", async () => {
-    const res = await request(makeSiteApp())
-      .post("/api/site/auth/recover")
-      .send({ email: "root@dentalos.app" });
-    expect(res.status).toBe(400);
-  });
-
-  it("returns 401 for an invalid recovery key", async () => {
-    vi.mocked(siteAuthService.recoverSiteAdmin).mockRejectedValue(ApiError.unauthorized("Invalid recovery key"));
-    const res = await request(makeSiteApp())
-      .post("/api/site/auth/recover")
-      .send({ email: "root@dentalos.app", recoveryKey: "wrong-key" });
-    expect(res.status).toBe(401);
-    expect(res.body.message).toBe("Invalid recovery key");
-  });
-
-  it("returns 403 when the admin is not a super admin", async () => {
-    vi.mocked(siteAuthService.recoverSiteAdmin).mockRejectedValue(
-      ApiError.forbidden("Recovery is only available for super admins"),
+  it("returns 401 for an invalid OTP", async () => {
+    vi.mocked(siteAuthService.verifyRecoveryOtp).mockRejectedValue(
+      ApiError.unauthorized("Invalid or expired OTP"),
     );
     const res = await request(makeSiteApp())
-      .post("/api/site/auth/recover")
-      .send({ email: "support@dentalos.app", recoveryKey: "some-recovery-key" });
-    expect(res.status).toBe(403);
+      .post("/api/site/auth/recover/verify")
+      .send({ email: "root@dentalos.app", otp: "000000", recoveryToken: "recovery-token-123" });
+    expect(res.status).toBe(401);
+    expect(res.body.message).toBe("Invalid or expired OTP");
   });
 });

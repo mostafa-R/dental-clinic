@@ -4,6 +4,7 @@ const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 
 let redis = null;
 let isConnected = false;
+let shuttingDown = false;
 let cacheHits = 0;
 let cacheMisses = 0;
 
@@ -25,6 +26,13 @@ export function getRedis() {
       }
       isConnected = false;
     });
+    redis.on('end', () => {
+      isConnected = false;
+      if (process.env.NODE_ENV === 'production' && !shuttingDown) {
+        console.error('[Redis] FATAL: Redis connection permanently lost in production. Failing fast — shutting down instead of falling back to in-memory stores.');
+        process.exit(1);
+      }
+    });
     redis.on('error', (err) => { console.warn('[Redis]', err.message); });
   }
   return redis;
@@ -38,9 +46,14 @@ export async function connectRedis() {
     console.log('Redis connected');
   } catch (err) {
     isConnected = false;
-    const severity = process.env.NODE_ENV === 'production' ? 'ERROR' : 'WARN';
-    console[severity === 'ERROR' ? 'error' : 'warn'](
-      `[Redis] ${severity}: Redis unavailable (${err.message}). Caching, distributed rate limits, and abuse detection are DISABLED — running on in-memory fallback. Check REDIS_URL=${REDIS_URL}`,
+    if (process.env.NODE_ENV === 'production') {
+      console.error(
+        `[Redis] FATAL: Redis unavailable in production (${err.message}). Failing fast — refusing to start without Redis. Check REDIS_URL=${REDIS_URL}`,
+      );
+      throw err;
+    }
+    console.warn(
+      `[Redis] WARN: Redis unavailable (${err.message}). Caching, distributed rate limits, and abuse detection are DISABLED — running on in-memory fallback. Check REDIS_URL=${REDIS_URL}`,
     );
   }
 }
@@ -161,6 +174,7 @@ export async function getTelemetryCounters() {
 }
 
 export async function disconnectRedis() {
+  shuttingDown = true;
   if (redis && isConnected) {
     try {
       await redis.quit();

@@ -21,6 +21,13 @@ vi.mock("../utils/branchScope.js", () => ({ toObjectId: (v) => v }));
 vi.mock("../modules/users/user.model.js", () => ({ default: {} }));
 vi.mock("../modules/billing/commission.model.js", () => ({ default: {} }));
 
+vi.mock("../core/transaction.js", () => ({
+  withTransaction: vi.fn(async (fn) => {
+    const session = { mock: true };
+    return fn(session);
+  }),
+}));
+
 import Counter from "../core/counters.js";
 import { createInvoice } from "../modules/billing/invoice.service.js";
 import Invoice from "../modules/billing/invoice.model.js";
@@ -79,6 +86,8 @@ describe("Counter.next — session-aware sequence increments", () => {
 describe("createInvoice — appointment/patient consistency", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // createInvoice fetches the next invoice number inside the transaction.
+    vi.spyOn(Counter, "next").mockResolvedValue(7);
   });
 
   const base = {
@@ -115,24 +124,29 @@ describe("createInvoice — appointment/patient consistency", () => {
       select: vi.fn().mockReturnThis(),
       lean: vi.fn().mockResolvedValue({ _id: "a1" }),
     });
-    vi.mocked(Invoice.create).mockResolvedValue({
-      _id: "inv1",
-      populate: vi.fn().mockResolvedValue({ _id: "inv1" }),
-    });
+    vi.mocked(Invoice.create).mockResolvedValue([
+      {
+        _id: "inv1",
+        populate: vi.fn().mockResolvedValue({ _id: "inv1" }),
+      },
+    ]);
 
     await createInvoice(base);
 
     expect(Invoice.create).toHaveBeenCalledWith(
-      expect.objectContaining({ patient: "p1", branch: "b1", appointment: "a1" }),
+      [expect.objectContaining({ patient: "p1", branch: "b1", appointment: "a1" })],
+      expect.objectContaining({ session: { mock: true } }),
     );
   });
 
   it("creates without an appointment when none is supplied", async () => {
     vi.mocked(Patient.findOne).mockResolvedValue({ _id: "p1" });
-    vi.mocked(Invoice.create).mockResolvedValue({
-      _id: "inv1",
-      populate: vi.fn().mockResolvedValue({ _id: "inv1" }),
-    });
+    vi.mocked(Invoice.create).mockResolvedValue([
+      {
+        _id: "inv1",
+        populate: vi.fn().mockResolvedValue({ _id: "inv1" }),
+      },
+    ]);
 
     await createInvoice({
       ...base,
@@ -141,7 +155,8 @@ describe("createInvoice — appointment/patient consistency", () => {
 
     expect(Appointment.findOne).not.toHaveBeenCalled();
     expect(Invoice.create).toHaveBeenCalledWith(
-      expect.objectContaining({ appointment: null }),
+      [expect.objectContaining({ appointment: null })],
+      expect.objectContaining({ session: { mock: true } }),
     );
   });
 });

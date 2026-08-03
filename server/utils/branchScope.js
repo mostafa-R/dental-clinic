@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
-import ApiError from './ApiError.js';
 import Patient from '../modules/patients/patient.model.js';
+import ApiError from './ApiError.js';
 
 function toObjectId(value) {
   if (value && typeof value === 'object' && value._id) value = value._id;
@@ -10,6 +10,36 @@ function toObjectId(value) {
 }
 
 export { toObjectId };
+
+/**
+ * Validate that a tenant ID matches the expected tenant context.
+ * Throws 404 if mismatch to prevent cross-tenant data leakage.
+ * 
+ * @param {string|ObjectId} resourceTenant - The tenant ID from the resource
+ * @param {string|ObjectId} expectedTenant - The expected tenant ID
+ * @param {object} options - Additional context for logging
+ * @returns {boolean} - True if tenants match
+ * @throws {ApiError} - 404 if tenants don't match
+ */
+export function validateTenantMatch(resourceTenant, expectedTenant, options = {}) {
+  const resourceTenantStr = String(resourceTenant || '');
+  const expectedTenantStr = String(expectedTenant || '');
+
+  if (resourceTenantStr && expectedTenantStr && resourceTenantStr !== expectedTenantStr) {
+    // Log cross-tenant access attempt
+    console.warn({
+      event: 'CROSS_TENANT_ACCESS_BLOCKED',
+      resourceTenant: resourceTenantStr,
+      expectedTenant: expectedTenantStr,
+      ...options,
+      timestamp: new Date().toISOString()
+    });
+
+    throw ApiError.notFound(options.resourceName || 'Resource not found');
+  }
+
+  return true;
+}
 
 /**
  * Build a mongoose filter object scoped to the authenticated user's branch
@@ -49,6 +79,31 @@ export function filterByBranch(req) {
   }
 
   return { branch: toObjectId(req.user.branch) };
+}
+
+/**
+ * Build a mongoose filter for site admin operations on tenant-scoped data.
+ * 
+ * @param {object} req - Express request with siteAdmin
+ * @param {string} tenantId - Target tenant ID (from params or body)
+ * @returns {object} - Mongoose filter object
+ */
+export function filterByTenantForSiteAdmin(req, tenantId) {
+  if (!req.siteAdmin) {
+    throw ApiError.unauthorized('Site admin authentication required');
+  }
+
+  const filter = {};
+
+  // Always filter by the provided tenant ID
+  if (tenantId) {
+    if (!mongoose.isValidObjectId(tenantId)) {
+      throw ApiError.badRequest('Invalid tenant ID');
+    }
+    filter.tenant = toObjectId(tenantId);
+  }
+
+  return filter;
 }
 
 /**
@@ -120,4 +175,39 @@ export async function loadScopedPatient(req, patientId, select = 'patientId firs
     throw ApiError.notFound('Patient not found');
   }
   return patient;
+}
+
+/**
+ * Load a resource by ID and validate tenant ownership.
+ * Generic helper for loading any tenant-scoped resource.
+ * 
+ * @param {object} Model - Mongoose model
+ * @param {string} resourceId - Resource ID to load
+ * @param {string} expectedTenantId - Expected tenant ID
+ * @param {object} options - Options (select, resourceName)
+ * @returns {Promise<object>} - The loaded resource
+ * @throws {ApiError} - 404 if not found or tenant mismatch
+ */
+export async function loadTenantScopedResource(Model, resourceId, expectedTenantId, options = {}) {
+  const { select, resourceName = 'Resource' } = options;
+
+  if (!mongoose.isValidObjectId(resourceId)) {
+    throw ApiError.badRequest(`Invalid ${resourceName.toLowerCase()} ID`);
+  }
+
+  const query = { _id: toObjectId(resourceId) };
+  const resource = select
+    ? await Model.findOne(query).select(select).lean()
+    : await Model.findOne(query).lean();
+
+  if (!resource) {
+    throw ApiError.notFound(`${resourceName} not found`);
+  }
+
+  // Validate tenant ownership
+  if (expectedTenantId && resource.tenant) {
+    validateTenantMatch(resource.tenant, expectedTenantId, { resourceName });
+  }
+
+  return resource;
 }

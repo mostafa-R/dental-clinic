@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
-import Counter from '../../core/counters.js';
 import { round2 } from "../../constants/accounting.js";
+import Counter from '../../core/counters.js';
 
 export const INVOICE_STATUS = ["unpaid", "partial", "paid", "void"];
 
@@ -193,6 +193,8 @@ function computeTotals(doc) {
 }
 
 invoiceSchema.pre("validate", async function assignInvoiceNo() {
+  // Skip auto-generation if invoiceNo is already set (e.g., from transactional create)
+  // This prevents double-increment of the counter
   if (!this.invoiceNo) {
     const nextSeq = await Counter.next('invoice', this.tenant, this.$session?.());
     this.invoiceNo = `INV-${String(nextSeq).padStart(5, "0")}`;
