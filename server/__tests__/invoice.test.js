@@ -4,17 +4,21 @@ import express from "express";
 import mongoose from "mongoose";
 import request from "supertest";
 
-vi.mock("../modules/billing/invoice.service.js", () => ({
-  listInvoices: vi.fn(),
-  getBillingSummary: vi.fn(),
-  getInvoice: vi.fn(),
-  createInvoice: vi.fn(),
-  updateInvoice: vi.fn(),
-  addPayment: vi.fn(),
-  voidInvoice: vi.fn(),
-  refundPayment: vi.fn(),
-  getInvoiceAging: vi.fn(),
-}));
+vi.mock("../modules/billing/invoice.service.js", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    listInvoices: vi.fn(),
+    getBillingSummary: vi.fn(),
+    getInvoice: vi.fn(),
+    createInvoice: vi.fn(),
+    updateInvoice: vi.fn(),
+    addPayment: vi.fn(),
+    voidInvoice: vi.fn(),
+    refundPayment: vi.fn(),
+    getInvoiceAging: vi.fn(),
+  };
+});
 
 vi.mock("../middleware/auth.js", () => ({ protect: vi.fn() }));
 
@@ -46,7 +50,12 @@ import invoiceRouter from "../modules/billing/invoice.routes.js";
 import * as invoiceService from "../modules/billing/invoice.service.js";
 import { protect } from "../middleware/auth.js";
 import { getCachedRole } from "../utils/cache.js";
-import Invoice from "../modules/billing/invoice.model.js";
+import Invoice, {
+  MAX_INVOICE_CHANGELOG,
+  MAX_INVOICE_ITEMS,
+  MAX_INVOICE_PAYMENTS,
+} from "../modules/billing/invoice.model.js";
+import { netWalletReversal } from "../modules/billing/invoice.service.js";
 
 const OID = () => new mongoose.Types.ObjectId();
 
@@ -151,6 +160,102 @@ describe("Invoice model — money/status contract (computeTotals)", () => {
   });
 });
 
+describe("Invoice embedded array bounds (16MB doc guard)", () => {
+  function buildInvoice(overrides = {}) {
+    return new Invoice({
+      tenant: OID(),
+      branch: OID(),
+      patient: OID(),
+      invoiceNo: "INV-TEST-BOUNDS",
+      items: [{ description: "Consultation", quantity: 1, unitPrice: 100 }],
+      ...overrides,
+    });
+  }
+
+  it("rejects more than MAX_INVOICE_ITEMS line items", async () => {
+    const doc = buildInvoice({
+      items: Array.from({ length: MAX_INVOICE_ITEMS + 1 }, (_, i) => ({
+        description: `Item ${i}`,
+        quantity: 1,
+        unitPrice: 10,
+      })),
+    });
+    await expect(doc.validate()).rejects.toMatchObject({
+      name: "ValidationError",
+      errors: expect.objectContaining({
+        items: expect.objectContaining({ message: expect.stringContaining("line items") }),
+      }),
+    });
+  });
+
+  it("accepts an invoice exactly at the items cap", async () => {
+    const doc = buildInvoice({
+      items: Array.from({ length: MAX_INVOICE_ITEMS }, (_, i) => ({
+        description: `Item ${i}`,
+        quantity: 1,
+        unitPrice: 1,
+      })),
+    });
+    await expect(doc.validate()).resolves.toBeUndefined();
+  });
+
+  it("rejects more than MAX_INVOICE_PAYMENTS payments", async () => {
+    const doc = buildInvoice({
+      payments: Array.from({ length: MAX_INVOICE_PAYMENTS + 1 }, () => ({
+        amount: 0.01,
+        method: "cash",
+      })),
+    });
+    await expect(doc.validate()).rejects.toMatchObject({
+      name: "ValidationError",
+      errors: expect.objectContaining({
+        payments: expect.objectContaining({ message: expect.stringContaining("payments") }),
+      }),
+    });
+  });
+
+  it("trims changelog to the last MAX_INVOICE_CHANGELOG entries", async () => {
+    const doc = buildInvoice({
+      changelog: Array.from({ length: MAX_INVOICE_CHANGELOG + 100 }, (_, i) => ({
+        field: "notes",
+        oldValue: i,
+        newValue: i + 1,
+        changedBy: null,
+      })),
+    });
+    await doc.validate();
+    expect(doc.changelog.length).toBe(MAX_INVOICE_CHANGELOG);
+  });
+});
+
+describe("netWalletReversal (void double-credit guard)", () => {
+  it("reverses the full wallet payment when nothing was refunded", () => {
+    expect(netWalletReversal([{ method: "wallet", amount: 100, isRefund: false }])).toBe(100);
+  });
+
+  it("subtracts prior wallet refunds to avoid double-crediting", () => {
+    const payments = [
+      { method: "wallet", amount: 100, isRefund: false },
+      { method: "wallet", amount: -40, isRefund: true },
+    ];
+    expect(netWalletReversal(payments)).toBe(60);
+  });
+
+  it("ignores cash/card refunds (only wallet entries count)", () => {
+    const payments = [
+      { method: "wallet", amount: 100, isRefund: false },
+      { method: "cash", amount: -40, isRefund: true },
+    ];
+    expect(netWalletReversal(payments)).toBe(100);
+  });
+
+  it("handles empty or missing payments", () => {
+    expect(netWalletReversal([])).toBe(0);
+    expect(netWalletReversal(null)).toBe(0);
+    expect(netWalletReversal(undefined)).toBe(0);
+  });
+});
+
 describe("Invoice API contract", () => {
   beforeEach(() => {
     currentUser = { _id: "u1", branch: "b1", roleId: "r1", tenant: null };
@@ -223,6 +328,22 @@ describe("Invoice API contract", () => {
       .post("/api/billing")
       .set("Cookie", "access_token=tok")
       .send({ patient: "64b000000000000000000001", items: [] });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe("Validation failed");
+  });
+
+  it("rejects an invoice with more than MAX_INVOICE_ITEMS line items (400)", async () => {
+    const res = await request(makeApp())
+      .post("/api/billing")
+      .set("Cookie", "access_token=tok")
+      .send({
+        patient: "64b000000000000000000001",
+        items: Array.from({ length: MAX_INVOICE_ITEMS + 1 }, (_, i) => ({
+          description: `Item ${i}`,
+          quantity: 1,
+          unitPrice: 1,
+        })),
+      });
     expect(res.status).toBe(400);
     expect(res.body.message).toBe("Validation failed");
   });

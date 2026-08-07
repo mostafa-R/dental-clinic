@@ -10,7 +10,7 @@
  * - professional: + EMR, prescriptions, accounting, staff management
  * - enterprise:  everything (inventory, roles, settings, branches)
  */
-export const DEFAULT_PLAN_MODULES = {
+const DEFAULT_PLAN_MODULES = {
   starter: [
     'dashboard',
     'patients',

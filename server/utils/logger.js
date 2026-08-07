@@ -24,22 +24,6 @@ const logger = pino({
   },
 });
 
-export function createChildLogger(bindings) {
-  return logger.child(bindings);
-}
-
-export function logRequest(req, res, responseTime) {
-  logger.info({
-    method: req.method,
-    url: req.originalUrl,
-    status: res.statusCode,
-    responseTime: `${responseTime}ms`,
-    requestId: req.id,
-    tenantId: req.user?.tenant ? String(req.user.tenant) : undefined,
-    userId: req.user?._id ? String(req.user._id) : undefined,
-  }, `${req.method} ${req.originalUrl} ${res.statusCode} ${responseTime}ms`);
-}
-
 export function logError(err, context = {}) {
   logger.error({
     err: {
@@ -58,10 +42,6 @@ export function logInfo(message, data = {}) {
 
 export function logWarn(message, data = {}) {
   logger.warn(data, message);
-}
-
-export function logDebug(message, data = {}) {
-  logger.debug(data, message);
 }
 
 export { logger };

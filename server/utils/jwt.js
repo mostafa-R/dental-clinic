@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 
 export const ACCESS_COOKIE = "access_token";
 export const REFRESH_COOKIE = "refresh_token";
-export const SITE_ACCESS_COOKIE = "site_access";
+const SITE_ACCESS_COOKIE = "site_access";
 export const SITE_REFRESH_COOKIE = "site_refresh";
 
 function secrets() {
@@ -61,13 +61,6 @@ export function verifyAccessToken(token) {
 export function verifyRefreshToken(token) {
   const { refresh } = secrets();
   return jwt.verify(token, refresh);
-}
-
-export function generateTokens(user, type = "clinic") {
-  return {
-    accessToken: signAccessToken(user, type),
-    refreshToken: signRefreshToken(user, type),
-  };
 }
 
 export function setAuthCookies(res, user, type = "clinic") {

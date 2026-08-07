@@ -10,8 +10,6 @@ const migrationSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-migrationSchema.index({ version: 1 });
-
 const Migration = mongoose.model('Migration', migrationSchema);
 
 export default Migration;

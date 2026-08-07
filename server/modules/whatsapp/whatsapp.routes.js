@@ -17,7 +17,12 @@ const whatsappSettingsSchema = z.object({
 });
 
 const testMessageSchema = z.object({
-  to: z.string().min(4, 'Phone number required'),
+  to: z
+    .string()
+    .regex(
+      /^\+?[1-9]\d{7,14}(@c\.us)?$/,
+      'Phone number must be in E.164 format (e.g. +15551234567)',
+    ),
   message: z.string().min(1, 'Message required').max(1000),
 });
 

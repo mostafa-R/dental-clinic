@@ -74,6 +74,7 @@ export const endImpersonation = asyncHandler(async (req, res) => {
   if (userId) {
     await User.findByIdAndUpdate(userId, { $inc: { tokenVersion: 1 } });
   }
-  req.auditDetails = { action: 'impersonation.end' };
+  req.auditTargetName = userId ? String(userId) : '';
+  req.auditDetails = { action: 'impersonation.end', userId: userId ? String(userId) : null };
   return sendSuccess(res, { message: 'Impersonation session ended' });
 });

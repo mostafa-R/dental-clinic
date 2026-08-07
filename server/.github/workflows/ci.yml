@@ -15,6 +15,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Single-node replica set so transactional tests (invoice counters,
+      # payment races) actually run. A standalone mongod cannot do transactions.
+      - name: Start MongoDB (single-node replica set)
+        uses: supercharge/mongodb-github-action@1.12.1
+        with:
+          mongodb-version: '7.0'
+          mongodb-replica-set: rs0
+
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
@@ -29,6 +37,8 @@ jobs:
 
       - name: Contract tests
         run: npm test
+        env:
+          TEST_MONGO_URI: mongodb://127.0.0.1:27017/dental_os_test
 
       - name: Production dependency audit
         run: npm run audit:prod

@@ -1,6 +1,7 @@
 import Wallet from './wallet.model.js';
 import ApiError from '../../utils/ApiError.js';
 import { withTransaction } from '../../core/transaction.js';
+import { round2 } from '../../constants/accounting.js';
 
 /**
  * Find or create a wallet for a patient.
@@ -44,6 +45,13 @@ export async function getOrCreateWallet(patient) {
  */
 export async function addTransaction(patient, data, userId, externalSession = null) {
   const fn = async (session) => {
+    // Round to cents so the wallet balance can never diverge from the
+    // round2 amounts stored on installments/invoices (penny drift).
+    const amount = round2(Math.abs(Number(data.amount)));
+    if (amount <= 0) {
+      throw ApiError.badRequest('Amount must be positive');
+    }
+
     let wallet = await Wallet.findOne({ patient: patient._id }).session(session);
     if (!wallet) {
       try {
@@ -70,8 +78,8 @@ export async function addTransaction(patient, data, userId, externalSession = nu
     // Atomic balance check + update using $inc
     if (data.type === 'debit') {
       const updated = await Wallet.findOneAndUpdate(
-        { _id: wallet._id, balance: { $gte: data.amount } },
-        { $inc: { balance: -Math.abs(data.amount) } },
+        { _id: wallet._id, balance: { $gte: amount } },
+        { $inc: { balance: -amount } },
         { new: true, session },
       );
       if (!updated) {
@@ -82,15 +90,15 @@ export async function addTransaction(patient, data, userId, externalSession = nu
       // Credit: atomic increment
       wallet = await Wallet.findOneAndUpdate(
         { _id: wallet._id },
-        { $inc: { balance: Math.abs(data.amount) } },
+        { $inc: { balance: amount } },
         { new: true, session },
       );
     }
 
     // Record the transaction in the embedded array
     const balanceBefore = data.type === 'credit'
-      ? wallet.balance - Math.abs(data.amount)
-      : wallet.balance + Math.abs(data.amount);
+      ? wallet.balance - amount
+      : wallet.balance + amount;
 
     await Wallet.updateOne(
       { _id: wallet._id },
@@ -99,7 +107,7 @@ export async function addTransaction(patient, data, userId, externalSession = nu
           transactions: {
             $each: [{
               type: data.type,
-              amount: Math.abs(data.amount),
+              amount,
               balanceBefore,
               balanceAfter: wallet.balance,
               reference: data.reference || '',

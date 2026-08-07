@@ -44,7 +44,7 @@ export function isIpAllowed(clientIp, allowedIps) {
  * @param {string} cidr - The CIDR range (e.g., "192.168.1.0/24")
  * @returns {boolean} - True if IP is in CIDR range
  */
-export function isIpInCidr(ip, cidr) {
+function isIpInCidr(ip, cidr) {
   const [range, bits] = cidr.split('/');
   const maskBits = parseInt(bits, 10);
 
@@ -164,5 +164,5 @@ function expandIPv6(ip) {
 
 export default {
   isIpAllowed,
-  isIpInCidr
+  isIpInCidr,
 };

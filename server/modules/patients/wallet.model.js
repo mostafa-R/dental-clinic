@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 
 import { WALLET_TX_TYPES } from '../../constants/wallet.js';
-import { round2 } from '../../constants/accounting.js';
 
 const walletTransactionSchema = new mongoose.Schema(
   {
@@ -22,44 +21,12 @@ const walletSchema = new mongoose.Schema(
   {
     tenant: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', index: true, default: null },
     branch: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', required: true, index: true },
-    patient: { type: mongoose.Schema.Types.ObjectId, ref: 'Patient', required: true, unique: true, index: true },
+    patient: { type: mongoose.Schema.Types.ObjectId, ref: 'Patient', required: true, unique: true },
     balance: { type: Number, default: 0, min: 0 },
     transactions: { type: [walletTransactionSchema], default: [] },
   },
   { timestamps: true },
 );
-
-const MAX_TRANSACTIONS = 1000;
-
-walletSchema.methods.addTransaction = function ({ type, amount, reference, description, invoice, installment, userId }) {
-  const balanceBefore = this.balance;
-  const absAmount = round2(Math.abs(Number(amount)));
-  const balanceAfter = type === 'credit'
-    ? round2(balanceBefore + absAmount)
-    : round2(balanceBefore - absAmount);
-
-  if (balanceAfter < 0) {
-    throw new Error('Insufficient wallet balance');
-  }
-
-  if (this.transactions.length >= MAX_TRANSACTIONS) {
-    this.transactions = this.transactions.slice(-MAX_TRANSACTIONS + 1);
-  }
-
-  this.transactions.push({
-    type,
-    amount: absAmount,
-    balanceBefore,
-    balanceAfter,
-    reference: reference || '',
-    description: description || '',
-    invoice: invoice || null,
-    installment: installment || null,
-    createdBy: userId || null,
-  });
-
-  this.balance = balanceAfter;
-};
 
 walletSchema.set('toJSON', { virtuals: true });
 walletSchema.set('toObject', { virtuals: true });

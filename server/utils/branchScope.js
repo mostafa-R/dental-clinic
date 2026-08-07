@@ -35,7 +35,7 @@ export function validateTenantMatch(resourceTenant, expectedTenant, options = {}
       timestamp: new Date().toISOString()
     });
 
-    throw ApiError.notFound(options.resourceName || 'Resource not found');
+    throw ApiError.notFound(`${options.resourceName || 'Resource'} not found`);
   }
 
   return true;
@@ -79,31 +79,6 @@ export function filterByBranch(req) {
   }
 
   return { branch: toObjectId(req.user.branch) };
-}
-
-/**
- * Build a mongoose filter for site admin operations on tenant-scoped data.
- * 
- * @param {object} req - Express request with siteAdmin
- * @param {string} tenantId - Target tenant ID (from params or body)
- * @returns {object} - Mongoose filter object
- */
-export function filterByTenantForSiteAdmin(req, tenantId) {
-  if (!req.siteAdmin) {
-    throw ApiError.unauthorized('Site admin authentication required');
-  }
-
-  const filter = {};
-
-  // Always filter by the provided tenant ID
-  if (tenantId) {
-    if (!mongoose.isValidObjectId(tenantId)) {
-      throw ApiError.badRequest('Invalid tenant ID');
-    }
-    filter.tenant = toObjectId(tenantId);
-  }
-
-  return filter;
 }
 
 /**
@@ -175,39 +150,4 @@ export async function loadScopedPatient(req, patientId, select = 'patientId firs
     throw ApiError.notFound('Patient not found');
   }
   return patient;
-}
-
-/**
- * Load a resource by ID and validate tenant ownership.
- * Generic helper for loading any tenant-scoped resource.
- * 
- * @param {object} Model - Mongoose model
- * @param {string} resourceId - Resource ID to load
- * @param {string} expectedTenantId - Expected tenant ID
- * @param {object} options - Options (select, resourceName)
- * @returns {Promise<object>} - The loaded resource
- * @throws {ApiError} - 404 if not found or tenant mismatch
- */
-export async function loadTenantScopedResource(Model, resourceId, expectedTenantId, options = {}) {
-  const { select, resourceName = 'Resource' } = options;
-
-  if (!mongoose.isValidObjectId(resourceId)) {
-    throw ApiError.badRequest(`Invalid ${resourceName.toLowerCase()} ID`);
-  }
-
-  const query = { _id: toObjectId(resourceId) };
-  const resource = select
-    ? await Model.findOne(query).select(select).lean()
-    : await Model.findOne(query).lean();
-
-  if (!resource) {
-    throw ApiError.notFound(`${resourceName} not found`);
-  }
-
-  // Validate tenant ownership
-  if (expectedTenantId && resource.tenant) {
-    validateTenantMatch(resource.tenant, expectedTenantId, { resourceName });
-  }
-
-  return resource;
 }

@@ -71,26 +71,3 @@ export async function runMigrations() {
   logger.info(`[Migrations] Applied ${count} migration(s)`);
   return { applied: count, total: files.length };
 }
-
-/**
- * List migration status.
- */
-export async function listMigrations() {
-  const files = await getMigrationFiles();
-  const applied = await getApplied();
-
-  return files.map((f) => {
-    const record = applied.find((a) => a.version === f.version);
-    return {
-      version: f.version,
-      name: f.name,
-      applied: !!record,
-      appliedAt: record?.appliedAt || null,
-      durationMs: record?.durationMs || null,
-    };
-  });
-}
-
-async function getApplied() {
-  return Migration.find({}).sort('version').lean();
-}

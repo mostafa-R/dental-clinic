@@ -12,14 +12,14 @@ import User from '../users/user.model.js';
 import Commission from './commission.model.js';
 import Invoice from './invoice.model.js';
 
-export const POPULATE = [
+const POPULATE = [
   { path: 'patient', select: 'patientId firstName lastName phone' },
   { path: 'appointment', select: 'start status' },
   { path: 'payments.recordedBy', select: 'name' },
   { path: 'createdBy', select: 'name' },
 ];
 
-export async function resolveSearchFilter(search, patientId, branchFilter) {
+async function resolveSearchFilter(search, patientId, branchFilter) {
   const filter = {};
   if (patientId) filter.patient = toObjectId(patientId);
   if (!search?.trim()) return filter;
@@ -180,61 +180,90 @@ export async function createInvoice({ data, branch, tenant, userId }) {
   return result;
 }
 
+const FINANCIAL_FIELDS = ['items', 'discount', 'discountType', 'discountRate', 'tax', 'taxRate'];
+
+/**
+ * Update an invoice inside a transaction.
+ *
+ * Re-reads the invoice inside the session (optimistic concurrency) so a
+ * concurrent payment cannot be silently overwritten by a recompute of the
+ * totals (TOCTOU). Financial fields (items/discount/tax) are locked once the
+ * invoice is paid — refund or void it first.
+ */
 export async function updateInvoice(id, branchFilter, data, userId) {
   if (!mongoose.isValidObjectId(id)) {
     throw ApiError.badRequest('Invalid invoice id');
   }
 
-  const invoice = await Invoice.findOne({ _id: id, ...branchFilter });
-  if (!invoice) {
-    throw ApiError.notFound('Invoice not found');
-  }
-  if (invoice.status === 'void') {
-    throw ApiError.conflict('Cannot edit a void invoice');
-  }
+  const result = await withTransaction(async (session) => {
+    const invoice = await Invoice.findOne({ _id: id, ...branchFilter }).session(session);
+    if (!invoice) {
+      throw ApiError.notFound('Invoice not found');
+    }
+    if (invoice.status === 'void') {
+      throw ApiError.conflict('Cannot edit a void invoice');
+    }
 
-  const changelog = [];
+    if (invoice.status === 'paid' && FINANCIAL_FIELDS.some((f) => data[f] !== undefined)) {
+      throw ApiError.conflict(
+        'Cannot modify items, discount, or tax on a paid invoice; refund or void it first',
+      );
+    }
 
-  if (data.items !== undefined) {
-    changelog.push({ field: 'items', oldValue: invoice.items.length + ' items', newValue: data.items.length + ' items', changedBy: userId });
-    invoice.items = data.items;
-  }
-  if (data.discountType !== undefined) {
-    changelog.push({ field: 'discountType', oldValue: invoice.discountType, newValue: data.discountType, changedBy: userId });
-    invoice.discountType = data.discountType;
-  }
-  if (data.discountRate !== undefined) {
-    changelog.push({ field: 'discountRate', oldValue: invoice.discountRate, newValue: data.discountRate, changedBy: userId });
-    invoice.discountRate = data.discountRate;
-  }
-  if (data.discount !== undefined) {
-    changelog.push({ field: 'discount', oldValue: invoice.discount, newValue: data.discount, changedBy: userId });
-    invoice.discount = data.discount;
-  }
-  if (data.tax !== undefined) {
-    changelog.push({ field: 'tax', oldValue: invoice.tax, newValue: data.tax, changedBy: userId });
-    invoice.tax = data.tax;
-  }
-  if (data.taxRate !== undefined) {
-    changelog.push({ field: 'taxRate', oldValue: invoice.taxRate, newValue: data.taxRate, changedBy: userId });
-    invoice.taxRate = data.taxRate;
-  }
-  if (data.dueDate !== undefined) {
-    changelog.push({ field: 'dueDate', oldValue: invoice.dueDate, newValue: data.dueDate, changedBy: userId });
-    invoice.dueDate = data.dueDate ? new Date(data.dueDate) : null;
-  }
-  if (data.notes !== undefined) {
-    changelog.push({ field: 'notes', oldValue: invoice.notes, newValue: data.notes, changedBy: userId });
-    invoice.notes = data.notes;
-  }
+    const changelog = [];
 
-  if (changelog.length > 0) {
-    invoice.changelog.push(...changelog);
-  }
+    if (data.items !== undefined) {
+      changelog.push({ field: 'items', oldValue: invoice.items.length + ' items', newValue: data.items.length + ' items', changedBy: userId });
+      invoice.items = data.items;
+    }
+    if (data.discountType !== undefined) {
+      changelog.push({ field: 'discountType', oldValue: invoice.discountType, newValue: data.discountType, changedBy: userId });
+      invoice.discountType = data.discountType;
+    }
+    if (data.discountRate !== undefined) {
+      changelog.push({ field: 'discountRate', oldValue: invoice.discountRate, newValue: data.discountRate, changedBy: userId });
+      invoice.discountRate = data.discountRate;
+    }
+    if (data.discount !== undefined) {
+      changelog.push({ field: 'discount', oldValue: invoice.discount, newValue: data.discount, changedBy: userId });
+      invoice.discount = data.discount;
+    }
+    if (data.tax !== undefined) {
+      changelog.push({ field: 'tax', oldValue: invoice.tax, newValue: data.tax, changedBy: userId });
+      invoice.tax = data.tax;
+    }
+    if (data.taxRate !== undefined) {
+      changelog.push({ field: 'taxRate', oldValue: invoice.taxRate, newValue: data.taxRate, changedBy: userId });
+      invoice.taxRate = data.taxRate;
+    }
+    if (data.dueDate !== undefined) {
+      changelog.push({ field: 'dueDate', oldValue: invoice.dueDate, newValue: data.dueDate, changedBy: userId });
+      invoice.dueDate = data.dueDate ? new Date(data.dueDate) : null;
+    }
+    if (data.notes !== undefined) {
+      changelog.push({ field: 'notes', oldValue: invoice.notes, newValue: data.notes, changedBy: userId });
+      invoice.notes = data.notes;
+    }
 
-  await invoice.save();
-  await invoice.populate(POPULATE);
-  return invoice;
+    if (changelog.length > 0) {
+      invoice.changelog.push(...changelog);
+    }
+
+    await invoice.save({ session });
+
+    // Money invariant: a partial/unpaid invoice must never end up overpaid
+    // after a total reduction.
+    if (invoice.paidAmount > round2(invoice.total) + 0.01) {
+      throw ApiError.badRequest(
+        `Total (${invoice.total.toFixed(2)}) cannot be less than the amount already paid (${invoice.paidAmount.toFixed(2)})`,
+      );
+    }
+
+    return invoice;
+  });
+
+  await result.populate(POPULATE);
+  return result;
 }
 
 /**
@@ -265,6 +294,19 @@ export async function addPayment(id, branchFilter, { amount, method, reference, 
       throw ApiError.conflict('Cannot record a payment on a void invoice');
     }
 
+    // Idempotency: check INSIDE the transaction and BEFORE the balance guard so
+    // replaying the idempotency key of the completing payment returns the
+    // idempotent result instead of a confusing "already fully paid" 409.
+    if (idempotencyKey) {
+      const exists = (fresh.payments || []).some(
+        (p) => p.idempotencyKey && p.idempotencyKey === idempotencyKey,
+      );
+      if (exists) {
+        await fresh.populate(POPULATE);
+        return { invoice: fresh, idempotent: true };
+      }
+    }
+
     const balance = round2(fresh.total - fresh.paidAmount);
     if (balance <= 0) {
       throw ApiError.conflict('This invoice is already fully paid');
@@ -274,17 +316,6 @@ export async function addPayment(id, branchFilter, { amount, method, reference, 
         `Payment exceeds the outstanding balance (${balance.toFixed(2)})`,
         { amount: 'exceeds balance' },
       );
-    }
-
-    // Idempotency: check inside the transaction
-    if (idempotencyKey) {
-      const exists = (fresh.payments || []).some(
-        (p) => p.idempotencyKey && p.idempotencyKey === idempotencyKey,
-      );
-      if (exists) {
-        await fresh.populate(POPULATE);
-        return { invoice: fresh, idempotent: true };
-      }
     }
 
     const statusBefore = fresh.status;
@@ -398,6 +429,23 @@ export async function addPayment(id, branchFilter, { amount, method, reference, 
 }
 
 /**
+ * Compute the net wallet amount to reverse when an invoice is voided.
+ *
+ * Wallet refunds were already credited back to the wallet when they were
+ * recorded, so they are subtracted from the original wallet payments to
+ * avoid double-crediting the wallet balance (refund-then-void).
+ */
+export function netWalletReversal(payments) {
+  const walletReceived = (payments || [])
+    .filter((p) => p.method === 'wallet' && !p.isRefund)
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const walletRefunded = (payments || [])
+    .filter((p) => p.method === 'wallet' && p.isRefund)
+    .reduce((sum, p) => sum + Math.abs(Number(p.amount) || 0), 0);
+  return round2(Math.max(0, walletReceived - walletRefunded));
+}
+
+/**
  * Void an invoice inside a transaction.
  * Reverses wallet debits and voids commission records atomically.
  */
@@ -419,10 +467,10 @@ export async function voidInvoice(id, branchFilter, { reason, userId } = {}) {
 
     const previousStatus = invoice.status;
 
-    // Calculate wallet-paid amount to reverse
-    const walletPaid = (invoice.payments || [])
-      .filter((p) => p.method === 'wallet' && !p.isRefund)
-      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    // Calculate the net wallet-paid amount to reverse. Wallet refunds were
+    // already credited back to the wallet when they were recorded, so subtract
+    // them here to avoid double-crediting the balance on void.
+    const walletPaid = netWalletReversal(invoice.payments);
 
     invoice.status = 'void';
     invoice.changelog.push({
@@ -497,7 +545,10 @@ export async function refundPayment(id, branchFilter, { amount, method, referenc
     if (refundAmount <= 0) {
       throw ApiError.badRequest('Refund amount must be greater than 0');
     }
-    if (refundAmount > invoice.paidAmount + 0.01) {
+    // Strict comparison (both sides already rounded to cents): refunding more
+    // than paidAmount would push paidAmount negative and fail the model's
+    // min: 0 guard with a 500. Reject it cleanly instead.
+    if (refundAmount > round2(invoice.paidAmount)) {
       throw ApiError.badRequest(
         `Refund cannot exceed total paid amount (${invoice.paidAmount.toFixed(2)})`,
         { amount: 'exceeds paid amount' },

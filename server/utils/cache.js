@@ -150,22 +150,6 @@ export async function invalidateTenant(tenantId) {
 }
 
 /**
- * Cache the resolved permission map for a user.
- * The key is `${userId}:${roleId}` so different roles for the same user
- * are cached separately.
- */
-export async function cachePermission(userId, roleId, permissionData) {
-  await cacheSet('permission', `${userId}:${roleId}`, permissionData);
-}
-
-/**
- * Get cached permission map.
- */
-export async function getCachedPermission(userId, roleId) {
-  return cacheGet('permission', `${userId}:${roleId}`);
-}
-
-/**
  * Invalidate cached permissions for a user.
  */
 export async function invalidatePermission(userId, roleId) {

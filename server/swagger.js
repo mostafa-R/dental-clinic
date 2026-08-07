@@ -42,5 +42,3 @@ export function setupSwagger(app) {
     res.send(swaggerSpec);
   });
 }
-
-export { swaggerSpec };

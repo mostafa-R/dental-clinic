@@ -1,5 +1,5 @@
 import { trackRequest } from '../services/abuseDetection.js';
-import { incrementTenantCounter, decrementTenantCounter } from '../config/redis.js';
+import { incrementTenantCounter } from '../config/redis.js';
 
 export function abuseMonitor(req, _res, next) {
   // Track tenant abuse metrics using authenticated user (populated by auth middleware

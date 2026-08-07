@@ -2,6 +2,7 @@ import Message from './message.model.js';
 import ChannelRead from './channelRead.model.js';
 import User from '../users/user.model.js';
 import { toObjectId, currentTenant } from '../../utils/branchScope.js';
+import ApiError from '../../utils/ApiError.js';
 
 export async function sendMessage({ branch, tenant, senderId, recipient, channel, content }) {
   const message = await Message.create({
@@ -20,14 +21,21 @@ export async function sendMessage({ branch, tenant, senderId, recipient, channel
 }
 
 export async function listMessages(branch, { recipient, senderId, channel, limit, before, after }) {
+  if (!recipient && !channel) {
+    throw ApiError.badRequest('Either recipient or channel is required');
+  }
+  if (recipient && channel) {
+    throw ApiError.badRequest('Cannot specify both recipient and channel');
+  }
   const filter = { branch: toObjectId(branch) };
   if (recipient) {
     filter.$or = [
       { sender: toObjectId(senderId), recipient: toObjectId(recipient) },
       { sender: toObjectId(recipient), recipient: toObjectId(senderId) },
     ];
+  } else if (channel) {
+    filter.channel = channel;
   }
-  if (channel) filter.channel = channel;
   if (before || after) {
     filter.createdAt = {};
     if (before) filter.createdAt.$lt = new Date(before);

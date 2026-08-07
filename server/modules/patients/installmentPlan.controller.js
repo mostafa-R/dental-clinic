@@ -98,6 +98,11 @@ export const updateInstallmentPlan = asyncHandler(async (req, res) => {
   if (data.title !== undefined) plan.title = data.title;
   if (data.notes !== undefined) plan.notes = data.notes;
   if (data.status !== undefined) {
+    if (plan.status === 'completed' || plan.status === 'defaulted') {
+      throw ApiError.conflict(
+        `Cannot change the status of a ${plan.status} installment plan`,
+      );
+    }
     if (data.status === 'completed') {
       const allPaid = plan.installments.every((inst) => inst.status === 'paid');
       if (!allPaid) throw ApiError.badRequest('Cannot mark plan as completed — not all installments are paid');

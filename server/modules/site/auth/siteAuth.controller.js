@@ -74,45 +74,6 @@ export const createSiteAdmin = asyncHandler(async (req, res) => {
   return sendSuccess(res, { admin: admin.toSafeObject() }, 201);
 });
 
-export const recoverSiteAdmin = asyncHandler(async (req, res) => {
-  const { email, recoveryKey } = req.validatedBody;
-  const clientIp = req.ip || req.connection.remoteAddress;
-
-  // Rate limiting check using Redis (max 5 attempts per hour per IP)
-  const redis = getRedis();
-  if (redis) {
-    const rateLimitKey = `recovery:ratelimit:${clientIp}`;
-    const attempts = await redis.incr(rateLimitKey);
-    if (attempts === 1) {
-      await redis.expire(rateLimitKey, 3600); // 1 hour window
-    }
-    if (attempts > 5) {
-      logWarn('Recovery rate limited', { ip: clientIp, email, attempts });
-      throw ApiError.tooManyRequests('Too many recovery attempts. Please try again later.');
-    }
-  }
-
-  // IP allowlist check
-  const allowedIps = process.env.ALLOWED_SITE_IPS?.split(',').map(ip => ip.trim()).filter(Boolean) || [];
-  if (allowedIps.length > 0) {
-    const { isIpAllowed } = await import('../../../utils/ipCheck.js');
-    if (!isIpAllowed(clientIp, allowedIps)) {
-      logWarn('Recovery blocked - IP not in allowlist', { ip: clientIp, email });
-      throw ApiError.forbidden('Access denied from this IP address');
-    }
-  }
-
-  const { admin, secret, otpauth, backupCodes } = await siteAuthService.recoverSiteAdmin(email, recoveryKey);
-  setAuthCookies(res, admin, 'site');
-  return sendSuccess(res, {
-    user: admin.toSafeObject(),
-    requires2faSetup: true,
-    secret,
-    otpauth,
-    backupCodes,
-  });
-});
-
 export const initiateRecovery = asyncHandler(async (req, res) => {
   const { email, recoveryKey } = req.validatedBody;
   const clientIp = req.ip || req.connection.remoteAddress;

@@ -60,7 +60,6 @@ const treatmentItemSchema = z.object({
   estimatedCost: z.number().min(0).default(0),
   status: z.enum(PROCEDURE_STATUSES).optional(),
   appointment: objectId.optional(),
-  invoice: objectId.optional(),
   notes: z.string().max(500).optional(),
 });
 

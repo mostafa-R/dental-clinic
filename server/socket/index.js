@@ -2,8 +2,10 @@ import { Server } from 'socket.io';
 
 import Branch from '../modules/users/branch.model.js';
 import Role from '../modules/users/role.model.js';
+import Tenant from '../modules/site/tenant/tenant.model.js';
 import User from '../modules/users/user.model.js';
 import { verifyAccessToken } from '../utils/jwt.js';
+import { planIncludesModule } from '../constants/plans.js';
 
 let io = null;
 
@@ -77,6 +79,26 @@ export function initSocket(httpServer) {
           tenant: user.tenant ? user.tenant.toString() : null,
           isSystemAdmin,
         };
+
+        // Enforce tenant subscription status (mirrors middleware/auth.js
+        // protect): clinic users from suspended/cancelled/inactive tenants
+        // cannot hold a live socket.
+        if (user.tenant && !isSystemAdmin) {
+          const tenant = await Tenant.findById(user.tenant)
+            .select('status isActive plan planModules')
+            .lean();
+          if (
+            !tenant ||
+            !tenant.isActive ||
+            tenant.status === 'suspended' ||
+            tenant.status === 'cancelled' ||
+            tenant.status === 'archived'
+          ) {
+            return next(new Error('Your clinic subscription is inactive'));
+          }
+          socket.user.tenantPlan = { plan: tenant.plan, planModules: tenant.planModules };
+        }
+
         next();
       })
       .catch((err) => next(err));
@@ -91,8 +113,9 @@ export function initSocket(httpServer) {
     }
 
     socket.join(userRoom(socket.user._id));
-    // Join tenant-scoped chat channels — each tenant has isolated rooms
-    if (socket.user.tenant) {
+    // Join tenant-scoped chat channels — each tenant has isolated rooms and
+    // the chat module must be included in the tenant's subscription plan.
+    if (socket.user.tenant && !socket.user.isSystemAdmin && planIncludesModule(socket.user.tenantPlan, 'chat')) {
       CHAT_CHANNELS.forEach((ch) => socket.join(chatChannelRoom(socket.user.tenant, ch)));
     }
 
@@ -162,5 +185,3 @@ export function emitToChat({ recipient, channel, senderId, tenantId, event, payl
     if (room) io.to(room).emit(event, payload);
   });
 }
-
-export { ADMIN_ROOM };

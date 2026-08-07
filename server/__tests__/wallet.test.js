@@ -35,6 +35,7 @@ import * as walletService from "../modules/patients/wallet.service.js";
 import { protect } from "../middleware/auth.js";
 import { loadScopedPatient } from "../utils/branchScope.js";
 import { getCachedRole } from "../utils/cache.js";
+import { addWalletTransactionSchema } from "../modules/patients/wallet.validator.js";
 
 const FULL_ROLE = {
   _id: "r1",
@@ -125,5 +126,35 @@ describe("Wallet API contract", () => {
       .set("Cookie", "access_token=tok")
       .send({ type: "credit", amount: 50 });
     expect(res.status).toBe(403);
+  });
+});
+
+describe("addWalletTransactionSchema (traceability guard)", () => {
+  it("rejects a wallet debit without invoice/installment/reference", () => {
+    const result = addWalletTransactionSchema.safeParse({ type: "debit", amount: 50 });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts a wallet debit with a linked invoice", () => {
+    const result = addWalletTransactionSchema.safeParse({
+      type: "debit",
+      amount: 50,
+      invoice: "64b000000000000000000001",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a wallet debit with an explicit reference", () => {
+    const result = addWalletTransactionSchema.safeParse({
+      type: "debit",
+      amount: 50,
+      reference: "Manual adjustment",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("still accepts a credit (top-up) without linkage", () => {
+    const result = addWalletTransactionSchema.safeParse({ type: "credit", amount: 150 });
+    expect(result.success).toBe(true);
   });
 });

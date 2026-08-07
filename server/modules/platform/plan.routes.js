@@ -6,6 +6,7 @@ import {
   getPlans,
   updatePlan,
 } from "./plan.controller.js";
+import { require2faSuperAdmin } from "../../middleware/require2fa.js";
 import { authorizeSite, protectSite } from "../../middleware/siteAuth.js";
 import { validate } from "../../middleware/validate.js";
 import { z } from "zod";
@@ -34,8 +35,8 @@ const planSchema = z.object({
 
 router.get("/", authorizeSite("super_admin", "admin", "support"), getPlans);
 router.get("/:id", authorizeSite("super_admin", "admin", "support"), getPlan);
-router.post("/", authorizeSite("super_admin"), validate(planSchema), createPlan);
-router.put("/:id", authorizeSite("super_admin"), validate(planSchema), updatePlan);
-router.delete("/:id", authorizeSite("super_admin"), deletePlan);
+router.post("/", authorizeSite("super_admin"), require2faSuperAdmin, validate(planSchema), createPlan);
+router.put("/:id", authorizeSite("super_admin"), require2faSuperAdmin, validate(planSchema), updatePlan);
+router.delete("/:id", authorizeSite("super_admin"), require2faSuperAdmin, deletePlan);
 
 export default router;

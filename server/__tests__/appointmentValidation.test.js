@@ -121,6 +121,17 @@ describe('Appointment Validation', () => {
   });
 
   describe('Doctor Working Hours', () => {
+    beforeEach(() => {
+      // Freeze the clock on a Monday so day-of-week and advance-booking
+      // assertions are deterministic instead of depending on the real date.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2025-01-06T09:30:00Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('should validate doctor availability', async () => {
       const User = (await import('../modules/users/user.model.js')).default;
 

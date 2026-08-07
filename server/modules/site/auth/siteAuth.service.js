@@ -64,30 +64,6 @@ export async function createSiteAdmin({ name, email, password, role }) {
 }
 
 /**
- * @deprecated Use initiateRecovery and verifyRecoveryOtp instead
- * This method is kept for backward compatibility but should not be used
- */
-export async function recoverSiteAdmin(email, recoveryKey) {
-  const expected = process.env.SITE_RECOVERY_KEY;
-  if (!expected) {
-    throw ApiError.forbidden('Recovery is not configured on this server');
-  }
-
-  const providedHash = crypto.createHash('sha256').update(String(recoveryKey || '')).digest();
-  const expectedHash = crypto.createHash('sha256').update(expected).digest();
-  if (providedHash.length !== expectedHash.length || !crypto.timingSafeEqual(providedHash, expectedHash)) {
-    throw ApiError.unauthorized('Invalid recovery key');
-  }
-
-  const admin = await SiteAdmin.findOne({ email: email.toLowerCase() });
-  if (!admin || !admin.isActive) throw ApiError.unauthorized('Admin not found or disabled');
-  if (admin.role !== 'super_admin') throw ApiError.forbidden('Recovery is only available for super admins');
-
-  const result = await bootstrap2fa(admin);
-  return { admin, ...result };
-}
-
-/**
  * Initiate recovery - validates recovery key and sends OTP to admin email
  */
 export async function initiateRecovery(email, recoveryKey, { ip, userAgent }) {
@@ -374,61 +350,4 @@ export async function alertRecoveryComplete({ email, ip, userAgent }) {
   }
 }
 
-const SAFE_ADMIN_FIELDS = '-password -twoFactorSecret -twoFactorBackupCodes';
 
-export async function listSiteAdmins({ page, limit, role, search }) {
-  const skip = (page - 1) * limit;
-  const filter = {};
-  if (role) filter.role = role;
-  if (search) {
-    const safe = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    filter.$or = [
-      { name: { $regex: safe, $options: 'i' } },
-      { email: { $regex: safe, $options: 'i' } },
-    ];
-  }
-
-  const [admins, total] = await Promise.all([
-    SiteAdmin.find(filter).select(SAFE_ADMIN_FIELDS).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-    SiteAdmin.countDocuments(filter),
-  ]);
-
-  return {
-    admins,
-    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
-  };
-}
-
-export async function getSiteAdmin(id) {
-  const admin = await SiteAdmin.findById(id).select(SAFE_ADMIN_FIELDS).lean();
-  if (!admin) throw ApiError.notFound('Admin not found');
-  return admin;
-}
-
-export async function updateSiteAdmin(id, { name, email, password, role, permissions }) {
-  const admin = await SiteAdmin.findById(id);
-  if (!admin) throw ApiError.notFound('Admin not found');
-
-  if (email && email !== admin.email) {
-    const existing = await SiteAdmin.findOne({ email, _id: { $ne: id } });
-    if (existing) throw ApiError.conflict('An admin with this email already exists');
-  }
-
-  if (name) admin.name = name;
-  if (email) admin.email = email;
-  if (password) {
-    admin.password = password;
-    admin.tokenVersion = (admin.tokenVersion || 0) + 1;
-  }
-  if (role) admin.role = role;
-  if (permissions) admin.permissions = permissions;
-
-  await admin.save();
-  return admin;
-}
-
-export async function deleteSiteAdmin(id) {
-  const admin = await SiteAdmin.findByIdAndDelete(id);
-  if (!admin) throw ApiError.notFound('Admin not found');
-  return admin;
-}

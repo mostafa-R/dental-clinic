@@ -17,29 +17,29 @@ export async function getWhatsAppSettings(tenantId) {
   return settings;
 }
 
-const ALLOWED_CONFIG_KEYS = ['phoneNumber', 'phoneNumberId'];
+const ALLOWED_CONFIG_KEYS = ['phoneNumber', 'phoneNumberId', 'accessToken'];
 const ALLOWED_SETTINGS_KEYS = ['appointmentReminder', 'appointmentConfirm', 'reminderHours'];
 
 export async function updateWhatsAppSettings(tenantId, data) {
-  const update = {};
-  if (data.enabled !== undefined) update.enabled = data.enabled;
-  if (data.provider) update.provider = data.provider;
+  let settings = await WhatsAppSetting.findOne({ tenant: tenantId });
+  if (!settings) {
+    settings = new WhatsAppSetting({ tenant: tenantId });
+  }
+
+  if (data.enabled !== undefined) settings.enabled = data.enabled;
+  if (data.provider) settings.provider = data.provider;
   if (data.config) {
     for (const [k, v] of Object.entries(data.config)) {
-      if (ALLOWED_CONFIG_KEYS.includes(k) && v !== undefined) update[`config.${k}`] = v;
+      if (ALLOWED_CONFIG_KEYS.includes(k) && v !== undefined) settings.config[k] = v;
     }
   }
   if (data.settings) {
     for (const [k, v] of Object.entries(data.settings)) {
-      if (ALLOWED_SETTINGS_KEYS.includes(k) && v !== undefined) update[`settings.${k}`] = v;
+      if (ALLOWED_SETTINGS_KEYS.includes(k) && v !== undefined) settings.settings[k] = v;
     }
   }
 
-  const settings = await WhatsAppSetting.findOneAndUpdate(
-    { tenant: tenantId },
-    { $set: update },
-    { upsert: true, returnDocument: 'after', select: '+config.session +config.accessToken +qrCode' },
-  );
+  await settings.save();
   return settings;
 }
 

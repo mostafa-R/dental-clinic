@@ -27,6 +27,7 @@ router.post(
 router.post(
   '/end',
   authorizeSite('super_admin', 'admin'),
+  audit('impersonation.end', 'user'),
   endImpersonation,
 );
 

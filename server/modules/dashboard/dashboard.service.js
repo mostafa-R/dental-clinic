@@ -4,6 +4,20 @@ import Invoice from '../billing/invoice.model.js';
 import Patient from '../patients/patient.model.js';
 import User from '../users/user.model.js';
 import { round2 } from '../../constants/accounting.js';
+import { planIncludesModule } from '../../constants/plans.js';
+
+const MODULE_CATALOG = [
+  { key: 'patients', label: 'Patients' },
+  { key: 'appointments', label: 'Appointments' },
+  { key: 'billing', label: 'Billing' },
+  { key: 'accounting', label: 'Accounting' },
+  { key: 'inventory', label: 'Inventory' },
+  { key: 'branches', label: 'Branches' },
+  { key: 'chat', label: 'Chat' },
+  { key: 'users', label: 'Users' },
+  { key: 'roles', label: 'Roles' },
+  { key: 'settings', label: 'Settings' },
+];
 
 export async function getDashboardStats(branchFilter, user, isSystemAdmin = false) {
 
@@ -124,17 +138,9 @@ export async function getDashboardStats(branchFilter, user, isSystemAdmin = fals
     staffByRole,
     recentStaff,
     branches: branchesWithStaff,
-    modules: [
-      { key: 'patients', label: 'Patients', enabled: true },
-      { key: 'appointments', label: 'Appointments', enabled: true },
-      { key: 'billing', label: 'Billing', enabled: true },
-      { key: 'accounting', label: 'Accounting', enabled: true },
-      { key: 'inventory', label: 'Inventory', enabled: true },
-      { key: 'branches', label: 'Branches', enabled: true },
-      { key: 'chat', label: 'Chat', enabled: true },
-      { key: 'users', label: 'Users', enabled: true },
-      { key: 'roles', label: 'Roles', enabled: true },
-      { key: 'settings', label: 'Settings', enabled: true },
-    ],
+    modules: MODULE_CATALOG.map((m) => ({
+      ...m,
+      enabled: planIncludesModule(user.tenant, m.key),
+    })),
   };
 }

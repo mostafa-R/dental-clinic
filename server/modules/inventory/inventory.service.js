@@ -6,7 +6,7 @@ import ApiError from '../../utils/ApiError.js';
 import { escapeRegex } from '../../utils/escapeRegex.js';
 
 export async function listItems(branchFilter, { search, category, lowStock, page, limit }) {
-  const filter = { ...branchFilter };
+  const filter = { ...branchFilter, isActive: true };
 
   if (search?.trim()) {
     const term = escapeRegex(search.trim());
@@ -26,11 +26,12 @@ export async function listItems(branchFilter, { search, category, lowStock, page
 
   const lowStockCount = await InventoryItem.countDocuments({
     ...branchFilter,
+    isActive: true,
     $expr: { $lte: ['$quantity', '$reorderPoint'] },
   });
 
   const stockValueResult = await InventoryItem.aggregate([
-    { $match: branchFilter },
+    { $match: { ...branchFilter, isActive: true } },
     { $group: { _id: null, total: { $sum: { $multiply: ['$quantity', '$costPerUnit'] } } } },
   ]);
   const totalStockValue = stockValueResult[0]?.total || 0;

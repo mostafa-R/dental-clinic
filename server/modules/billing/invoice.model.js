@@ -7,6 +7,13 @@ export const INVOICE_STATUS = ["unpaid", "partial", "paid", "void"];
 
 export const PAYMENT_METHODS = ["cash", "card", "transfer", "wallet"];
 
+// Hard caps on embedded arrays. Mongo has a 16MB document limit, and these
+// arrays are the only unbounded growth vectors on an invoice, so each is
+// bounded to keep documents far below the limit over years of use.
+export const MAX_INVOICE_ITEMS = 500;
+export const MAX_INVOICE_PAYMENTS = 2000;
+export const MAX_INVOICE_CHANGELOG = 500;
+
 const invoiceItemSchema = new mongoose.Schema(
   {
     description: { type: String, required: true, trim: true, maxlength: 200 },
@@ -203,6 +210,30 @@ invoiceSchema.pre("validate", async function assignInvoiceNo() {
   const needsRecompute = this.isNew || financialFields.some((f) => this.isModified(f));
   if (needsRecompute) {
     computeTotals(this);
+  }
+});
+
+/**
+ * Bound the embedded arrays so a single invoice can never grow toward Mongo's
+ * 16MB document limit:
+ * - `items` and `payments` exceed the cap -> validation fails with a clear
+ *   error (no silent data loss of financial records).
+ * - `changelog` is trimmed to the most recent entries (audit-only data).
+ * Only checked when the field was actually modified, so pre-existing
+ * documents that already exceed a cap can still be updated elsewhere.
+ */
+invoiceSchema.pre("validate", function enforceEmbeddedArrayBounds() {
+  if (this.isModified("items") && (this.items || []).length > MAX_INVOICE_ITEMS) {
+    this.invalidate("items", `An invoice cannot have more than ${MAX_INVOICE_ITEMS} line items`);
+  }
+  if (this.isModified("payments") && (this.payments || []).length > MAX_INVOICE_PAYMENTS) {
+    this.invalidate(
+      "payments",
+      `An invoice cannot have more than ${MAX_INVOICE_PAYMENTS} payments. Archive or split this invoice to continue.`,
+    );
+  }
+  if (Array.isArray(this.changelog) && this.changelog.length > MAX_INVOICE_CHANGELOG) {
+    this.changelog = this.changelog.slice(-MAX_INVOICE_CHANGELOG);
   }
 });
 

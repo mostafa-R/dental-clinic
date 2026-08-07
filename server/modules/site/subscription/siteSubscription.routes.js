@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { require2fa } from '../../../middleware/require2fa.js';
 import { authorizeSite, protectSite } from '../../../middleware/siteAuth.js';
 import { validate } from '../../../middleware/validate.js';
 import { paymentSchema, subscriptionSchema } from '../tenant/site.validator.js';
@@ -29,6 +30,7 @@ router.get(
 router.put(
   '/:id',
   authorizeSite('super_admin', 'admin'),
+  require2fa,
   validate(subscriptionSchema),
   updateSubscription
 );
@@ -36,6 +38,7 @@ router.put(
 router.post(
   '/:tenantId/payment',
   authorizeSite('super_admin', 'admin'),
+  require2fa,
   validate(paymentSchema),
   processPayment
 );

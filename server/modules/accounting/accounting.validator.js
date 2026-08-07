@@ -17,6 +17,9 @@ export const createExpenseSchema = z.object({
   date: z.string().datetime({ message: 'Invalid date' }).optional().or(z.literal('')),
   paymentMethod: z.enum(EXPENSE_PAYMENT_METHODS).optional(),
   branch: z.string().length(24, 'Invalid branch id').optional(),
+}).refine((data) => data.paymentMethod !== 'wallet', {
+  message: 'Expenses cannot be paid from a patient wallet',
+  path: ['paymentMethod'],
 });
 
 export const listExpenseQuerySchema = z.object({

@@ -1,6 +1,23 @@
 import mongoose from 'mongoose';
 
 /**
+ * List indexes for a collection without throwing when the collection has not
+ * been created yet (fresh databases have no `messages`, `auditlogs`, ...).
+ * `createIndex` auto-creates the collection, so a missing one simply means
+ * "no indexes to inspect".
+ */
+async function listIndexes(collection) {
+  try {
+    return await collection.indexes();
+  } catch (err) {
+    if (err && (err.code === 26 || /ns does not exist/i.test(err.message || ''))) {
+      return [];
+    }
+    throw err;
+  }
+}
+
+/**
  * Migration: 002-add-indexes-ttl
  * 
  * Adds:
@@ -23,7 +40,7 @@ export async function up() {
   // We add { channel: 1, createdAt: -1 } for channel-first queries
   try {
     const messagesCollection = db.collection('messages');
-    const messageIndexes = await messagesCollection.indexes();
+    const messageIndexes = await listIndexes(messagesCollection);
     
     // Check if the index already exists
     const channelCreatedAtIndex = messageIndexes.find(
@@ -36,7 +53,7 @@ export async function up() {
         { 
           name: 'channel_1_createdAt_-1',
           background: true,
-          partialFilterExpression: { channel: { $ne: null } }
+          partialFilterExpression: { channel: { $type: 'string' } }
         }
       );
       console.log('[Migration] Created messages index: { channel: 1, createdAt: -1 }');
@@ -52,7 +69,7 @@ export async function up() {
   // There's already { dueDate: 1, status: 1 }, we add branch for branch-scoped aging
   try {
     const invoicesCollection = db.collection('invoices');
-    const invoiceIndexes = await invoicesCollection.indexes();
+    const invoiceIndexes = await listIndexes(invoicesCollection);
     
     const branchDueDateStatusIndex = invoiceIndexes.find(
       (idx) => idx.key.branch === 1 && idx.key.dueDate === 1 && idx.key.status === 1
@@ -66,7 +83,7 @@ export async function up() {
           background: true,
           partialFilterExpression: { 
             status: { $in: ['unpaid', 'partial'] },
-            dueDate: { $exists: true, $ne: null }
+            dueDate: { $type: 'date' }
           }
         }
       );
@@ -82,7 +99,7 @@ export async function up() {
   // 3. AuditLogs: Add TTL index (90 days = 7,776,000 seconds)
   try {
     const auditLogsCollection = db.collection('auditlogs');
-    const auditIndexes = await auditLogsCollection.indexes();
+    const auditIndexes = await listIndexes(auditLogsCollection);
     
     const existingTtlIndex = auditIndexes.find(
       (idx) => idx.key.createdAt === 1 && idx.expireAfterSeconds
@@ -129,7 +146,7 @@ export async function up() {
   // 4. ErrorLogs: Add TTL index (30 days = 2,592,000 seconds)
   try {
     const errorLogsCollection = db.collection('errorlogs');
-    const errorIndexes = await errorLogsCollection.indexes();
+    const errorIndexes = await listIndexes(errorLogsCollection);
     
     const existingTtlIndex = errorIndexes.find(
       (idx) => idx.key.createdAt === 1 && idx.expireAfterSeconds
@@ -178,7 +195,7 @@ export async function down() {
   try {
     // Messages
     const messagesCollection = db.collection('messages');
-    const messageIndexes = await messagesCollection.indexes();
+    const messageIndexes = await listIndexes(messagesCollection);
     const channelCreatedAtIndex = messageIndexes.find(
       (idx) => idx.name === 'channel_1_createdAt_-1'
     );
@@ -189,7 +206,7 @@ export async function down() {
 
     // Invoices
     const invoicesCollection = db.collection('invoices');
-    const invoiceIndexes = await invoicesCollection.indexes();
+    const invoiceIndexes = await listIndexes(invoicesCollection);
     const branchDueDateStatusIndex = invoiceIndexes.find(
       (idx) => idx.name === 'branch_1_dueDate_1_status_1'
     );
@@ -200,7 +217,7 @@ export async function down() {
 
     // AuditLogs TTL
     const auditLogsCollection = db.collection('auditlogs');
-    const auditIndexes = await auditLogsCollection.indexes();
+    const auditIndexes = await listIndexes(auditLogsCollection);
     const auditTtlIndex = auditIndexes.find(
       (idx) => idx.name === 'createdAt_1_ttl_90d'
     );
@@ -211,7 +228,7 @@ export async function down() {
 
     // ErrorLogs TTL
     const errorLogsCollection = db.collection('errorlogs');
-    const errorIndexes = await errorLogsCollection.indexes();
+    const errorIndexes = await listIndexes(errorLogsCollection);
     const errorTtlIndex = errorIndexes.find(
       (idx) => idx.name === 'createdAt_1_ttl_30d'
     );

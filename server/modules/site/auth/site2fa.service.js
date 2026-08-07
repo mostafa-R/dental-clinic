@@ -62,6 +62,7 @@ export async function verify2fa(adminId, token) {
   admin.twoFactorEnabled = true;
   admin.tokenVersion = (admin.tokenVersion || 0) + 1;
   await admin.save();
+  return admin;
 }
 
 export async function disable2fa(adminId, token) {
@@ -77,6 +78,7 @@ export async function disable2fa(adminId, token) {
   admin.twoFactorBackupCodes = [];
   admin.tokenVersion = (admin.tokenVersion || 0) + 1;
   await admin.save();
+  return admin;
 }
 
 export async function get2faStatus(adminId) {

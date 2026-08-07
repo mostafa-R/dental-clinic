@@ -3,9 +3,19 @@ import ApiError from '../utils/ApiError.js';
 import { MODULES } from '../constants/permissions.js';
 import { planIncludesModule } from '../constants/plans.js';
 import {
-  getCachedRole, cacheRole, invalidateRole,
-  getCachedPermission, cachePermission,
+  getCachedRole, cacheRole,
 } from '../utils/cache.js';
+
+/**
+ * A role is usable by the caller when:
+ *  - it is platform-level (tenant: null) → shared across all tenants, OR
+ *  - it is tenant-scoped and belongs to the caller's own tenant.
+ */
+function roleBelongsToTenant(roleDoc, tenantId) {
+  const roleTenant = roleDoc.tenant ? String(roleDoc.tenant) : null;
+  if (roleTenant === null) return true;
+  return tenantId !== null && roleTenant === tenantId;
+}
 
 /**
  * Resolve the Role document for the authenticated user.
@@ -24,10 +34,18 @@ export async function resolveRole(req) {
     throw ApiError.unauthorized('Not authenticated');
   }
 
-  const { roleId, tenant } = req.user;
+  const { roleId } = req.user;
+  // protect (middleware/auth.js) replaces req.user.tenant with the populated /
+  // cached tenant config object, so the id lives at ._id. A bare id string is
+  // tolerated too for safety.
+  const tenantId = req.user.tenant?._id
+    ? String(req.user.tenant._id)
+    : req.user.tenant
+      ? String(req.user.tenant)
+      : null;
 
   // Clinic users with no role assigned have NO permissions.
-  if (!roleId && !tenant) {
+  if (!roleId && !req.user.tenant) {
     const emptyPerms = Object.fromEntries(MODULES.map((m) => [m.key, []]));
     return {
       isSystemAdmin: false,
@@ -39,14 +57,19 @@ export async function resolveRole(req) {
   let roleDoc = null;
   if (roleId) {
     roleDoc = await getCachedRole(roleId);
-    if (roleDoc && roleDoc.tenant && String(roleDoc.tenant) !== String(tenant)) {
+    if (roleDoc && !roleBelongsToTenant(roleDoc, tenantId)) {
       roleDoc = null;
     }
   }
 
-  // 2. Cache miss → query MongoDB
+  // 2. Cache miss → query MongoDB, scoped to the caller's tenant plus
+  //    platform-level roles so a cross-tenant roleId is rejected.
   if (!roleDoc && roleId) {
-    roleDoc = await Role.findById(roleId).lean();
+    const query = { _id: roleId };
+    if (tenantId) {
+      query.$or = [{ tenant: tenantId }, { tenant: null }];
+    }
+    roleDoc = await Role.findOne(query).lean();
     if (roleDoc) {
       await cacheRole(roleId, roleDoc);
     }

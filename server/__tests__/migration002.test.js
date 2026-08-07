@@ -19,6 +19,10 @@ describe('Migration 002-add-indexes-ttl', () => {
   beforeAll(async () => {
     const testDbUri = process.env.TEST_MONGO_URI || 'mongodb://127.0.0.1:27017/dental_os_test';
     await mongoose.connect(testDbUri);
+
+    // Run the migration so the collections and their indexes actually exist.
+    const migration = await import('../migrations/002-add-indexes-ttl.js');
+    await migration.up();
   });
 
   afterAll(async () => {

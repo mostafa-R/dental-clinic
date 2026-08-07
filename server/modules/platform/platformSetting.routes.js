@@ -4,6 +4,7 @@ import {
   getPlatformSettings,
   updatePlatformSettings,
 } from "./platformSetting.controller.js";
+import { require2faSuperAdmin } from "../../middleware/require2fa.js";
 import { authorizeSite, protectSite } from "../../middleware/siteAuth.js";
 import { validate } from "../../middleware/validate.js";
 
@@ -27,6 +28,6 @@ const router = Router();
 router.use(protectSite);
 
 router.get("/", authorizeSite("super_admin", "admin", "support"), getPlatformSettings);
-router.put("/", authorizeSite("super_admin"), validate(platformSettingSchema), updatePlatformSettings);
+router.put("/", authorizeSite("super_admin"), require2faSuperAdmin, validate(platformSettingSchema), updatePlatformSettings);
 
 export default router;

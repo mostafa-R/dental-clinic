@@ -29,12 +29,6 @@ export async function authenticateUser(email, password) {
   return user;
 }
 
-export async function refreshUser(tokenData, currentTokenVersion) {
-  if (tokenData.tokenVersion !== undefined && tokenData.tokenVersion !== currentTokenVersion) {
-    throw ApiError.unauthorized('Token has been rotated, please log in again');
-  }
-}
-
 export async function getUserWithTenant(userId) {
   const user = await User.findById(userId);
   if (!user || !user.isActive) return null;

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { INVOICE_STATUS, PAYMENT_METHODS } from './invoice.model.js';
+import { INVOICE_STATUS, MAX_INVOICE_ITEMS, PAYMENT_METHODS } from './invoice.model.js';
 
 const objectIdSchema = z.string().length(24, 'Invalid id');
 
@@ -20,7 +20,7 @@ export const createInvoiceSchema = z.object({
   patient: objectIdSchema,
   branch: objectIdSchema.optional(),
   appointment: objectIdSchema.optional(),
-  items: z.array(itemSchema).min(1, 'At least one line item is required'),
+  items: z.array(itemSchema).min(1, 'At least one line item is required').max(MAX_INVOICE_ITEMS, `At most ${MAX_INVOICE_ITEMS} line items are allowed`),
   discount: z.coerce.number().min(0).optional(),
   discountType: z.enum(['fixed', 'percentage']).optional(),
   discountRate: z.coerce.number().min(0).max(100).optional(),
@@ -32,7 +32,7 @@ export const createInvoiceSchema = z.object({
 
 export const updateInvoiceSchema = z
   .object({
-    items: z.array(itemSchema).min(1, 'At least one line item is required').optional(),
+    items: z.array(itemSchema).min(1, 'At least one line item is required').max(MAX_INVOICE_ITEMS, `At most ${MAX_INVOICE_ITEMS} line items are allowed`).optional(),
     discount: z.coerce.number().min(0).optional(),
     discountType: z.enum(['fixed', 'percentage']).optional(),
     discountRate: z.coerce.number().min(0).max(100).optional(),

@@ -38,8 +38,8 @@ export const updateItem = asyncHandler(async (req, res) => {
 });
 
 export const deleteItem = asyncHandler(async (req, res) => {
-  await inventoryService.deleteItem(req.params.id, filterByBranch(req));
-  emitToBranch(String(filterByBranch(req).branch || ''), 'inventory:deleted', { _id: req.params.id });
+  const item = await inventoryService.deleteItem(req.params.id, filterByBranch(req));
+  emitToBranch(String(item.branch), 'inventory:deleted', { _id: req.params.id });
   return sendSuccess(res, { message: 'Item deleted' });
 });
 

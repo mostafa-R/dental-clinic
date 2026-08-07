@@ -41,11 +41,6 @@ export const listInstallmentPlansSchema = z.object({
   status: z.enum(INSTALLMENT_PLAN_STATUS).optional(),
 });
 
-export const listWalletTransactionsSchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-});
-
 export const addWalletTransactionSchema = z.object({
   type: z.enum(WALLET_TX_TYPES),
   amount: z.number().positive('Amount must be positive'),
@@ -53,4 +48,15 @@ export const addWalletTransactionSchema = z.object({
   description: z.string().max(300).optional(),
   invoice: objectId.optional(),
   installment: objectId.optional(),
+}).refine((data) => {
+  // A manual wallet debit must be traceable to something — a linked
+  // invoice/installment or an explicit reference — otherwise it becomes a
+  // silent ledger entry that reconciles to nothing.
+  if (data.type === 'debit') {
+    return Boolean(data.invoice || data.installment || (data.reference && data.reference.trim()));
+  }
+  return true;
+}, {
+  message: 'A wallet debit must reference an invoice, installment, or carry a reference',
+  path: ['reference'],
 });

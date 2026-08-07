@@ -22,25 +22,38 @@ const EMPTY_RESULT = {
   wallets: [], installments: [],
 };
 
-function buildSearchCacheKey(branchFilter, query) {
+function buildSearchCacheKey(branchFilter, query, allowedModules) {
   const sorted = Object.keys(branchFilter).sort().reduce((acc, k) => {
     acc[k] = String(branchFilter[k]);
     return acc;
   }, {});
-  return `${JSON.stringify(sorted)}:${query}`;
+  const scope = allowedModules.length ? allowedModules.join(',') : 'none';
+  return `${JSON.stringify(sorted)}:${scope}:${query}`;
 }
 
 function isPhoneLike(q) {
   return /^\d[\d\s\-()+ ]*$/.test(q);
 }
 
-export async function globalSearch(branchFilter, query) {
+/**
+ * Permission-scoped global search.
+ *
+ * @param {object} branchFilter - Branch/tenant scoping filter (from filterByBranch)
+ * @param {string} query - Raw search term
+ * @param {(module: string) => boolean} can - Returns true when the caller may read the module
+ */
+export async function globalSearch(branchFilter, query, can = () => true) {
   const q = query?.trim();
   if (!q || q.length < 2) {
     return EMPTY_RESULT;
   }
 
-  const cacheKey = buildSearchCacheKey(branchFilter, q);
+  const allowedModules = [
+    'patients', 'appointments', 'billing', 'branches', 'users', 'roles',
+    'inventory', 'accounting', 'emr', 'prescriptions',
+  ].filter(can);
+
+  const cacheKey = buildSearchCacheKey(branchFilter, q, allowedModules);
   const cached = await cacheGet('search', cacheKey);
   if (cached) return cached;
 
@@ -48,98 +61,165 @@ export async function globalSearch(branchFilter, query) {
   const regex = new RegExp(esc, 'i');
   const phoneLike = isPhoneLike(q);
 
-  const matchedPatients = await Patient.find({
-    ...branchFilter,
-    $or: [{ firstName: regex }, { lastName: regex }, { phone: regex }, { email: regex }, { patientId: regex }],
-  })
-    .select('firstName lastName phone patientId')
-    .limit(5)
-    .lean();
+  const matchedPatients = can('patients')
+    ? await Patient.find({
+        ...branchFilter,
+        $or: [{ firstName: regex }, { lastName: regex }, { phone: regex }, { email: regex }, { patientId: regex }],
+      })
+        .select('firstName lastName phone patientId')
+        .limit(5)
+        .lean()
+    : [];
 
   const matchedIds = matchedPatients.map((p) => p._id);
 
   const patientLinkQuery = matchedIds.length ? [{ patient: { $in: matchedIds } }] : [];
 
-  const corePromises = [
-    Appointment.find({
-      ...branchFilter,
-      $or: [{ reason: regex }, ...patientLinkQuery],
-    })
-      .populate('patient', 'firstName lastName phone patientId')
-      .populate('doctor', 'name')
-      .limit(5)
-      .lean(),
-    Invoice.find({
-      ...branchFilter,
-      $or: [{ invoiceNo: regex }, ...patientLinkQuery],
-    })
-      .populate('patient', 'firstName lastName phone patientId')
-      .limit(5)
-      .lean(),
-    Branch.find({ ...branchFilter, $or: [{ name: regex }, { address: regex }, { phone: regex }] })
-      .select('name address phone')
-      .limit(5)
-      .lean(),
-    User.find({ ...branchFilter, $or: [{ name: regex }, { email: regex }, { phone: regex }] })
-      .select('name email phone roleId branch isDoctor')
-      .populate('branch', 'name')
-      .limit(5)
-      .lean(),
-    Wallet.find({ ...branchFilter })
-      .populate({
-        path: 'patient',
-        match: { $or: [{ firstName: regex }, { lastName: regex }, { patientId: regex }, { phone: regex }] },
-        select: 'firstName lastName phone patientId',
+  const corePromises = [];
+  if (can('appointments')) {
+    corePromises.push(
+      Appointment.find({
+        ...branchFilter,
+        $or: [{ reason: regex }, ...patientLinkQuery],
       })
-      .limit(5)
-      .lean(),
-    InstallmentPlan.find({ ...branchFilter })
-      .populate({
-        path: 'patient',
-        match: { $or: [{ firstName: regex }, { lastName: regex }, { patientId: regex }, { phone: regex }] },
-        select: 'firstName lastName phone patientId',
+        .populate('patient', 'firstName lastName phone patientId')
+        .populate('doctor', 'name')
+        .limit(5)
+        .lean(),
+    );
+  } else {
+    corePromises.push(Promise.resolve([]));
+  }
+  if (can('billing')) {
+    corePromises.push(
+      Invoice.find({
+        ...branchFilter,
+        $or: [{ invoiceNo: regex }, ...patientLinkQuery],
       })
-      .select('planNo totalAmount paidAmount status')
-      .limit(5)
-      .lean(),
-  ];
+        .populate('patient', 'firstName lastName phone patientId')
+        .limit(5)
+        .lean(),
+    );
+  } else {
+    corePromises.push(Promise.resolve([]));
+  }
+  if (can('branches')) {
+    // Branch documents are identified by _id, not by a branch field.
+    // A clinic user is scoped to a single branch; system admins scope by tenant.
+    const branchSearchFilter = branchFilter.branch
+      ? { _id: branchFilter.branch, ...(branchFilter.tenant ? { tenant: branchFilter.tenant } : {}) }
+      : branchFilter;
+    corePromises.push(
+      Branch.find({ ...branchSearchFilter, $or: [{ name: regex }, { address: regex }, { phone: regex }] })
+        .select('name address phone')
+        .limit(5)
+        .lean(),
+    );
+  } else {
+    corePromises.push(Promise.resolve([]));
+  }
+  if (can('users')) {
+    corePromises.push(
+      User.find({ ...branchFilter, $or: [{ name: regex }, { email: regex }, { phone: regex }] })
+        .select('name email phone roleId branch isDoctor')
+        .populate('branch', 'name')
+        .limit(5)
+        .lean(),
+    );
+  } else {
+    corePromises.push(Promise.resolve([]));
+  }
+  if (can('billing')) {
+    corePromises.push(
+      Wallet.find({ ...branchFilter })
+        .populate({
+          path: 'patient',
+          match: { $or: [{ firstName: regex }, { lastName: regex }, { patientId: regex }, { phone: regex }] },
+          select: 'firstName lastName phone patientId',
+        })
+        .limit(5)
+        .lean(),
+    );
+  } else {
+    corePromises.push(Promise.resolve([]));
+  }
+  if (can('billing')) {
+    corePromises.push(
+      InstallmentPlan.find({ ...branchFilter })
+        .populate({
+          path: 'patient',
+          match: { $or: [{ firstName: regex }, { lastName: regex }, { patientId: regex }, { phone: regex }] },
+          select: 'firstName lastName phone patientId',
+        })
+        .select('planNo totalAmount paidAmount status')
+        .limit(5)
+        .lean(),
+    );
+  } else {
+    corePromises.push(Promise.resolve([]));
+  }
 
-  const textOnlyPromises = phoneLike ? [] : [
-    Role.find({ ...branchFilter, $or: [{ name: regex }, { description: regex }] })
-      .select('name description')
-      .limit(5)
-      .lean(),
-    InventoryItem.find({ ...branchFilter, $or: [{ name: regex }, { sku: regex }, { category: regex }, { supplier: regex }] })
-      .select('name sku category unit quantity reorderPoint')
-      .limit(5)
-      .lean(),
-    Expense.find({ ...branchFilter, $or: [{ expenseNo: regex }, { description: regex }, { category: regex }] })
-      .select('expenseNo description category amount date')
-      .limit(5)
-      .lean(),
-    OwnerDrawing.find({ ...branchFilter, $or: [{ drawingNo: regex }, { description: regex }] })
-      .select('drawingNo description amount date')
-      .populate('owner', 'name')
-      .limit(5)
-      .lean(),
-    TreatmentPlan.find({ ...branchFilter, $or: [{ title: regex }, { diagnosis: regex }] })
-      .select('title diagnosis status')
-      .populate('patient', 'firstName lastName patientId')
-      .limit(5)
-      .lean(),
-    Prescription.find({ ...branchFilter, $or: [{ diagnosis: regex }] })
-      .select('diagnosis medications')
-      .populate('patient', 'firstName lastName patientId')
-      .populate('doctor', 'name')
-      .limit(5)
-      .lean(),
-    ClinicalNote.find({ ...branchFilter, $or: [{ chiefComplaint: regex }, { examination: regex }, { diagnosis: regex }, { plan: regex }] })
-      .select('chiefComplaint examination diagnosis plan visitDate')
-      .populate('patient', 'firstName lastName patientId')
-      .populate('doctor', 'name')
-      .limit(5)
-      .lean(),
-  ];
+  const textOnlyPromises = [];
+  if (!phoneLike && can('roles')) {
+    textOnlyPromises.push(
+      Role.find({ ...branchFilter, $or: [{ name: regex }, { description: regex }] })
+        .select('name description')
+        .limit(5)
+        .lean(),
+    );
+  }
+  if (!phoneLike && can('inventory')) {
+    textOnlyPromises.push(
+      InventoryItem.find({ ...branchFilter, $or: [{ name: regex }, { sku: regex }, { category: regex }, { supplier: regex }] })
+        .select('name sku category unit quantity reorderPoint')
+        .limit(5)
+        .lean(),
+    );
+  }
+  if (!phoneLike && can('accounting')) {
+    textOnlyPromises.push(
+      Expense.find({ ...branchFilter, $or: [{ expenseNo: regex }, { description: regex }, { category: regex }] })
+        .select('expenseNo description category amount date')
+        .limit(5)
+        .lean(),
+    );
+    textOnlyPromises.push(
+      OwnerDrawing.find({ ...branchFilter, $or: [{ drawingNo: regex }, { description: regex }] })
+        .select('drawingNo description amount date')
+        .populate('owner', 'name')
+        .limit(5)
+        .lean(),
+    );
+  }
+  if (!phoneLike && can('emr')) {
+    textOnlyPromises.push(
+      TreatmentPlan.find({ ...branchFilter, $or: [{ title: regex }, { diagnosis: regex }] })
+        .select('title diagnosis status')
+        .populate('patient', 'firstName lastName patientId')
+        .limit(5)
+        .lean(),
+    );
+  }
+  if (!phoneLike && can('prescriptions')) {
+    textOnlyPromises.push(
+      Prescription.find({ ...branchFilter, $or: [{ diagnosis: regex }] })
+        .select('diagnosis medications')
+        .populate('patient', 'firstName lastName patientId')
+        .populate('doctor', 'name')
+        .limit(5)
+        .lean(),
+    );
+  }
+  if (!phoneLike && can('emr')) {
+    textOnlyPromises.push(
+      ClinicalNote.find({ ...branchFilter, $or: [{ chiefComplaint: regex }, { examination: regex }, { diagnosis: regex }, { plan: regex }] })
+        .select('chiefComplaint examination diagnosis plan visitDate')
+        .populate('patient', 'firstName lastName patientId')
+        .populate('doctor', 'name')
+        .limit(5)
+        .lean(),
+    );
+  }
 
   const [coreResults, textResults] = await Promise.all([
     Promise.all(corePromises),

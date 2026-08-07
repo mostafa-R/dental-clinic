@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { require2fa, require2faSuperAdmin } from "../../../middleware/require2fa.js";
 import { authorizeSite, protectSite, requireBranchAccess, requireTenantAccess } from "../../../middleware/siteAuth.js";
 import { validate } from "../../../middleware/validate.js";
 import { createBranchSchema, updateBranchSchema } from "../../users/branch.validator.js";
@@ -24,6 +25,7 @@ router.get("/:id", authorizeSite("super_admin", "admin", "support"), requireBran
 router.post(
   "/",
   authorizeSite("super_admin", "admin"),
+  require2fa,
   requireTenantAccess,
   validate(createBranchSchema),
   createBranch,
@@ -33,12 +35,13 @@ router.post(
 router.put(
   "/:id",
   authorizeSite("super_admin", "admin"),
+  require2fa,
   requireBranchAccess,
   validate(updateBranchSchema),
   updateBranch,
 );
 
 // Delete branch - validates branch exists
-router.delete("/:id", authorizeSite("super_admin"), requireBranchAccess, deleteBranch);
+router.delete("/:id", authorizeSite("super_admin"), require2faSuperAdmin, requireBranchAccess, deleteBranch);
 
 export default router;

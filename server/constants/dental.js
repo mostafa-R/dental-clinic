@@ -50,7 +50,7 @@ export const ATTACHMENT_TYPES = ['xray', 'photo', 'document'];
 /**
  * Canonical Palmer quadrant keys. Symbols open toward the dental midline.
  */
-export const QUADRANTS = {
+const QUADRANTS = {
   ur: { label: 'Upper Right', symbol: '\u2518' }, // ┘
   ul: { label: 'Upper Left', symbol: '\u2514' }, // └
   ll: { label: 'Lower Left', symbol: '\u2510' }, // ┐
@@ -73,7 +73,7 @@ const PALMER_NAMES = [
  * Map a Universal Numbering tooth (1-32) to its notation metadata.
  * Returns null for out-of-range values so callers can guard inputs.
  */
-export function describeTooth(universal) {
+function describeTooth(universal) {
   const n = Number(universal);
   if (!Number.isInteger(n) || n < 1 || n > 32) return null;
 
@@ -124,7 +124,7 @@ export function describeTooth(universal) {
 }
 
 /** Ordered list of all 32 permanent teeth with full notation metadata. */
-export const PERMANENT_TEETH = Array.from({ length: 32 }, (_, i) => describeTooth(i + 1));
+const PERMANENT_TEETH = Array.from({ length: 32 }, (_, i) => describeTooth(i + 1));
 
 /**
  * Build the default set of 32 sound teeth for a freshly created chart.

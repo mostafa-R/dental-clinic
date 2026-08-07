@@ -58,40 +58,6 @@ export async function connectRedis() {
   }
 }
 
-export async function cacheGet(key) {
-  if (!redis || !isConnected) return null;
-  try {
-    const val = await redis.get(key);
-    if (val !== null) {
-      cacheHits++;
-      return JSON.parse(val);
-    }
-    cacheMisses++;
-    return null;
-  } catch {
-    cacheMisses++;
-    return null;
-  }
-}
-
-export async function cacheSet(key, value, ttlSeconds = 300) {
-  if (!redis || !isConnected) return;
-  try {
-    await redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
-  } catch (err) {
-    console.warn('[Redis] cacheSet error:', err.message);
-  }
-}
-
-export async function cacheDel(key) {
-  if (!redis || !isConnected) return;
-  try {
-    await redis.del(key);
-  } catch (err) {
-    console.warn('[Redis] cacheDel error:', err.message);
-  }
-}
-
 export async function getRedisInfo() {
   if (!redis || !isConnected) {
     return { connected: false, cacheHits, cacheMisses, hitRate: 0 };
@@ -118,13 +84,7 @@ export async function getRedisInfo() {
   }
 }
 
-export function resetCacheStats() {
-  cacheHits = 0;
-  cacheMisses = 0;
-}
-
 // --- Telemetry counters ---
-
 const TELEMETRY_PREFIX = 'telemetry:';
 const TELEMETRY_TTL = 86400;
 
@@ -139,18 +99,7 @@ export async function incrementTenantCounter(tenantId, counter) {
   } catch {}
 }
 
-export async function decrementTenantCounter(tenantId, counter) {
-  if (!redis || !isConnected) return;
-  const key = `${TELEMETRY_PREFIX}${counter}:${tenantId}`;
-  try {
-    await redis.multi()
-      .decr(key)
-      .expire(key, TELEMETRY_TTL)
-      .exec();
-  } catch {}
-}
-
-export async function getTelemetryCounters() {
+async function getTelemetryCounters() {
   if (!redis || !isConnected) return {};
   try {
     const result = {};

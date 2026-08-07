@@ -21,12 +21,21 @@ vi.mock('../utils/logger.js', () => ({
   logError: vi.fn(),
 }));
 
-describe('Invoice Counter Transaction', () => {
-  beforeAll(async () => {
-    const testDbUri = process.env.TEST_MONGO_URI || 'mongodb://127.0.0.1:27017/dental_os_test';
-    await mongoose.connect(testDbUri);
-  });
+const testDbUri = process.env.TEST_MONGO_URI || 'mongodb://127.0.0.1:27017/dental_os_test';
+await mongoose.connect(testDbUri);
 
+// Multi-document transactions require a replica set (or mongos). A standalone
+// MongoDB deployment cannot run them, so those tests are skipped there and
+// exercised in CI, which runs a single-node replica set.
+let supportsTransactions = false;
+try {
+  await mongoose.connection.db.admin().command({ replSetGetStatus: 1 });
+  supportsTransactions = true;
+} catch {
+  supportsTransactions = false;
+}
+
+describe('Invoice Counter Transaction', () => {
   afterAll(async () => {
     await mongoose.disconnect();
   });
@@ -41,7 +50,7 @@ describe('Invoice Counter Transaction', () => {
     }
   });
 
-  describe('Counter.next with session', () => {
+  describe.skipIf(!supportsTransactions)('Counter.next with session', () => {
     it('should increment counter within a transaction', async () => {
       const Counter = (await import('../core/counters.js')).default;
       const { withTransaction } = await import('../core/transaction.js');
@@ -161,7 +170,7 @@ describe('Invoice Counter Transaction', () => {
     });
   });
 
-  describe('Tenant-scoped counters', () => {
+  describe.skipIf(!supportsTransactions)('Tenant-scoped counters', () => {
     it('should maintain separate counters per tenant', async () => {
       const Counter = (await import('../core/counters.js')).default;
       const { withTransaction } = await import('../core/transaction.js');

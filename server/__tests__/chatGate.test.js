@@ -113,4 +113,31 @@ describe("chat routes — role and plan gating", () => {
     const res = await request(makeApp()).get("/api/chat");
     expect(res.status).toBe(401);
   });
+
+  it("rejects listing messages without recipient or channel (no branch-wide leak)", async () => {
+    const res = await request(makeApp())
+      .get("/api/chat")
+      .set("Cookie", "access_token=tok");
+    expect(res.status).toBe(400);
+    expect(chatService.listMessages).not.toHaveBeenCalled();
+  });
+
+  it("rejects listing messages with both recipient and channel", async () => {
+    const res = await request(makeApp())
+      .get("/api/chat")
+      .set("Cookie", "access_token=tok")
+      .query({ recipient: "64b0000000000000000000a1", channel: "general" });
+    expect(res.status).toBe(400);
+    expect(chatService.listMessages).not.toHaveBeenCalled();
+  });
+
+  it("allows listing a specific DM or channel conversation", async () => {
+    vi.mocked(chatService.listMessages).mockResolvedValue([]);
+    const res = await request(makeApp())
+      .get("/api/chat")
+      .set("Cookie", "access_token=tok")
+      .query({ recipient: "64b0000000000000000000a1" });
+    expect(res.status).toBe(200);
+    expect(chatService.listMessages).toHaveBeenCalled();
+  });
 });

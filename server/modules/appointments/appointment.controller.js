@@ -183,10 +183,11 @@ async function assertNoPatientOverlap({ patient, branch, start, end, excludeId }
 async function assertClinicHours(branch, start, end) {
   if (!start || !end) return;
 
-  // Reload branch with working hours if not populated
-  const branchDoc = branch.workingHours
+  // Reload branch with working hours if not populated. NOT lean — the
+  // isWithinWorkingHours schema method must survive on the document.
+  const branchDoc = branch?.workingHours
     ? branch
-    : await Branch.findById(branch._id || branch).lean();
+    : await Branch.findById(branch?._id || branch);
 
   if (!branchDoc) return;
 
@@ -202,10 +203,11 @@ async function assertClinicHours(branch, start, end) {
 async function assertDoctorAvailability(doctor, branch, start, end) {
   if (!start || !end) return;
 
-  // Check doctor's working hours
-  const doctorDoc = doctor.workingHours
+  // Check doctor's working hours. NOT lean — isAvailableAt is a schema
+  // method and must survive on the document.
+  const doctorDoc = doctor?.workingHours
     ? doctor
-    : await User.findById(doctor._id || doctor).select('workingHours appointmentSettings isDoctor').lean();
+    : await User.findById(doctor?._id || doctor).select('workingHours appointmentSettings isDoctor');
 
   if (!doctorDoc) return;
 
@@ -340,8 +342,10 @@ export const updateAppointment = asyncHandler(async (req, res) => {
 
   // Only run availability checks if time, doctor, or patient changes
   if (data.start || data.end || data.doctor || data.patient) {
-    const branch = await Branch.findById(existing.branch).lean();
-    const doctorToCheck = doctor || await User.findById(existing.doctor).select('workingHours appointmentSettings isDoctor').lean();
+    // NOT lean: isWithinWorkingHours / isAvailableAt are schema methods and
+    // are stripped from lean documents.
+    const branch = await Branch.findById(existing.branch);
+    const doctorToCheck = doctor || await User.findById(existing.doctor).select('workingHours appointmentSettings isDoctor');
 
     // Validate clinic working hours
     await assertClinicHours(branch, newStart, newEnd);
@@ -380,6 +384,10 @@ export const updateAppointment = asyncHandler(async (req, res) => {
     { $set: setPayload },
     { new: true, runValidators: true },
   ).populate(POPULATE);
+
+  if (!appointment) {
+    throw ApiError.notFound('Appointment not found');
+  }
 
   emitAppointment(existing.branch, 'appointment:updated', appointment);
 

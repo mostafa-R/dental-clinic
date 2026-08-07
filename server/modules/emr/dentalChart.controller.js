@@ -19,19 +19,16 @@ function emitChart(branchId, chart) {
 export const getDentalChart = asyncHandler(async (req, res) => {
   const patient = await loadScopedPatient(req, req.params.patientId);
 
-  let chart = await DentalChart.findOne({ patient: patient._id, branch: patient.branch });
-  let isNew = false;
-  if (!chart) {
-    chart = await DentalChart.create({
-      branch: patient.branch,
-      tenant: patient.tenant,
-      patient: patient._id,
-      updatedBy: req.user._id,
-    });
-    isNew = true;
-  }
+  // Race-free upsert: concurrent first-access GETs can no longer both try to
+  // create the chart (which would throw a duplicate-key error on the unique
+  // { branch, patient } index). MongoDB retries the upsert on a lost race.
+  const chart = await DentalChart.findOneAndUpdate(
+    { patient: patient._id, branch: patient.branch },
+    { $setOnInsert: { tenant: patient.tenant, updatedBy: req.user._id } },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
 
-  if (isNew || !chart.populated('patient')) {
+  if (!chart.populated('patient')) {
     await chart.populate([
       { path: 'patient', select: 'patientId firstName lastName' },
       { path: 'updatedBy', select: 'name' },

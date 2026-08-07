@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("../modules/users/role.model.js", () => {
   class MockRole {}
   MockRole.findById = vi.fn();
+  MockRole.findOne = vi.fn();
   return { default: MockRole };
 });
 
@@ -61,7 +62,7 @@ describe("resolveRole", () => {
 
   it("returns empty permissions when no Role document exists", async () => {
     vi.mocked(getCachedRole).mockResolvedValue(null);
-    vi.mocked(Role.findById).mockReturnValue({ lean: vi.fn().mockResolvedValue(null) });
+    vi.mocked(Role.findOne).mockReturnValue({ lean: vi.fn().mockResolvedValue(null) });
     const result = await resolveRole({ user: { roleId: "r1", tenant: "t1" } });
     expect(result.isSystemAdmin).toBe(false);
     expect(result.permissionMap().billing).toEqual([]);
@@ -97,10 +98,36 @@ describe("resolveRole", () => {
       isSystemAdmin: true,
       permissions: [{ module: "billing", actions: ["delete"] }],
     });
-    vi.mocked(Role.findById).mockReturnValue({ lean: vi.fn().mockResolvedValue(null) });
+    vi.mocked(Role.findOne).mockReturnValue({ lean: vi.fn().mockResolvedValue(null) });
     const result = await resolveRole({ user: { roleId: "r1", tenant: "t1" } });
     expect(result.isSystemAdmin).toBe(false);
     expect(result.permissionMap().billing).toEqual([]);
+  });
+
+  it("uses a cached role that belongs to the caller's tenant", async () => {
+    vi.mocked(Role.findOne).mockClear();
+    vi.mocked(getCachedRole).mockResolvedValue({
+      _id: "r1",
+      tenant: "t1",
+      isSystemAdmin: false,
+      permissions: [{ module: "appointments", actions: ["read", "update"] }],
+    });
+    const result = await resolveRole({ user: { roleId: "r1", tenant: { _id: "t1", plan: "professional" } } });
+    expect(result.permissionMap().appointments).toEqual(["read", "update"]);
+    expect(Role.findOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects a DB role belonging to another tenant even when cached as missing", async () => {
+    vi.mocked(Role.findOne).mockClear();
+    vi.mocked(getCachedRole).mockResolvedValue(null);
+    vi.mocked(Role.findOne).mockReturnValue({ lean: vi.fn().mockResolvedValue(null) });
+    const result = await resolveRole({ user: { roleId: "r1", tenant: { _id: "t1", plan: "professional" } } });
+    expect(result.isSystemAdmin).toBe(false);
+    expect(result.permissionMap().billing).toEqual([]);
+    expect(Role.findOne).toHaveBeenCalledWith({
+      _id: "r1",
+      $or: [{ tenant: "t1" }, { tenant: null }],
+    });
   });
 });
 

@@ -2,6 +2,10 @@ import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// Run tests in UTC so date/time assertions are deterministic regardless of the
+// machine's local timezone (CI runs UTC; local dev may be anything).
+process.env.TZ = "UTC";
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 // Load the local .env when present (dev machine). Never overrides

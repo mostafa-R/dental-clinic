@@ -5,7 +5,7 @@ function routeKey(method, route) {
   return `${method}:${route}`;
 }
 
-export function trackResponse(method, route, durationMs, statusCode) {
+function trackResponse(method, route, durationMs, statusCode) {
   const key = routeKey(method, route);
   let stat = routeStats.get(key);
 

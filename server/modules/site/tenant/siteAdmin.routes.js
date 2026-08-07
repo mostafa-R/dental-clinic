@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { audit } from "../../../middleware/audit.js";
+import { require2faSuperAdmin } from "../../../middleware/require2fa.js";
 import { authorizeSite, protectSite } from "../../../middleware/siteAuth.js";
 import { validate } from "../../../middleware/validate.js";
 import {
@@ -26,9 +27,9 @@ const adminSchema = z.object({
 
 router.get("/", authorizeSite("super_admin", "admin"), getAdmins);
 router.get("/:id", authorizeSite("super_admin", "admin"), getAdmin);
-router.post("/", authorizeSite("super_admin"), validate(adminSchema), audit("admin.create", "admin"), createAdmin);
-router.put("/:id/permissions", authorizeSite("super_admin"), validate(z.object({ permissions: z.array(z.string()) })), audit("admin.update_permissions", "admin"), updateAdminPermissions);
-router.put("/:id", authorizeSite("super_admin"), validate(adminSchema), audit("admin.update", "admin"), updateAdmin);
-router.delete("/:id", authorizeSite("super_admin"), audit("admin.delete", "admin"), deleteAdmin);
+router.post("/", authorizeSite("super_admin"), require2faSuperAdmin, validate(adminSchema), audit("admin.create", "admin"), createAdmin);
+router.put("/:id/permissions", authorizeSite("super_admin"), require2faSuperAdmin, validate(z.object({ permissions: z.array(z.string()) })), audit("admin.update_permissions", "admin"), updateAdminPermissions);
+router.put("/:id", authorizeSite("super_admin"), require2faSuperAdmin, validate(adminSchema), audit("admin.update", "admin"), updateAdmin);
+router.delete("/:id", authorizeSite("super_admin"), require2faSuperAdmin, audit("admin.delete", "admin"), deleteAdmin);
 
 export default router;

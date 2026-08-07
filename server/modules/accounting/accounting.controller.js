@@ -160,9 +160,13 @@ export const createDrawing = asyncHandler(async (req, res) => {
 
     // If drawing is from a patient's wallet, debit atomically
     if (data.paymentMethod === 'wallet' && data.patient) {
-      const patient = await Patient.findOne({ _id: data.patient, ...(tenant ? { tenant } : {}) }).session(session);
+      const patient = await Patient.findOne({
+        _id: data.patient,
+        ...(tenant ? { tenant } : {}),
+        ...(branch ? { branch } : {}),
+      }).session(session);
       if (!patient) {
-        throw ApiError.badRequest("Referenced patient does not exist", { patient: 'not found' });
+        throw ApiError.badRequest("Referenced patient does not exist in this branch/tenant", { patient: 'not found' });
       }
 
       await addTransaction(patient, {
@@ -202,7 +206,11 @@ export const deleteDrawing = asyncHandler(async (req, res) => {
 
     // If the drawing was from a patient's wallet, credit the wallet back
     if (drawing.paymentMethod === 'wallet' && drawing.patient) {
-      const patient = await Patient.findOne({ _id: drawing.patient }).session(session);
+      const patient = await Patient.findOne({
+        _id: drawing.patient,
+        ...(drawing.tenant ? { tenant: drawing.tenant } : {}),
+        ...(drawing.branch ? { branch: drawing.branch } : {}),
+      }).session(session);
       if (patient) {
         await addTransaction(patient, {
           type: 'credit',

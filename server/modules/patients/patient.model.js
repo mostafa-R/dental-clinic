@@ -4,13 +4,6 @@ import Counter from '../../core/counters.js';
 
 export const GENDER_VALUES = ["male", "female", "other", "unknown"];
 
-export const GENDER_LABELS = Object.freeze({
-  male: "Male",
-  female: "Female",
-  other: "Other",
-  unknown: "Unknown",
-});
-
 const conditionSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },

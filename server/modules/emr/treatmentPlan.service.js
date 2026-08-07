@@ -23,8 +23,11 @@ export function normalizeItem(raw) {
     item.tooth = Number.isInteger(n) && n >= 1 && n <= 32 ? n : null;
   }
   if (item.appointment) item.appointment = toObjectId(item.appointment);
-  if (item.invoice) item.invoice = toObjectId(item.invoice);
   if (item.completedDate) item.completedDate = new Date(item.completedDate);
+  // item.invoice is intentionally ignored here: the invoice link is stamped
+  // server-side by generateInvoiceFromPlan so a client can never pre-link an
+  // item to an invoice or overwrite an existing link.
+  delete item.invoice;
   return item;
 }
 

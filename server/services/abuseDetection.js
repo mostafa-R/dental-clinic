@@ -80,7 +80,7 @@ export async function trackRequest(tenantId, statusCode) {
   return { count: entry.count, errors: entry.errors };
 }
 
-export async function checkAbuse(tenantId) {
+async function checkAbuse(tenantId) {
   const key = getKey(tenantId);
   const redis = await getRedisClient();
 

@@ -120,6 +120,7 @@ describe('Cross-Tenant Isolation', () => {
       name: 'User A',
       email: 'user-a@test.com',
       password: 'Password123!',
+      roleId: new mongoose.Types.ObjectId(),
       role: 'doctor',
       isActive: true,
     });
@@ -132,6 +133,7 @@ describe('Cross-Tenant Isolation', () => {
       name: 'User B',
       email: 'user-b@test.com',
       password: 'Password123!',
+      roleId: new mongoose.Types.ObjectId(),
       role: 'doctor',
       isActive: true,
     });
@@ -305,6 +307,17 @@ describe('Cross-Tenant Isolation', () => {
 });
 
 describe('Tenant Isolation Middleware', () => {
+  // This describe block is separate from the one above, so it needs its own
+  // connection for the DB-backed requireTenantAccess assertions.
+  beforeAll(async () => {
+    const testDbUri = process.env.TEST_MONGO_URI || 'mongodb://127.0.0.1:27017/dental_os_test';
+    await mongoose.connect(testDbUri);
+  });
+
+  afterAll(async () => {
+    await mongoose.disconnect();
+  });
+
   it('should reject invalid tenant ID format', async () => {
     const { requireTenantAccess } = await import('../middleware/siteAuth.js');
     const ApiError = (await import('../utils/ApiError.js')).default;

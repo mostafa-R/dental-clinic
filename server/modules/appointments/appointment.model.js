@@ -108,6 +108,39 @@ appointmentSchema.pre("validate", function validateTimes() {
   }
 });
 
+// Active statuses that occupy a doctor's schedule. Cancelled/completed/no-show
+// records release the slot so it can be rebooked.
+const ACTIVE_STATUSES = ["scheduled", "confirmed", "checked_in", "in_progress"];
+
+/**
+ * Doctor double-booking guard at the model level.
+ *
+ * The partial unique index on { branch, doctor, start } only blocks two
+ * appointments that share the exact same start time. This hook also rejects
+ * overlapping appointments at different start times (e.g. 10:00-11:00 vs
+ * 10:30-11:30), closing the check-then-insert window for direct model writes.
+ */
+appointmentSchema.pre("validate", async function assertNoDoctorOverlap() {
+  if (!ACTIVE_STATUSES.includes(this.status)) return;
+  if (!this.branch || !this.doctor || !this.start || !this.end) return;
+
+  const clash = await this.constructor
+    .findOne({
+      branch: this.branch,
+      doctor: this.doctor,
+      status: { $in: ACTIVE_STATUSES },
+      start: { $lt: this.end },
+      end: { $gt: this.start },
+      _id: { $ne: this._id },
+    })
+    .select("_id")
+    .lean();
+
+  if (clash) {
+    this.invalidate("start", "Doctor already has an overlapping appointment");
+  }
+});
+
 appointmentSchema.virtual("durationMin").get(function durationMin() {
   if (!this.start || !this.end) return 0;
   return Math.round((this.end - this.start) / 60000);
