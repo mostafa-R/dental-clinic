@@ -2,6 +2,7 @@ import cron from "node-cron";
 import PlatformSetting from "../modules/platform/platformSetting.model.js";
 import Subscription from "../modules/site/tenant/subscription.model.js";
 import Tenant from "../modules/site/tenant/tenant.model.js";
+import { invalidateTenant } from "../utils/cache.js";
 
 async function checkAndSuspend() {
   try {
@@ -28,6 +29,10 @@ async function checkAndSuspend() {
 
       await Subscription.findByIdAndUpdate(sub._id, { status: "past_due" });
 
+      // Drop the cached tenant immediately so the status change takes effect
+      // right away instead of after the 2-minute tenant cache TTL.
+      await invalidateTenant(String(sub.tenant._id));
+
       console.log(
         `[Auto-Suspend] Suspended tenant "${sub.tenant.name}" (${sub.tenant._id}) — overdue since ${sub.nextPaymentAt?.toISOString()}`,
       );
@@ -44,6 +49,8 @@ async function checkAndSuspend() {
 }
 
 let suspensionTask = null;
+
+export { checkAndSuspend };
 
 export function startSuspensionCron() {
   suspensionTask = cron.schedule("0 0 * * *", checkAndSuspend);

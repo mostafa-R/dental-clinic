@@ -5,6 +5,30 @@ import { toObjectId, currentTenant } from '../../utils/branchScope.js';
 import ApiError from '../../utils/ApiError.js';
 
 export async function sendMessage({ branch, tenant, senderId, recipient, channel, content }) {
+  if (recipient) {
+    // Isolation: a DM recipient must exist, be active, and belong to the
+    // sender's own branch+tenant. Messages are stored and read branch-scoped,
+    // so allowing a cross-branch/cross-tenant recipient would (a) leak message
+    // content into another clinic's socket rooms and (b) produce messages the
+    // recipient could never list back.
+    const recipientUser = await User.findOne({ _id: toObjectId(recipient) })
+      .select('tenant branch isActive')
+      .lean();
+    if (!recipientUser || !recipientUser.isActive) {
+      throw ApiError.badRequest('Recipient does not exist', { recipient: 'not found' });
+    }
+    if (recipientUser.branch && String(recipientUser.branch) !== String(branch)) {
+      throw ApiError.badRequest('Recipient does not belong to your branch', {
+        recipient: 'branch mismatch',
+      });
+    }
+    if (tenant && String(recipientUser.tenant || '') !== String(tenant)) {
+      throw ApiError.badRequest('Recipient does not belong to your clinic', {
+        recipient: 'tenant mismatch',
+      });
+    }
+  }
+
   const message = await Message.create({
     branch: toObjectId(branch),
     tenant: tenant ? toObjectId(tenant) : null,

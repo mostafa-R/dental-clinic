@@ -42,6 +42,12 @@ export const createUser = asyncHandler(async (req, res) => {
     throw ApiError.badRequest('Role does not belong to your clinic', { roleId: 'tenant mismatch' });
   }
 
+  // Prevent privilege escalation: a system admin role bypasses every
+  // permission check. Mirroring updateUser, it can never be assigned here.
+  if (roleDoc.isSystemAdmin) {
+    throw ApiError.forbidden('Cannot assign a system admin role through this endpoint');
+  }
+
   // Resolve branch: clinic owner must assign to a branch within their tenant.
   let branchId;
   const creatorIsPlatform = req._roleResolved?.isSystemAdmin && !tenant;

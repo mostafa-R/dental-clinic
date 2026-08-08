@@ -15,8 +15,9 @@ export const getUsersByTenant = asyncHandler(async (req, res) => {
 
   const [users, total] = await Promise.all([
     User.find(filter)
-      .select('name email role branch isActive')
+      .select('name email roleId branch isActive')
       .populate('branch', 'name')
+      .populate('roleId', 'name')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)

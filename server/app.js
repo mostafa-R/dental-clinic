@@ -100,12 +100,23 @@ const authLimiter = rateLimit({
   },
 });
 
+// Strict auth limiter on BOTH the unversioned and versioned prefixes.
+// The v1 router is mounted at "/" and "/v1" (routes/routes.js), so the
+// same auth endpoints are reachable via /api/* and /api/v1/*. Without the
+// versioned mounts, /api/v1/auth/login etc. would only get the loose
+// general limiter (200/min), opening a brute-force bypass.
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/refresh", authLimiter);
 app.use("/api/site/auth/login", authLimiter);
 app.use("/api/site/auth/refresh", authLimiter);
 app.use("/api/site/auth/create", authLimiter);
 app.use("/api/site/2fa/verify-login", authLimiter);
+app.use("/api/v1/auth/login", authLimiter);
+app.use("/api/v1/auth/refresh", authLimiter);
+app.use("/api/v1/site/auth/login", authLimiter);
+app.use("/api/v1/site/auth/refresh", authLimiter);
+app.use("/api/v1/site/auth/create", authLimiter);
+app.use("/api/v1/site/2fa/verify-login", authLimiter);
 
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,

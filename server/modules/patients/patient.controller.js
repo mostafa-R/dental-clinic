@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 
 import Patient from './patient.model.js';
+import Branch from '../users/branch.model.js';
 import Tenant from '../site/tenant/tenant.model.js';
 import Counter from '../../core/counters.js';
 import ApiError from '../../utils/ApiError.js';
@@ -38,6 +39,31 @@ function normalizePayload(data) {
     }
   }
   return payload;
+}
+
+/**
+ * Validate a target branch before reassigning a patient to it.
+ * The branch must exist and belong to the patient's own tenant, so a patient
+ * can never be moved into another clinic's branch (cross-tenant PHI leak).
+ * Returns the branch as an ObjectId.
+ */
+async function resolveBranchForReassign(branchId, patientTenant) {
+  const targetBranch = await Branch.findById(toObjectId(branchId)).select('_id tenant').lean();
+  if (!targetBranch) {
+    throw ApiError.badRequest('The selected branch does not exist', { branch: 'not found' });
+  }
+
+  const patientTenantStr = patientTenant ? String(patientTenant) : '';
+  const branchTenantStr = targetBranch.tenant ? String(targetBranch.tenant) : '';
+
+  // Tenant isolation: a tenant-scoped patient must only move within that tenant.
+  if (patientTenantStr && branchTenantStr !== patientTenantStr) {
+    throw ApiError.badRequest('The selected branch does not belong to this clinic', {
+      branch: 'tenant mismatch',
+    });
+  }
+
+  return toObjectId(targetBranch._id);
 }
 
 export const listPatients = asyncHandler(async (req, res) => {
@@ -139,12 +165,18 @@ export const updatePatient = asyncHandler(async (req, res) => {
   const branchFilter = filterByBranch(req);
   const payload = normalizePayload(req.validatedBody);
 
-  // Only system admin may reassign a patient to another branch.
+  const existing = await Patient.findOne({ _id: id, ...branchFilter }).select('_id tenant branch');
+  if (!existing) {
+    throw ApiError.notFound('Patient not found');
+  }
+
+  // Only system admin may reassign a patient to another branch, and the
+  // target branch must belong to the patient's own tenant.
   const canReassignBranch = req._roleResolved?.isSystemAdmin;
   if (!canReassignBranch) {
     delete payload.branch;
   } else if (payload.branch) {
-    payload.branch = toObjectId(payload.branch);
+    payload.branch = await resolveBranchForReassign(payload.branch, existing.tenant);
   }
 
   const patient = await Patient.findOneAndUpdate(

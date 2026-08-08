@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { globalSearch } from './search.controller.js';
 import { protect } from '../../middleware/auth.js';
 import { checkPermission } from '../../middleware/checkPermission.js';
+import { phiRestrict } from '../../middleware/phiRestrict.js';
 import { validate } from '../../middleware/validate.js';
 
 const searchQuerySchema = z.object({
@@ -12,6 +13,6 @@ const searchQuerySchema = z.object({
 
 const router = Router();
 
-router.get('/', protect, checkPermission('patients', 'read'), validate(searchQuerySchema, 'query'), globalSearch);
+router.get('/', protect, checkPermission('patients', 'read'), phiRestrict, validate(searchQuerySchema, 'query'), globalSearch);
 
 export default router;

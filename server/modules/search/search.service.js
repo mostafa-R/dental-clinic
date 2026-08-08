@@ -22,13 +22,14 @@ const EMPTY_RESULT = {
   wallets: [], installments: [],
 };
 
-function buildSearchCacheKey(branchFilter, query, allowedModules) {
+function buildSearchCacheKey(branchFilter, query, allowedModules, { userId, impersonating } = {}) {
   const sorted = Object.keys(branchFilter).sort().reduce((acc, k) => {
     acc[k] = String(branchFilter[k]);
     return acc;
   }, {});
   const scope = allowedModules.length ? allowedModules.join(',') : 'none';
-  return `${JSON.stringify(sorted)}:${scope}:${query}`;
+  const viewer = userId ? `${String(userId)}${impersonating ? ':imp' : ''}` : '';
+  return `${viewer}:${JSON.stringify(sorted)}:${scope}:${query}`;
 }
 
 function isPhoneLike(q) {
@@ -41,8 +42,10 @@ function isPhoneLike(q) {
  * @param {object} branchFilter - Branch/tenant scoping filter (from filterByBranch)
  * @param {string} query - Raw search term
  * @param {(module: string) => boolean} can - Returns true when the caller may read the module
+ * @param {{ userId?: string, impersonating?: boolean }} [options] - Viewer identity, used to scope the cache key so
+ *   impersonating sessions never receive (or serve) another user's cached PHI results.
  */
-export async function globalSearch(branchFilter, query, can = () => true) {
+export async function globalSearch(branchFilter, query, can = () => true, options = {}) {
   const q = query?.trim();
   if (!q || q.length < 2) {
     return EMPTY_RESULT;
@@ -53,7 +56,7 @@ export async function globalSearch(branchFilter, query, can = () => true) {
     'inventory', 'accounting', 'emr', 'prescriptions',
   ].filter(can);
 
-  const cacheKey = buildSearchCacheKey(branchFilter, q, allowedModules);
+  const cacheKey = buildSearchCacheKey(branchFilter, q, allowedModules, options);
   const cached = await cacheGet('search', cacheKey);
   if (cached) return cached;
 

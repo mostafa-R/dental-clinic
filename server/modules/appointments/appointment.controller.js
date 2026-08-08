@@ -6,6 +6,7 @@ import asyncHandler from '../../utils/asyncHandler.js';
 import { currentTenant, filterByBranch, resolveBranchForCreate, toObjectId } from '../../utils/branchScope.js';
 import { escapeRegex } from '../../utils/escapeRegex.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
+import { stripPHI } from '../../middleware/phiRestrict.js';
 import Patient from '../patients/patient.model.js';
 import Branch from '../users/branch.model.js';
 import DoctorAvailability, { AVAILABILITY_TYPE } from '../users/doctorAvailability.model.js';
@@ -42,6 +43,15 @@ function emitAppointment(branchId, event, appointment) {
   };
   const resolved = branchId?._id ?? branchId;
   emitToBranch(String(resolved), event, payload);
+}
+
+/**
+ * Serialize an appointment for the response. During an impersonation session
+ * the populated patient/doctor fields carry PHI (phone, etc.) and must be
+ * stripped before leaving the API.
+ */
+function serializeAppointment(appointment, req) {
+  return req.isImpersonation ? stripPHI(appointment.toJSON()) : appointment;
 }
 
 async function loadAppointment(id, branchFilter) {
@@ -94,7 +104,9 @@ export const listAppointments = asyncHandler(async (req, res) => {
   ]);
 
   return sendSuccess(res, {
-    appointments,
+    appointments: req.isImpersonation
+      ? appointments.map((a) => serializeAppointment(a, req))
+      : appointments,
     pagination: {
       page,
       limit,
@@ -115,7 +127,7 @@ export const getAppointment = asyncHandler(async (req, res) => {
     throw ApiError.notFound('Appointment not found');
   }
 
-  return sendSuccess(res, { appointment });
+  return sendSuccess(res, { appointment: serializeAppointment(appointment, req) });
 });
 
 async function assertReferences(payload, branchFilter) {
@@ -301,7 +313,7 @@ export const createAppointment = asyncHandler(async (req, res) => {
   await appointment.populate(POPULATE);
   emitAppointment(branch, 'appointment:created', appointment);
 
-  return sendSuccess(res, { appointment }, 201);
+  return sendSuccess(res, { appointment: serializeAppointment(appointment, req) }, 201);
 });
 
 export const updateAppointment = asyncHandler(async (req, res) => {
@@ -391,7 +403,7 @@ export const updateAppointment = asyncHandler(async (req, res) => {
 
   emitAppointment(existing.branch, 'appointment:updated', appointment);
 
-  return sendSuccess(res, { appointment });
+  return sendSuccess(res, { appointment: serializeAppointment(appointment, req) });
 });
 
 /**
