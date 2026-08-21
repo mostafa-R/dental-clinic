@@ -1,7 +1,6 @@
 import crypto from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { pipeline } from 'node:stream/promises';
-import { createGunzip, createGzip } from 'node:zlib';
+import { unlink } from 'node:fs/promises';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
@@ -13,8 +12,8 @@ function deriveKey(password, salt) {
   return crypto.scryptSync(password, salt, KEY_LENGTH);
 }
 
-function getPassword() {
-  const key = process.env.BACKUP_ENCRYPTION_KEY;
+function getPassword(provided) {
+  const key = provided || process.env.BACKUP_ENCRYPTION_KEY;
   if (!key) {
     throw new Error('BACKUP_ENCRYPTION_KEY is required for file/backup encryption. Set it in .env — do NOT reuse JWT_SECRET.');
   }
@@ -24,12 +23,15 @@ function getPassword() {
 /**
  * Encrypt a file using AES-256-GCM with streaming.
  * Output format: [salt(16)][iv(16)][authTag(16)][encrypted data]
+ * @param {string} password - Optional explicit key. Defaults to the shared
+ *   BACKUP_ENCRYPTION_KEY (used for backup archives and as the legacy key for
+ *   attachments created before per-tenant keys existed).
  */
-export async function encryptFile(inputPath, outputPath) {
-  const password = getPassword();
+export async function encryptFile(inputPath, outputPath, password) {
+  const secret = getPassword(password);
   const salt = crypto.randomBytes(SALT_LENGTH);
   const iv = crypto.randomBytes(IV_LENGTH);
-  const key = deriveKey(password, salt);
+  const key = deriveKey(secret, salt);
 
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
 
@@ -64,9 +66,11 @@ export async function encryptFile(inputPath, outputPath) {
 /**
  * Decrypt a file encrypted with encryptFile.
  * Input format: [salt(16)][iv(16)][authTag(16)][encrypted data]
+ * @param {string} password - Optional explicit key. Defaults to the shared
+ *   BACKUP_ENCRYPTION_KEY.
  */
-export async function decryptFile(inputPath, outputPath) {
-  const password = getPassword();
+export async function decryptFile(inputPath, outputPath, password) {
+  const secret = getPassword(password);
   
   return new Promise((resolve, reject) => {
     const inputStream = createReadStream(inputPath);
@@ -89,7 +93,7 @@ export async function decryptFile(inputPath, outputPath) {
           iv = headerBuffer.subarray(MAGIC_SIZE + SALT_LENGTH, MAGIC_SIZE + SALT_LENGTH + IV_LENGTH);
           authTag = headerBuffer.subarray(MAGIC_SIZE + SALT_LENGTH + IV_LENGTH, HEADER_SIZE);
 
-          const key = deriveKey(password, salt);
+          const key = deriveKey(secret, salt);
           const decipher = crypto.createDecipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
           decipher.setAuthTag(authTag);
 
@@ -122,4 +126,33 @@ export async function decryptFile(inputPath, outputPath) {
 export function isEncrypted(buffer) {
   if (buffer.length < SALT_LENGTH + IV_LENGTH + AUTH_TAG_LENGTH + 4) return false;
   return buffer.subarray(0, 4).toString('ascii') === 'ENC1';
+}
+
+/**
+ * Decrypt a file trying each candidate key string in order. AES-256-GCM auth
+ * tags fail on the wrong key, so a rejected attempt means "wrong key". Used by
+ * attachments: files written after per-tenant keys exist decrypt with the
+ * tenant key; legacy files fall back to the shared BACKUP_ENCRYPTION_KEY.
+ *
+ * Returns true when a key succeeds; throws the last error when none match.
+ */
+export async function decryptFileWithKeys(inputPath, outputPath, passwords = []) {
+  const candidates = Array.from(new Set(passwords.filter(Boolean)));
+  const envKey = process.env.BACKUP_ENCRYPTION_KEY;
+  if (envKey && !candidates.includes(envKey)) {
+    candidates.push(envKey);
+  }
+
+  let lastError = null;
+  for (const pw of candidates) {
+    try {
+      await decryptFile(inputPath, outputPath, pw);
+      return true;
+    } catch (err) {
+      lastError = err;
+      await unlink(outputPath).catch(() => {});
+    }
+  }
+
+  throw lastError;
 }

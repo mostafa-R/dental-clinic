@@ -3,6 +3,11 @@ import crypto from 'node:crypto';
 import nodemailer from 'nodemailer';
 import { getRedis } from '../../../config/redis.js';
 import ApiError from '../../../utils/ApiError.js';
+import {
+  assertNotLocked,
+  recordFailedLogin,
+  resetFailedLogins,
+} from '../../../utils/loginThrottle.js';
 import { logger, logInfo, logWarn } from '../../../utils/logger.js';
 import SiteAdmin from '../admin/admin.model.js';
 import { bootstrap2fa } from './site2fa.service.js';
@@ -13,12 +18,18 @@ const RECOVERY_TOKEN_PREFIX = 'recovery:token:';
 const OTP_EXPIRY_SECONDS = 300; // 5 minutes
 
 export async function authenticateSiteAdmin(email, password) {
+  await assertNotLocked(email);
+
   const admin = await SiteAdmin.findOne({ email }).select('+password');
   if (!admin) throw ApiError.unauthorized('Invalid email or password');
   if (!admin.isActive) throw ApiError.forbidden('Account is disabled');
 
   const isMatch = await admin.comparePassword(password);
-  if (!isMatch) throw ApiError.unauthorized('Invalid email or password');
+  if (!isMatch) {
+    await recordFailedLogin(email);
+    throw ApiError.unauthorized('Invalid email or password');
+  }
+  await resetFailedLogins(email);
 
   if (admin.role === 'super_admin' && !admin.twoFactorEnabled) {
     throw ApiError.forbidden('Super admin must enable 2FA before logging in. Use the recovery endpoint or the seed bootstrap to configure it.');

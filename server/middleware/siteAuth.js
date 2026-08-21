@@ -1,6 +1,10 @@
 import SiteAdmin from "../modules/site/admin/admin.model.js";
 import ApiError from "../utils/ApiError.js";
 import { verifyAccessToken } from "../utils/jwt.js";
+import {
+  effectiveSitePermissions,
+  SITE_ROLE_DEFAULT_PERMISSIONS,
+} from "../constants/sitePermissions.js";
 
 /**
  * Extract client IP from request
@@ -49,6 +53,10 @@ export async function protectSite(req, _res, next) {
       throw ApiError.unauthorized("Token revoked — please log in again");
     }
 
+    // Expose the raw token claims (incl. twoFactorVerified) so downstream
+    // middleware such as require2fa can verify the session actually passed a
+    // 2FA challenge rather than only checking that 2FA is configured.
+    req.siteTokenClaims = decoded;
     req.siteAdmin = admin;
     return next();
   } catch (err) {
@@ -56,7 +64,7 @@ export async function protectSite(req, _res, next) {
   }
 }
 
-// Authorize site admin roles
+// Authorize site admin roles and enforce granular permissions.
 export function authorizeSite(...roles) {
   if (roles.length === 0) {
     throw new Error("authorizeSite() requires at least one role");
@@ -67,12 +75,30 @@ export function authorizeSite(...roles) {
       return next(ApiError.unauthorized("Not authenticated"));
     }
 
-    // Treat "site_admin" as equivalent to the legacy "super_admin"
-    const effectiveRole = req.siteAdmin.role === 'site_admin' ? 'super_admin' : req.siteAdmin.role;
-    if (!roles.includes(effectiveRole)) {
+    const { role, permissions } = req.siteAdmin;
+
+    if (!roles.includes(role)) {
       return next(
         ApiError.forbidden("You do not have permission to perform this action"),
       );
+    }
+
+    // `super_admin` always has full access. For every other role the stored
+    // `permissions` array is the effective grant (falling back to the role's
+    // default set when empty) and must overlap the capabilities of at least
+    // one of the non-super_admin roles allowed on this route.
+    if (role !== "super_admin") {
+      const effective = effectiveSitePermissions(role, permissions);
+      const required = new Set(
+        roles
+          .filter((r) => r !== "super_admin")
+          .flatMap((r) => SITE_ROLE_DEFAULT_PERMISSIONS[r] || []),
+      );
+      if (!effective.some((p) => required.has(p))) {
+        return next(
+          ApiError.forbidden("Your account is not authorized for this action"),
+        );
+      }
     }
 
     return next();

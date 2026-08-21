@@ -3,6 +3,7 @@ import PlatformSetting from "../modules/platform/platformSetting.model.js";
 import Subscription from "../modules/site/tenant/subscription.model.js";
 import Tenant from "../modules/site/tenant/tenant.model.js";
 import { invalidateTenant } from "../utils/cache.js";
+import { withTransaction } from "../core/transaction.js";
 
 async function checkAndSuspend() {
   try {
@@ -22,12 +23,22 @@ async function checkAndSuspend() {
     for (const sub of overdue) {
       if (!sub.tenant) continue;
 
-      await Tenant.findByIdAndUpdate(sub.tenant._id, {
-        status: "suspended",
-        isActive: false,
-      });
+      // Tenant suspension + subscription status must land atomically — a
+      // partial failure between the two writes would leave a suspended tenant
+      // with an active subscription (or an overdue tenant never suspended).
+      await withTransaction(async (session) => {
+        await Tenant.findByIdAndUpdate(
+          sub.tenant._id,
+          { status: "suspended", isActive: false },
+          { session },
+        );
 
-      await Subscription.findByIdAndUpdate(sub._id, { status: "past_due" });
+        await Subscription.findByIdAndUpdate(
+          sub._id,
+          { status: "past_due" },
+          { session },
+        );
+      });
 
       // Drop the cached tenant immediately so the status change takes effect
       // right away instead of after the 2-minute tenant cache TTL.

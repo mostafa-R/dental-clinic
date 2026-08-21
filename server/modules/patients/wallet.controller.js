@@ -2,6 +2,7 @@ import * as walletService from './wallet.service.js';
 import { loadScopedPatient } from '../../utils/branchScope.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
+import { stripPHI } from '../../middleware/phiRestrict.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 import { emitToBranch } from '../../socket/index.js';
 import Invoice from '../billing/invoice.model.js';
@@ -15,8 +16,9 @@ export const getWallet = asyncHandler(async (req, res) => {
   const start = Math.max(0, wallet.transactions.length - page * limit);
   const end = start + limit;
   const slicedTransactions = wallet.transactions.slice(start, end);
+  const data = { ...wallet.toJSON(), transactions: slicedTransactions };
   return sendSuccess(res, {
-    wallet: { ...wallet.toJSON(), transactions: slicedTransactions },
+    wallet: req.isImpersonation ? stripPHI(data) : data,
     pagination: {
       page,
       limit,
@@ -49,5 +51,6 @@ export const addWalletTransaction = asyncHandler(async (req, res) => {
 
   const wallet = await walletService.addTransaction(patient, data, req.user._id);
   emitToBranch(String(patient.branch), 'wallet:updated', { wallet });
-  return sendSuccess(res, { wallet });
+  const result = wallet.toJSON ? wallet.toJSON() : wallet;
+  return sendSuccess(res, { wallet: req.isImpersonation ? stripPHI(result) : result });
 });

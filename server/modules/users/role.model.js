@@ -52,7 +52,7 @@ const roleSchema = new mongoose.Schema(
     },
     /**
      * If true, this role bypasses all permission checks (platform/clinic owner).
-     * Built-in site_admin / clinic_admin roles are system-managed and always isSystemAdmin.
+     * Built-in clinic_admin roles are system-managed and always isSystemAdmin.
      */
     isSystemAdmin: {
       type: Boolean,

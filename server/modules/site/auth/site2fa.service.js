@@ -23,6 +23,8 @@ export async function bootstrap2fa(admin) {
   const hashedCodes = await Promise.all(backupCodes.map((c) => bcrypt.hash(c, 10)));
   admin.twoFactorBackupCodes = hashedCodes;
   admin.twoFactorEnabled = true;
+  // Revoke every existing session: any 2FA state change invalidates old tokens
+  // so a session created before the change can never claim to be verified.
   admin.tokenVersion = (admin.tokenVersion || 0) + 1;
   await admin.save();
 
@@ -60,7 +62,7 @@ export async function verify2fa(adminId, token) {
   if (!result.valid) throw ApiError.badRequest('Invalid token. Try again.');
 
   admin.twoFactorEnabled = true;
-  admin.tokenVersion = (admin.tokenVersion || 0) + 1;
+  admin.tokenVersion = (admin.tokenVersion || 0) + 1; // invalidate existing sessions on 2FA enable
   await admin.save();
   return admin;
 }
@@ -76,7 +78,7 @@ export async function disable2fa(adminId, token) {
   admin.twoFactorEnabled = false;
   admin.twoFactorSecret = null;
   admin.twoFactorBackupCodes = [];
-  admin.tokenVersion = (admin.tokenVersion || 0) + 1;
+  admin.tokenVersion = (admin.tokenVersion || 0) + 1; // invalidate existing sessions on 2FA disable
   await admin.save();
   return admin;
 }

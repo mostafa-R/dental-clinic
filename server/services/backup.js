@@ -13,7 +13,8 @@ function getBackupDir() {
   return process.env.BACKUP_DIR || path.join(__dirname, "..", "backups");
 }
 
-function getRetentionDays() {
+function getRetentionDays(override) {
+  if (typeof override === "number" && override > 0) return override;
   return parseInt(process.env.BACKUP_RETENTION_DAYS, 10) || 30;
 }
 
@@ -51,10 +52,23 @@ function runMongodump(mongodumpBin, uri, archivePath) {
   });
 }
 
-export async function performBackup(type = "scheduled", triggeredBy = null) {
+// Interlock: never run two mongodumps at once. The cron and the manual
+// "run now" endpoint share this process, so a manual trigger while a
+// scheduled backup is still running is rejected instead of writing two
+// archives to the same dir.
+let backupInProgress = false;
+
+export async function performBackup(type = "scheduled", triggeredBy = null, options = {}) {
+  if (backupInProgress) {
+    throw new Error("A backup is already in progress. Please try again when it finishes.");
+  }
+
   const start = Date.now();
   const backupDir = getBackupDir();
+  const retentionDays = getRetentionDays(options.retentionDays);
   const uri = getMongoUri();
+
+  backupInProgress = true;
 
   await mkdir(backupDir, { recursive: true });
 
@@ -129,7 +143,7 @@ export async function performBackup(type = "scheduled", triggeredBy = null) {
     logEntry.dbSizeBytes = dbSizeBytes;
     await logEntry.save();
 
-    await cleanOldBackups(backupDir);
+    await cleanOldBackups(backupDir, retentionDays);
 
     return logEntry;
   } catch (err) {
@@ -141,11 +155,13 @@ export async function performBackup(type = "scheduled", triggeredBy = null) {
     try { await rm(finalPath); } catch {}
 
     throw err;
+  } finally {
+    backupInProgress = false;
   }
 }
 
-async function cleanOldBackups(backupDir) {
-  const retention = getRetentionDays();
+async function cleanOldBackups(backupDir, retentionDays) {
+  const retention = getRetentionDays(retentionDays);
   const cutoff = Date.now() - retention * 24 * 60 * 60 * 1000;
 
   try {

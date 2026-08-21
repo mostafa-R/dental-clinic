@@ -10,6 +10,40 @@ const router = Router();
 
 router.use(protectSite);
 
+/**
+ * @swagger
+ * /api/v1/site/quarantine/{tenantId}/remove:
+ *   put:
+ *     tags: [Site Quarantine]
+ *     summary: Remove a tenant from quarantine
+ *     description: Site realm. Requires `super_admin` role and 2FA confirmation.
+ *     security:
+ *       - siteAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: tenantId
+ *         required: true
+ *         schema: { $ref: '#/components/schemas/ObjectId' }
+ *     responses:
+ *       '200':
+ *         description: Quarantine removed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     message: { type: string }
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ *       '404':
+ *         $ref: '#/components/responses/NotFound'
+ */
 router.put(
   '/:tenantId/remove',
   authorizeSite('super_admin'),
@@ -18,6 +52,50 @@ router.put(
   removeQuarantine,
 );
 
+/**
+ * @swagger
+ * /api/v1/site/quarantine/{tenantId}:
+ *   put:
+ *     tags: [Site Quarantine]
+ *     summary: Quarantine a tenant
+ *     description: Site realm. Requires `super_admin` role and 2FA confirmation. Blocks the tenant and flags it for abuse review.
+ *     security:
+ *       - siteAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: tenantId
+ *         required: true
+ *         schema: { $ref: '#/components/schemas/ObjectId' }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason: { type: string }
+ *     responses:
+ *       '200':
+ *         description: Tenant quarantined
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     message: { type: string }
+ *       '400':
+ *         $ref: '#/components/responses/ValidationError'
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ *       '404':
+ *         $ref: '#/components/responses/NotFound'
+ */
 router.put(
   '/:tenantId',
   authorizeSite('super_admin'),
@@ -27,6 +105,35 @@ router.put(
   setQuarantine,
 );
 
+/**
+ * @swagger
+ * /api/v1/site/quarantine/checks:
+ *   get:
+ *     tags: [Site Quarantine]
+ *     summary: List pending abuse checks
+ *     description: Site realm. Requires `super_admin` or `admin` role. Returns tenants flagged by automated abuse detection.
+ *     security:
+ *       - siteAuth: []
+ *     responses:
+ *       '200':
+ *         description: Pending checks
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     checks:
+ *                       type: array
+ *                       items: { type: object }
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ */
 router.get(
   '/checks',
   authorizeSite('super_admin', 'admin'),

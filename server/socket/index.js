@@ -6,6 +6,7 @@ import Tenant from '../modules/site/tenant/tenant.model.js';
 import User from '../modules/users/user.model.js';
 import { verifyAccessToken } from '../utils/jwt.js';
 import { planIncludesModule } from '../constants/plans.js';
+import { stripPHI } from '../middleware/phiRestrict.js';
 
 let io = null;
 
@@ -24,6 +25,11 @@ function chatChannelRoom(tenantId, channel) {
 const ADMIN_ROOM = 'admin';
 const CHAT_CHANNELS = ['doctors', 'accounting', 'general'];
 
+// Simple per-IP connection cap so a misbehaving client cannot hold the
+// process hostage with an unbounded number of sockets.
+const IP_CONNECTION_LIMIT = 20;
+const connectionsByIp = new Map();
+
 export function initSocket(httpServer) {
   io = new Server(httpServer, {
     cors: {
@@ -35,6 +41,11 @@ export function initSocket(httpServer) {
   });
 
   io.use((socket, next) => {
+    const ip = socket.handshake.address || 'unknown';
+    if ((connectionsByIp.get(ip) || 0) >= IP_CONNECTION_LIMIT) {
+      return next(new Error(`Too many concurrent connections from this IP`));
+    }
+
     const token = socket.handshake.auth?.token;
     const cookie = socket.handshake.headers?.cookie;
 
@@ -80,6 +91,13 @@ export function initSocket(httpServer) {
           isSystemAdmin,
         };
 
+        // Tag impersonated sessions so room membership below can restrict
+        // them to branch data and never chat/DM rooms.
+        if (decoded.type === 'impersonation') {
+          socket.user.impersonating = true;
+          socket.user.impersonator = decoded.impersonator || null;
+        }
+
         // Enforce tenant subscription status (mirrors middleware/auth.js
         // protect): clinic users from suspended/cancelled/inactive tenants
         // cannot hold a live socket.
@@ -105,18 +123,36 @@ export function initSocket(httpServer) {
   });
 
   io.on('connection', (socket) => {
-    if (socket.user.isSystemAdmin) {
-      socket.join(ADMIN_ROOM);
-    }
-    if (socket.user.branch) {
-      socket.join(branchRoom(socket.user.branch));
-    }
+    const ip = socket.handshake.address || 'unknown';
+    connectionsByIp.set(ip, (connectionsByIp.get(ip) || 0) + 1);
+    socket.on('disconnect', () => {
+      const n = connectionsByIp.get(ip) || 0;
+      if (n <= 1) connectionsByIp.delete(ip);
+      else connectionsByIp.set(ip, n - 1);
+    });
 
-    socket.join(userRoom(socket.user._id));
-    // Join tenant-scoped chat channels — each tenant has isolated rooms and
-    // the chat module must be included in the tenant's subscription plan.
-    if (socket.user.tenant && !socket.user.isSystemAdmin && planIncludesModule(socket.user.tenantPlan, 'chat')) {
-      CHAT_CHANNELS.forEach((ch) => socket.join(chatChannelRoom(socket.user.tenant, ch)));
+    if (socket.user.impersonating) {
+      // Impersonated sessions are read-only views into the target clinic:
+      // they join the branch room so live data refreshes work, but they must
+      // never join chat channel rooms or the impersonated user's personal
+      // room (that would deliver that user's private DMs to the impersonator).
+      if (socket.user.branch) {
+        socket.join(branchRoom(socket.user.branch));
+      }
+    } else {
+      if (socket.user.isSystemAdmin) {
+        socket.join(ADMIN_ROOM);
+      }
+      if (socket.user.branch) {
+        socket.join(branchRoom(socket.user.branch));
+      }
+
+      socket.join(userRoom(socket.user._id));
+      // Join tenant-scoped chat channels — each tenant has isolated rooms and
+      // the chat module must be included in the tenant's subscription plan.
+      if (socket.user.tenant && !socket.user.isSystemAdmin && planIncludesModule(socket.user.tenantPlan, 'chat')) {
+        CHAT_CHANNELS.forEach((ch) => socket.join(chatChannelRoom(socket.user.tenant, ch)));
+      }
     }
 
     socket.on('subscribe:branch', async (branchId) => {
@@ -156,13 +192,34 @@ export function getIO() {
 }
 
 /**
+ * Convert a Mongoose document to a plain object (so stripPHI's deep recursion
+ * can walk nested populated docs) and remove PHI fields.
+ */
+function sanitize(payload) {
+  const plain = payload && typeof payload.toJSON === 'function' ? payload.toJSON() : payload;
+  return stripPHI(plain);
+}
+
+/**
  * Emit a real-time event to everyone who should see changes for a given branch:
  * users in that branch's room, plus any site_admin observing.
+ *
+ * The payload is stripped of PHI per socket: impersonated sessions (which join
+ * the branch room) must not receive patient phone/email/notes over the wire,
+ * while regular clinic users keep the full document.
  */
 export function emitToBranch(branchId, event, payload) {
   if (!io) return;
   const room = branchRoom(branchId);
-  if (room) io.to(room).emit(event, payload);
+  if (!room) return;
+  const roomSockets = io.sockets.adapter.rooms.get(room);
+  if (!roomSockets) return;
+  for (const socketId of roomSockets) {
+    const socket = io.sockets.sockets.get(socketId);
+    if (!socket) continue;
+    const data = socket.user?.impersonating ? sanitize(payload) : payload;
+    io.to(socketId).emit(event, data);
+  }
 }
 
 /**
@@ -182,6 +239,14 @@ export function emitToChat({ recipient, channel, senderId, tenantId, event, payl
     rooms.add(chatChannelRoom(tenantId, channel));
   }
   rooms.forEach((room) => {
-    if (room) io.to(room).emit(event, payload);
+    if (!room) return;
+    const roomSockets = io.sockets.adapter.rooms.get(room);
+    if (!roomSockets) return;
+    for (const socketId of roomSockets) {
+      const socket = io.sockets.sockets.get(socketId);
+      if (!socket) continue;
+      const data = socket.user?.impersonating ? sanitize(payload) : payload;
+      io.to(socketId).emit(event, data);
+    }
   });
 }

@@ -29,26 +29,27 @@ export const cookieOptions = {
   path: "/",
 };
 
-function buildPayload(user, type = "clinic") {
+function buildPayload(user, type = "clinic", extra = {}) {
   return {
     sub: user._id.toString(),
     roleId: user.roleId ? user.roleId.toString() : null,
     branch: user.branch ? user.branch.toString() : null,
     tokenVersion: user.tokenVersion ?? 0,
     type,
+    ...extra,
   };
 }
 
-export function signAccessToken(user, type = "clinic") {
+export function signAccessToken(user, type = "clinic", extra = {}) {
   const { access } = secrets();
-  return jwt.sign(buildPayload(user, type), access, {
+  return jwt.sign(buildPayload(user, type, extra), access, {
     expiresIn: accessExpiry(),
   });
 }
 
-export function signRefreshToken(user, type = "clinic") {
+export function signRefreshToken(user, type = "clinic", extra = {}) {
   const { refresh } = secrets();
-  return jwt.sign(buildPayload(user, type), refresh, {
+  return jwt.sign(buildPayload(user, type, extra), refresh, {
     expiresIn: refreshExpiry(),
   });
 }
@@ -63,9 +64,9 @@ export function verifyRefreshToken(token) {
   return jwt.verify(token, refresh);
 }
 
-export function setAuthCookies(res, user, type = "clinic") {
-  const accessToken = signAccessToken(user, type);
-  const refreshToken = signRefreshToken(user, type);
+export function setAuthCookies(res, user, type = "clinic", extra = {}) {
+  const accessToken = signAccessToken(user, type, extra);
+  const refreshToken = signRefreshToken(user, type, extra);
 
   if (type === "site") {
     res.cookie(SITE_ACCESS_COOKIE, accessToken, {

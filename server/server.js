@@ -58,7 +58,9 @@ async function start() {
   startSuspensionCron();
   startAbuseCron();
   startWhatsAppReminderCron();
-  startBackupCron();
+  startBackupCron().catch((err) => {
+    console.error("[Backup-Cron] Failed to initialize:", err.message);
+  });
   startInstallmentCron();
 
   const shutdown = async (signal) => {

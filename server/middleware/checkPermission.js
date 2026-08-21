@@ -21,7 +21,7 @@ function roleBelongsToTenant(roleDoc, tenantId) {
  * Resolve the Role document for the authenticated user.
  *
  * Resolution order:
- *   1. Platform site_admin / legacy super_admin (no tenant) → always full access
+ *   1. Platform/site admin (no tenant) → always full access
  *   2. Check Redis cache for role document (keyed by roleId)
  *   3. Query MongoDB if cache miss → cache the result
  *   4. If no Role document exists, use built-in defaults from MODULES

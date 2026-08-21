@@ -426,7 +426,7 @@ export const transitionAppointment = asyncHandler(async (req, res) => {
 
   if (appointment.status === nextStatus) {
     await appointment.populate(POPULATE);
-    return sendSuccess(res, { appointment });
+    return sendSuccess(res, { appointment: serializeAppointment(appointment, req) });
   }
 
   if (!canTransition(appointment.status, nextStatus)) {
@@ -441,7 +441,7 @@ export const transitionAppointment = asyncHandler(async (req, res) => {
 
   emitAppointment(appointment.branch, 'appointment:statusChanged', appointment);
 
-  return sendSuccess(res, { appointment });
+  return sendSuccess(res, { appointment: serializeAppointment(appointment, req) });
 });
 
 export const cancelAppointment = asyncHandler(async (req, res) => {
@@ -458,7 +458,7 @@ export const cancelAppointment = asyncHandler(async (req, res) => {
 
   if (appointment.status === 'cancelled') {
     await appointment.populate(POPULATE);
-    return sendSuccess(res, { appointment });
+    return sendSuccess(res, { appointment: serializeAppointment(appointment, req) });
   }
 
   if (!canTransition(appointment.status, 'cancelled')) {
@@ -471,5 +471,5 @@ export const cancelAppointment = asyncHandler(async (req, res) => {
 
   emitAppointment(appointment.branch, 'appointment:statusChanged', appointment);
 
-  return sendSuccess(res, { appointment });
+  return sendSuccess(res, { appointment: serializeAppointment(appointment, req) });
 });

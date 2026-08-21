@@ -38,6 +38,12 @@ export async function protect(req, _res, next) {
       throw ApiError.forbidden('Account is disabled');
     }
 
+    // Deactivated branches must not serve requests — users assigned to one
+    // would otherwise keep full access after the branch is archived.
+    if (user.branch && user.branch.isActive === false) {
+      throw ApiError.forbidden('Your branch has been deactivated. Contact your administrator.');
+    }
+
     // Reject revoked tokens (password change, admin-initiated rotation).
     if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== user.tokenVersion) {
       throw ApiError.unauthorized('Token revoked — please log in again');
@@ -68,8 +74,10 @@ export async function protect(req, _res, next) {
         await cacheTenant(tenantId, tenantConfig);
       }
 
-      // Quick subscription check from cache
-      if (!tenantConfig.isActive || tenantConfig.status === 'suspended' || tenantConfig.status === 'cancelled') {
+      // Quick subscription check from cache. `archived` tenants are rejected
+      // the same as suspended/cancelled — a clinic marked archived is
+      // permanently read-only for its users.
+      if (!tenantConfig.isActive || ['suspended', 'cancelled', 'archived'].includes(tenantConfig.status)) {
         throw ApiError.forbidden('Your clinic subscription is suspended. Contact your platform administrator.');
       }
 

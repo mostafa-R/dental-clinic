@@ -16,6 +16,10 @@ vi.mock("../utils/cache.js", () => ({
   invalidateTenant: vi.fn(),
 }));
 
+vi.mock("../core/transaction.js", () => ({
+  withTransaction: vi.fn(async (fn) => fn({})),
+}));
+
 import PlatformSetting from "../modules/platform/platformSetting.model.js";
 import Subscription from "../modules/site/tenant/subscription.model.js";
 import Tenant from "../modules/site/tenant/tenant.model.js";

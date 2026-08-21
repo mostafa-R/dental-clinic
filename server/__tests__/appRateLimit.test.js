@@ -1,5 +1,19 @@
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// The global /api chain runs the maintenance + ipAllowlist middlewares, each of
+// which does a PlatformSetting.findOne() probe. This test never connects
+// mongoose, so without mocks every request stalls on the 10s buffer timeout and
+// the versioned test (fresh limiter counters) cannot reach 429 within the 60s
+// timeout. Those middlewares are unrelated to rate limiting, so stub them out.
+vi.mock("../middleware/maintenance.js", () => ({
+  maintenance: (_req, _res, next) => next(),
+}));
+
+vi.mock("../middleware/ipAllowlist.js", () => ({
+  ipAllowlist: (_req, _res, next) => next(),
+}));
+
 import app from "../app.js";
 
 const LIMIT = 20;

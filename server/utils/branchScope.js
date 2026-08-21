@@ -45,12 +45,12 @@ export function validateTenantMatch(resourceTenant, expectedTenant, options = {}
  * Build a mongoose filter object scoped to the authenticated user's branch
  * and tenant.
  *
- * - site_admin WITH a tenant (platform admin): restricted to their own
+ * - Site (platform) admin WITH a tenant: restricted to their own
  *   tenant's data, optionally narrowed to a single ?branch= query. This is the
  *   key tenant-isolation guard: a site admin can never see another clinic's
- *   records even though they hold the site_admin role.
- * - site_admin WITHOUT a tenant (the platform/seeder admin): no restriction,
- *   may optionally narrow with ?branch=.
+ *   records.
+ * - Site (platform) admin WITHOUT a tenant (the platform/seeder admin): no
+ *   restriction, may optionally narrow with ?branch=.
  * - clinic_admin/other roles: restricted to their own branch.
  *
  * The branch/tenant values are normalized to ObjectIds so the result is safe
@@ -94,7 +94,7 @@ export function currentTenant(req) {
 
 /**
  * Resolve the branch to assign when creating a record.
- * - site_admin/clinic_admin: must provide a branch (via body); otherwise bad request.
+ * - Site (platform) admin / clinic_admin: must provide a branch (via body); otherwise bad request.
  * - other roles: forced to their own branch regardless of input.
  *
  * When the caller belongs to a tenant, the requested branch is verified to

@@ -10,14 +10,15 @@ export const setup2fa = asyncHandler(async (req, res) => {
 
 export const verify2fa = asyncHandler(async (req, res) => {
   const admin = await site2faService.verify2fa(req.siteAdmin._id, req.validatedBody.token);
-  setAuthCookies(res, admin, 'site');
+  setAuthCookies(res, admin, 'site', { twoFactorVerified: true, twoFactorVerifiedAt: Date.now() });
   req.auditDetails = { action: '2fa.enable' };
   return sendSuccess(res, { message: '2FA has been enabled successfully' });
 });
 
 export const disable2fa = asyncHandler(async (req, res) => {
   const admin = await site2faService.disable2fa(req.siteAdmin._id, req.validatedBody.token);
-  setAuthCookies(res, admin, 'site');
+  // 2FA is now disabled: the fresh session must NOT carry a verified claim.
+  setAuthCookies(res, admin, 'site', { twoFactorVerified: false });
   req.auditDetails = { action: '2fa.disable' };
   return sendSuccess(res, { message: '2FA has been disabled' });
 });

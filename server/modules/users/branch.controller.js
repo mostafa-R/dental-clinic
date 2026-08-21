@@ -36,7 +36,13 @@ export const createBranch = asyncHandler(async (req, res) => {
 
   const branch = await Branch.create({ tenant, name, address, phone, isActive: isActive ?? true });
 
-  emitToBranch(String(branch._id), 'branch:created', { branch: branch.toObject() });
+  // Emit to the creating user's branch room, not the new branch's (empty)
+  // room — nobody is subscribed to a branch that didn't exist a second ago.
+  // The creator's own clients are the ones that need the immediate refresh.
+  const creatorBranch = req.user?.branch ? String(req.user.branch) : null;
+  if (creatorBranch) {
+    emitToBranch(creatorBranch, 'branch:created', { branch: branch.toObject() });
+  }
   return sendSuccess(res, { branch }, 201);
 });
 

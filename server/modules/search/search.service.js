@@ -13,6 +13,7 @@ import ClinicalNote from '../emr/clinicalNote.model.js';
 import Wallet from '../patients/wallet.model.js';
 import InstallmentPlan from '../patients/installment.model.js';
 import { cacheGet, cacheSet } from '../../utils/cache.js';
+import { stripPHI } from '../../middleware/phiRestrict.js';
 
 const EMPTY_RESULT = {
   patients: [], appointments: [], invoices: [],
@@ -34,6 +35,22 @@ function buildSearchCacheKey(branchFilter, query, allowedModules, { userId, impe
 
 function isPhoneLike(q) {
   return /^\d[\d\s\-()+ ]*$/.test(q);
+}
+
+/**
+ * Remove medical PHI (clinical note bodies, diagnoses, medication lists) from
+ * a search result set. Applied to the payload BEFORE it is written to the
+ * Redis/in-memory cache so no protected health information ever rests in a
+ * cache tier. The result remains fully navigable (record ids + identifying
+ * metadata are preserved); the user opens the record to read its contents.
+ */
+function sanitizeForCache(result) {
+  return {
+    ...result,
+    clinicalNotes: stripPHI(result.clinicalNotes),
+    prescriptions: stripPHI(result.prescriptions),
+    treatmentPlans: stripPHI(result.treatmentPlans),
+  };
 }
 
 /**
@@ -268,7 +285,11 @@ export async function globalSearch(branchFilter, query, can = () => true, option
     installments: filteredInstallments,
   };
 
-  await cacheSet('search', cacheKey, result, 60);
+  // Cache the sanitized payload so PHI never persists in the cache tier, and
+  // return the same sanitized payload so live and cached responses are
+  // identical. The controller additionally strips PHI when impersonating.
+  const cacheSafe = sanitizeForCache(result);
+  await cacheSet('search', cacheKey, cacheSafe, 60);
 
-  return result;
+  return cacheSafe;
 }

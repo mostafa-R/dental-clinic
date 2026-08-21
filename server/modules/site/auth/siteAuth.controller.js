@@ -16,7 +16,7 @@ export const siteLogin = asyncHandler(async (req, res) => {
   }
 
   await siteAuthService.completeSiteAdminLogin(admin);
-  setAuthCookies(res, admin, 'site');
+  setAuthCookies(res, admin, 'site', { twoFactorVerified: false });
   return sendSuccess(res, { user: admin.toSafeObject() });
 });
 
@@ -49,7 +49,13 @@ export const siteRefresh = asyncHandler(async (req, res) => {
   }
 
   await siteAuthService.rotateSiteAdminToken(admin);
-  setAuthCookies(res, admin, 'site');
+  // Carry the original 2FA challenge timestamp forward across refreshes so the
+  // freshness gate in require2fa still applies to long-lived sessions.
+  const verified = decoded.twoFactorVerified === true && typeof decoded.twoFactorVerifiedAt === 'number';
+  setAuthCookies(res, admin, 'site', {
+    twoFactorVerified: verified,
+    ...(verified ? { twoFactorVerifiedAt: decoded.twoFactorVerifiedAt } : {}),
+  });
   return sendSuccess(res, { message: 'Token refreshed' });
 });
 
@@ -185,7 +191,7 @@ export const verifyRecoveryOtp = asyncHandler(async (req, res) => {
   // Alert on successful recovery (for monitoring)
   await siteAuthService.alertRecoveryComplete({ email, ip: clientIp, userAgent });
 
-  setAuthCookies(res, admin, 'site');
+  setAuthCookies(res, admin, 'site', { twoFactorVerified: true, twoFactorVerifiedAt: Date.now() });
   return sendSuccess(res, {
     user: admin.toSafeObject(),
     requires2faSetup: true,

@@ -47,6 +47,9 @@ counterSchema.statics.next = async function next(name, tenantId, session) {
     return 1;
   } catch {
     const retry = await this.findById(counterId).session(session).lean();
+    if (!retry || retry.seq == null) {
+      throw new Error(`Counter "${counterId}" could not be initialized after a concurrent upsert collision`);
+    }
     return retry.seq;
   }
 };

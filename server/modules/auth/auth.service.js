@@ -1,6 +1,11 @@
 import User from '../users/user.model.js';
 import Tenant from '../site/tenant/tenant.model.js';
 import ApiError from '../../utils/ApiError.js';
+import {
+  assertNotLocked,
+  recordFailedLogin,
+  resetFailedLogins,
+} from '../../utils/loginThrottle.js';
 
 export async function assertTenantActive(tenantId) {
   if (!tenantId) return;
@@ -14,8 +19,12 @@ export async function assertTenantActive(tenantId) {
 }
 
 export async function authenticateUser(email, password) {
+  await assertNotLocked(email);
+
   const user = await User.findOne({ email }).select('+password').populate('branch');
   if (!user) {
+    // No lockout state for unknown accounts (avoids lockout-DoS via email
+    // enumeration); the per-IP/per-email rate limiters still apply.
     throw ApiError.unauthorized('Invalid email or password');
   }
   if (!user.isActive) {
@@ -23,8 +32,10 @@ export async function authenticateUser(email, password) {
   }
   const ok = await user.comparePassword(password);
   if (!ok) {
+    await recordFailedLogin(email);
     throw ApiError.unauthorized('Invalid email or password');
   }
+  await resetFailedLogins(email);
   await assertTenantActive(user.tenant);
   return user;
 }

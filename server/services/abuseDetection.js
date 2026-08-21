@@ -133,6 +133,56 @@ async function checkAbuse(tenantId) {
   return { flagged: false, reason: null, level: 'ok', rate };
 }
 
+/**
+ * Surface abuse stats for unauthenticated traffic, tracked by IP. Reuses the
+ * same Redis/in-memory counters as tenants, so brute-force and flood attempts
+ * on public endpoints are monitored rather than invisible.
+ */
+export async function getAbuseStatsByIp() {
+  const results = [];
+  const redis = await getRedisClient();
+
+  if (redis) {
+    try {
+      let cursor = '0';
+      do {
+        const reply = await redis.scan(cursor, 'MATCH', `${ABUSE_PREFIX}ip:*`, 'COUNT', 200);
+        cursor = reply[0];
+        for (const fullKey of reply[1]) {
+          const key = fullKey.replace(ABUSE_PREFIX, '');
+          const check = await checkAbuse(key);
+          results.push({
+            ip: key.replace(/^ip:/, ''),
+            currentRate: check.rate || 0,
+            currentErrors: check.errors || 0,
+            flagged: check.flagged,
+            level: check.level,
+            reason: check.reason,
+          });
+        }
+      } while (cursor !== '0');
+    } catch (err) {
+      console.error('[Abuse] Failed to scan IP stats:', err.message);
+    }
+  } else {
+    for (const [key, entry] of reqCounts.entries()) {
+      if (!key.startsWith('ip:')) continue;
+      const elapsed = Math.max((Date.now() - entry.start) / 1000, 1);
+      const check = await checkAbuse(key);
+      results.push({
+        ip: key.replace(/^ip:/, ''),
+        currentRate: Math.round((entry.count / elapsed) * 60),
+        currentErrors: entry.errors,
+        flagged: check.flagged,
+        level: check.level,
+        reason: check.reason,
+      });
+    }
+  }
+
+  return results;
+}
+
 export async function getAbuseStatsForTenants() {
   const results = [];
   let skip = 0;
@@ -219,6 +269,16 @@ export function startAbuseCron() {
             await tenant.save();
             console.log(`[Abuse] Auto-quarantined tenant "${s.name}" — ${s.reason}`);
           }
+        }
+      }
+
+      // Log unauthenticated (IP-keyed) abuse — e.g. brute-force floods against
+      // public auth endpoints. IPs are surfaced for operator review; they are
+      // not auto-banned here.
+      const ipStats = await getAbuseStatsByIp();
+      for (const s of ipStats) {
+        if (s.level !== 'ok') {
+          console.warn(`[Abuse] IP ${s.ip} flagged (${s.level}): ${s.reason}`);
         }
       }
     } catch (err) {

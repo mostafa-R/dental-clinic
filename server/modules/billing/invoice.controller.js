@@ -2,6 +2,7 @@ import * as invoiceService from './invoice.service.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { currentTenant, filterByBranch, resolveBranchForCreate, toObjectId } from '../../utils/branchScope.js';
 import { emitToBranch } from '../../socket/index.js';
+import { stripPHI } from '../../middleware/phiRestrict.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 
 function emitInvoice(branchId, event, invoice) {
@@ -9,9 +10,20 @@ function emitInvoice(branchId, event, invoice) {
   emitToBranch(branchId, event, payload);
 }
 
+/**
+ * Serialize an invoice for the response. During an impersonation session the
+ * populated patient (firstName/lastName/phone) carries PHI and must be
+ * stripped before it leaves the API.
+ */
+function serializeInvoice(invoice, req) {
+  if (!req.isImpersonation) return invoice;
+  return invoice && typeof invoice.toJSON === 'function' ? stripPHI(invoice.toJSON()) : stripPHI(invoice);
+}
+
 export const listInvoices = asyncHandler(async (req, res) => {
   const branchFilter = filterByBranch(req);
   const result = await invoiceService.listInvoices(branchFilter, req.validatedQuery);
+  if (req.isImpersonation) result.invoices = result.invoices.map((i) => serializeInvoice(i, req));
   return sendSuccess(res, result);
 });
 
@@ -23,7 +35,7 @@ export const getBillingSummary = asyncHandler(async (req, res) => {
 
 export const getInvoice = asyncHandler(async (req, res) => {
   const invoice = await invoiceService.getInvoice(req.params.id, filterByBranch(req));
-  return sendSuccess(res, { invoice });
+  return sendSuccess(res, { invoice: serializeInvoice(invoice, req) });
 });
 
 export const createInvoice = asyncHandler(async (req, res) => {
@@ -43,7 +55,7 @@ export const createInvoice = asyncHandler(async (req, res) => {
   });
 
   emitInvoice(branch, 'invoice:created', invoice);
-  return sendSuccess(res, { invoice }, 201);
+  return sendSuccess(res, { invoice: serializeInvoice(invoice, req) }, 201);
 });
 
 export const updateInvoice = asyncHandler(async (req, res) => {
@@ -51,7 +63,7 @@ export const updateInvoice = asyncHandler(async (req, res) => {
     req.params.id, filterByBranch(req), req.validatedBody, req.user._id,
   );
   emitInvoice(invoice.branch, 'invoice:updated', invoice);
-  return sendSuccess(res, { invoice });
+  return sendSuccess(res, { invoice: serializeInvoice(invoice, req) });
 });
 
 export const addPayment = asyncHandler(async (req, res) => {
@@ -61,7 +73,7 @@ export const addPayment = asyncHandler(async (req, res) => {
     userId: req.user._id,
   });
   emitInvoice(invoice.branch, 'invoice:updated', invoice);
-  return sendSuccess(res, { invoice });
+  return sendSuccess(res, { invoice: serializeInvoice(invoice, req) });
 });
 
 export const voidInvoice = asyncHandler(async (req, res) => {
@@ -70,7 +82,7 @@ export const voidInvoice = asyncHandler(async (req, res) => {
     userId: req.user._id,
   });
   emitInvoice(invoice.branch, 'invoice:updated', invoice);
-  return sendSuccess(res, { invoice });
+  return sendSuccess(res, { invoice: serializeInvoice(invoice, req) });
 });
 
 export const refundPayment = asyncHandler(async (req, res) => {
@@ -80,11 +92,14 @@ export const refundPayment = asyncHandler(async (req, res) => {
     userId: req.user._id,
   });
   emitInvoice(invoice.branch, 'invoice:updated', invoice);
-  return sendSuccess(res, { invoice });
+  return sendSuccess(res, { invoice: serializeInvoice(invoice, req) });
 });
 
 export const getInvoiceAging = asyncHandler(async (req, res) => {
   const branchFilter = filterByBranch(req);
   const result = await invoiceService.getInvoiceAging(branchFilter);
+  if (req.isImpersonation) {
+    result.invoices = result.invoices.map((i) => stripPHI(i));
+  }
   return sendSuccess(res, result);
 });

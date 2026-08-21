@@ -2,7 +2,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import helmet from "helmet";
 import crypto from "node:crypto";
 import path from "node:path";
@@ -100,23 +100,47 @@ const authLimiter = rateLimit({
   },
 });
 
+// Per-account auth limiter: keyed on the submitted email so brute-force
+// attempts that rotate IPs (or hide behind a proxy) still get throttled
+// against the target account. Falls back to IP when no email is submitted.
+const emailAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const email = (req.body?.email || "").toString().trim().toLowerCase();
+    return email ? `email:${email}` : ipKeyGenerator(req);
+  },
+  message: {
+    success: false,
+    message: "Too many attempts for this account, please try again later",
+  },
+});
+
 // Strict auth limiter on BOTH the unversioned and versioned prefixes.
 // The v1 router is mounted at "/" and "/v1" (routes/routes.js), so the
 // same auth endpoints are reachable via /api/* and /api/v1/*. Without the
 // versioned mounts, /api/v1/auth/login etc. would only get the loose
 // general limiter (200/min), opening a brute-force bypass.
-app.use("/api/auth/login", authLimiter);
+const authLoginPaths = [
+  "/api/auth/login",
+  "/api/site/auth/login",
+  "/api/site/auth/create",
+  "/api/site/2fa/verify-login",
+  "/api/v1/auth/login",
+  "/api/v1/site/auth/login",
+  "/api/v1/site/auth/create",
+  "/api/v1/site/2fa/verify-login",
+];
+authLoginPaths.forEach((p) => {
+  app.use(p, authLimiter, emailAuthLimiter);
+});
+
 app.use("/api/auth/refresh", authLimiter);
-app.use("/api/site/auth/login", authLimiter);
 app.use("/api/site/auth/refresh", authLimiter);
-app.use("/api/site/auth/create", authLimiter);
-app.use("/api/site/2fa/verify-login", authLimiter);
-app.use("/api/v1/auth/login", authLimiter);
 app.use("/api/v1/auth/refresh", authLimiter);
-app.use("/api/v1/site/auth/login", authLimiter);
 app.use("/api/v1/site/auth/refresh", authLimiter);
-app.use("/api/v1/site/auth/create", authLimiter);
-app.use("/api/v1/site/2fa/verify-login", authLimiter);
 
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -146,6 +170,7 @@ export async function upgradeRateLimitStore() {
       sendCommand: (...args) => redisClient.call(...args),
     });
     authLimiter.store = store;
+    emailAuthLimiter.store = store;
     generalLimiter.store = store;
     console.log("[RateLimit] Upgraded auth + general limiters to Redis store");
     return true;

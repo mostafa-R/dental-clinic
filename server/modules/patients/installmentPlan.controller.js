@@ -4,10 +4,22 @@ import { emitToBranch } from '../../socket/index.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { loadScopedPatient } from '../../utils/branchScope.js';
+import { stripPHI } from '../../middleware/phiRestrict.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 import Invoice from '../billing/invoice.model.js';
+import { applyInvoicePayment } from '../billing/invoice.service.js';
 import InstallmentPlan from './installment.model.js';
 import { addTransaction } from './wallet.service.js';
+
+function serializePlan(plan, req) {
+  if (!req.isImpersonation) return plan;
+  return plan && typeof plan.toJSON === 'function' ? stripPHI(plan.toJSON()) : stripPHI(plan);
+}
+
+function serializePHI(value, req) {
+  if (!req.isImpersonation) return value;
+  return value && typeof value.toJSON === 'function' ? stripPHI(value.toJSON()) : stripPHI(value);
+}
 
 /**
  * GET /patients/:patientId/installments
@@ -30,7 +42,7 @@ export const listInstallmentPlans = asyncHandler(async (req, res) => {
   ]);
 
   return sendSuccess(res, {
-    installmentPlans: plans,
+    installmentPlans: plans.map((p) => serializePlan(p, req)),
     pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) },
   });
 });
@@ -116,7 +128,7 @@ export const updateInstallmentPlan = asyncHandler(async (req, res) => {
 
   await plan.save();
   emitToBranch(String(patient.branch), 'installment:updated', { installmentPlan: plan });
-  return sendSuccess(res, { installmentPlan: plan });
+  return sendSuccess(res, { installmentPlan: serializePlan(plan, req) });
 });
 
 /**
@@ -190,9 +202,37 @@ export const payInstallment = asyncHandler(async (req, res) => {
 
     await plan.save({ session });
 
-    return { installmentPlan: plan, installment };
+    // Keep the linked invoice ledger in sync (ISSUE-014): advance paidAmount,
+    // derive unpaid → partial → paid, push a payment entry, and accrue the
+    // doctor commission on full payment — all inside the same transaction.
+    let invoice = null;
+    if (plan.invoice) {
+      invoice = await applyInvoicePayment(
+        {
+          invoiceId: plan.invoice,
+          branchFilter: { branch: patient.branch, tenant: patient.tenant },
+          amount: data.amount,
+          method: installment.paymentMethod,
+          reference: installment.paymentRef || `Installment #${installment.number}`,
+          notes: `Installment plan payment — ${plan.title}`,
+          idempotencyKey: `installment:${String(plan._id)}:${String(installment._id)}`,
+          userId: req.user._id,
+          // The wallet debit above already covers wallet-funded installments,
+          // so the invoice ledger must not debit the wallet a second time.
+          skipWalletDebit: true,
+        },
+        session,
+      );
+      if (invoice && invoice.idempotent) invoice = invoice.invoice;
+    }
+
+    return { installmentPlan: plan, installment, invoice };
   });
 
   emitToBranch(String(patient.branch), 'installment:paid', result);
-  return sendSuccess(res, result);
+  return sendSuccess(res, {
+    installmentPlan: serializePlan(result.installmentPlan, req),
+    installment: serializePHI(result.installment, req),
+    invoice: result.invoice ? serializePHI(result.invoice, req) : undefined,
+  });
 });

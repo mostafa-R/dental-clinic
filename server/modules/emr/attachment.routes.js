@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { protect } from '../../middleware/auth.js';
 import { checkPermission } from '../../middleware/checkPermission.js';
 import { uploadMedicalFile, UPLOADS_ROOT } from '../../middleware/upload.js';
-import { encryptFile, decryptFile, isEncrypted } from '../../utils/encryption.js';
+import { encryptFile, decryptFile, decryptFileWithKeys, isEncrypted } from '../../utils/encryption.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
@@ -11,6 +11,7 @@ import { unlink, access, readFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import crypto from 'node:crypto';
 import MedicalAttachment from './attachment.model.js';
+import Tenant from '../site/tenant/tenant.model.js';
 import { ATTACHMENT_TYPES } from '../../constants/dental.js';
 import { loadScopedPatient, toObjectId } from '../../utils/branchScope.js';
 import { phiRestrict } from '../../middleware/phiRestrict.js';
@@ -41,6 +42,65 @@ function attachmentScope(req) {
   return filter;
 }
 
+/**
+ * Load the tenant's per-tenant encryption key (stored `select: false`).
+ * Every clinic has its own key generated at creation, so one tenant's
+ * ciphertext is never decryptable with another tenant's key.
+ */
+async function getTenantKey(tenantId) {
+  if (!tenantId) return null;
+  const tenant = await Tenant.findById(tenantId).select('+encryption.key').lean();
+  return tenant?.encryption?.key || null;
+}
+
+/**
+ * @swagger
+ * /api/v1/emr/attachments/upload:
+ *   post:
+ *     tags: [EMR Attachments]
+ *     summary: Upload a medical attachment
+ *     description: "Requires `emr:create` and multipart/form-data. Files are encrypted at rest. Allowed types: image/jpeg, image/png, image/webp, image/gif, application/pdf, application/dicom. Max 20MB."
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [patient, file]
+ *             properties:
+ *               patient: { $ref: '#/components/schemas/ObjectId', description: 'Scoped to the caller''s branch' }
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *               type:
+ *                 type: string
+ *                 enum: [xray, image, document, lab, other]
+ *                 default: xray
+ *               caption: { type: string, maxLength: 500 }
+ *     responses:
+ *       '201':
+ *         description: Attachment uploaded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     file: { $ref: '#/components/schemas/ClinicalNoteAttachment' }
+ *       '400':
+ *         description: No file uploaded, invalid type, or invalid patient
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ *       '404':
+ *         $ref: '#/components/responses/NotFound'
+ */
 router.post(
   '/upload',
   protect,
@@ -64,7 +124,11 @@ router.post(
     const encryptedPath = originalPath + ENCRYPTED_SUFFIX;
 
     try {
-      await encryptFile(originalPath, encryptedPath);
+      // Encrypt with the tenant's own key (never the shared backup key).
+      // Patient data already pins tenant ownership, so `patient.tenant` is the
+      // authoritative owner even for system admins.
+      const tenantKey = await getTenantKey(patient.tenant);
+      await encryptFile(originalPath, encryptedPath, tenantKey);
       await unlink(originalPath);
 
       const record = await MedicalAttachment.create({
@@ -155,10 +219,12 @@ router.get(
       throw ApiError.notFound('File not found');
     }
 
+    // Only the header needs reading to detect the ENC1 magic — reading the
+    // whole (up to 20MB) file into memory just to peek at 4 bytes wastes RAM.
     const isPlainFile = await (async () => {
       try {
-        const buf = await readFile(encryptedPath);
-        return !isEncrypted(buf);
+        const header = await readFile(encryptedPath, { start: 0, end: 63 });
+        return !isEncrypted(header);
       } catch {
         return true;
       }
@@ -169,7 +235,11 @@ router.get(
     }
 
     try {
-      await decryptFile(encryptedPath, tmpPath);
+      // Prefer the tenant's key; legacy files encrypted with the shared
+      // BACKUP_ENCRYPTION_KEY still decrypt via the fallback inside
+      // decryptFileWithKeys.
+      const tenantKey = await getTenantKey(record.tenant);
+      await decryptFileWithKeys(encryptedPath, tmpPath, tenantKey ? [tenantKey] : []);
 
       const ext = path.extname(safeName).toLowerCase();
       const mimeMap = {

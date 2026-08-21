@@ -2,9 +2,11 @@ import { trackRequest } from '../services/abuseDetection.js';
 import { incrementTenantCounter } from '../config/redis.js';
 
 export function abuseMonitor(req, _res, next) {
-  // Track tenant abuse metrics using authenticated user (populated by auth middleware
-  // before route handlers run). On response finish, req.user will be available for
-  // authenticated routes. For unauthenticated routes, no tracking occurs.
+  // Track abuse metrics on response finish. Authenticated requests are keyed
+  // by tenant (populated by the auth middleware); unauthenticated requests
+  // (public auth endpoints, open routes) are keyed by IP so flooding/brute
+  // force attempts are visible to the abuse detection cron instead of being
+  // invisible.
   _res.once('finish', () => {
     const tenantId = req.user?.tenant;
     if (tenantId) {
@@ -17,6 +19,9 @@ export function abuseMonitor(req, _res, next) {
       } else {
         incrementTenantCounter(tid, 'server_errors');
       }
+    } else {
+      const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+      trackRequest(`ip:${ip}`, _res.statusCode);
     }
   });
   next();

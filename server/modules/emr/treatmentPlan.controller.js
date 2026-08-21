@@ -236,5 +236,14 @@ export const generateInvoice = asyncHandler(async (req, res) => {
   });
 
   emitPlan(patient.branch, 'treatment-plan:updated', plan);
-  return sendSuccess(res, result, 201);
+
+  const data = req.isImpersonation
+    ? {
+        invoice: stripPHI(result.invoice.toJSON ? result.invoice.toJSON() : result.invoice),
+        plan: stripPHI(result.plan.toJSON ? result.plan.toJSON() : result.plan),
+        deductions: result.deductions,
+      }
+    : result;
+
+  return sendSuccess(res, data, 201);
 });

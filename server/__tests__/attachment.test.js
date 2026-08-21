@@ -15,13 +15,23 @@ const mocks = vi.hoisted(() => ({
   createReadStream: vi.fn(),
   encryptFile: vi.fn(),
   decryptFile: vi.fn(),
+  decryptFileWithKeys: vi.fn(),
   isEncrypted: vi.fn(),
+  tenantFindById: vi.fn(),
 }));
 
 vi.mock("../modules/emr/attachment.model.js", () => ({
   default: {
     findOne: (...args) => mocks.findOne(...args),
     create: (...args) => mocks.create(...args),
+  },
+}));
+
+// getTenantKey() loads the tenant's per-tenant encryption key via
+// Tenant.findById(...).select("+encryption.key").lean().
+vi.mock("../modules/site/tenant/tenant.model.js", () => ({
+  default: {
+    findById: (...args) => mocks.tenantFindById(...args),
   },
 }));
 
@@ -61,6 +71,7 @@ vi.mock("../utils/branchScope.js", () => ({
 vi.mock("../utils/encryption.js", () => ({
   encryptFile: (...args) => mocks.encryptFile(...args),
   decryptFile: (...args) => mocks.decryptFile(...args),
+  decryptFileWithKeys: (...args) => mocks.decryptFileWithKeys(...args),
   isEncrypted: (...args) => mocks.isEncrypted(...args),
 }));
 
@@ -125,7 +136,13 @@ beforeEach(() => {
   mocks.createReadStream.mockReset();
   mocks.encryptFile.mockReset().mockResolvedValue();
   mocks.decryptFile.mockReset().mockResolvedValue();
+  mocks.decryptFileWithKeys.mockReset().mockResolvedValue();
   mocks.isEncrypted.mockReset().mockReturnValue(true);
+  mocks.tenantFindById.mockReset().mockReturnValue({
+    select: vi.fn().mockReturnValue({
+      lean: vi.fn().mockResolvedValue({ encryption: { key: "t1-key" } }),
+    }),
+  });
 });
 
 describe("POST /emr/attachments/upload", () => {
@@ -213,7 +230,11 @@ describe("GET /emr/attachments/:filename/download", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toBeTruthy();
-    expect(mocks.decryptFile).toHaveBeenCalled();
+    expect(mocks.decryptFileWithKeys).toHaveBeenCalledWith(
+      "C:\\uploads\\medical\\abc.pdf.enc",
+      expect.stringContaining("tmp_"),
+      ["t1-key"],
+    );
   });
 
   it("blocks a file that is not registered even when the file exists on disk", async () => {

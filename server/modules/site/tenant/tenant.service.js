@@ -1,8 +1,9 @@
 import crypto from 'crypto';
 import ApiError from '../../../utils/ApiError.js';
-import { cacheDelPattern, invalidateTenant, invalidateTenantRoles } from '../../../utils/cache.js';
+import { cacheDel, cacheDelPattern, invalidateTenant, invalidateTenantRoles } from '../../../utils/cache.js';
 import { withTransaction } from '../../../core/transaction.js';
 import Counter from '../../../core/counters.js';
+import { getPlanPrice } from '../subscription/subscription.service.js';
 import OwnerDrawing from '../../accounting/ownerDrawing.model.js';
 import Expense from '../../accounting/expense.model.js';
 import Appointment from '../../appointments/appointment.model.js';
@@ -120,19 +121,6 @@ export async function createTenant({ name, email, phone, plan, status, address, 
     subscriptionEndsAt = new Date(now.getTime() + periodDays * 24 * 60 * 60 * 1000);
   }
 
-  const tenant = new Tenant({
-    name,
-    email,
-    phone,
-    address,
-    city,
-    country,
-    status: tenantStatus,
-    trialEndsAt: tenantStatus === 'trial' ? trialEndsAt : null,
-    subscriptionEndsAt,
-    isActive: tenantStatus === 'active',
-  });
-
   let baseSlug = name
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, '-')
@@ -144,74 +132,102 @@ export async function createTenant({ name, email, phone, plan, status, address, 
     slug = `${baseSlug}-${counter}`;
     counter++;
   }
-  tenant.slug = slug;
-
-  tenant.updatePlanSettings(planDoc);
-
-  tenant.encryption = {
-    key: crypto.randomBytes(32).toString('hex'),
-    algorithm: 'aes-256-gcm',
-    createdAt: new Date(),
-  };
-
-  await tenant.save();
-
-  const defaultBranch = await Branch.create({
-    tenant: tenant._id,
-    name: name,
-    address: address || '',
-    phone: phone || '',
-    isActive: true,
-  });
 
   const password = adminPassword || generatePassword();
 
-  // Create or find the clinic_admin role for this tenant
-  let clinicAdminRole = await Role.findOne({ key: 'clinic_admin', tenant: tenant._id }).lean();
-  if (!clinicAdminRole) {
-    const [created] = await Role.create([{
+  // Tenant, default branch, clinic_admin role, admin user, and subscription are
+  // created inside ONE transaction so a mid-way failure can never orphan a
+  // half-created clinic (e.g. a tenant with no admin user). withTransaction
+  // retries transient failures; each retry attempt creates fresh documents.
+  const { tenant, clinicAdmin } = await withTransaction(async (session) => {
+    const tenant = new Tenant({
+      name,
+      email,
+      phone,
+      address,
+      city,
+      country,
+      status: tenantStatus,
+      trialEndsAt: tenantStatus === 'trial' ? trialEndsAt : null,
+      subscriptionEndsAt,
+      isActive: tenantStatus === 'active',
+      slug,
+    });
+
+    tenant.updatePlanSettings(planDoc);
+
+    tenant.encryption = {
+      key: crypto.randomBytes(32).toString('hex'),
+      algorithm: 'aes-256-gcm',
+      createdAt: new Date(),
+    };
+
+    await tenant.save({ session });
+
+    const [defaultBranch] = await Branch.create([{
       tenant: tenant._id,
-      name: 'Clinic Admin',
-      key: 'clinic_admin',
-      isSystemAdmin: false,
-      isBuiltIn: true,
-      permissions: [
-        { module: 'dashboard', actions: ['create', 'read', 'update', 'delete'] },
-        { module: 'patients', actions: ['create', 'read', 'update', 'delete'] },
-        { module: 'appointments', actions: ['create', 'read', 'update', 'delete'] },
-        { module: 'billing', actions: ['create', 'read', 'update', 'delete'] },
-        { module: 'accounting', actions: ['create', 'read', 'update', 'delete'] },
-        { module: 'inventory', actions: ['create', 'read', 'update', 'delete'] },
-        { module: 'emr', actions: ['create', 'read', 'update', 'delete'] },
-        { module: 'prescriptions', actions: ['create', 'read', 'update', 'delete'] },
-        { module: 'users', actions: ['create', 'read', 'update', 'delete'] },
-        { module: 'branches', actions: ['create', 'read', 'update', 'delete'] },
-        { module: 'settings', actions: ['create', 'read', 'update', 'delete'] },
-        { module: 'roles', actions: ['create', 'read', 'update', 'delete'] },
-        { module: 'chat', actions: ['create', 'read', 'update', 'delete'] },
-      ],
-    }]);
-    clinicAdminRole = created.toObject();
-  }
+      name: name,
+      address: address || '',
+      phone: phone || '',
+      isActive: true,
+    }], { session });
 
-  const clinicAdmin = await User.create({
-    tenant: tenant._id,
-    name: name,
-    email,
-    password,
-    roleId: clinicAdminRole._id,
-    branch: defaultBranch._id,
-    isActive: true,
-  });
+    // Create or find the clinic_admin role for this tenant. A duplicate-key
+    // error means a concurrent request just created it — fall back to reading
+    // it instead of failing the whole tenant creation.
+    let clinicAdminRole = await Role.findOne({ key: 'clinic_admin', tenant: tenant._id }).session(session).lean();
+    if (!clinicAdminRole) {
+      try {
+        const [created] = await Role.create([{
+          tenant: tenant._id,
+          name: 'Clinic Admin',
+          key: 'clinic_admin',
+          isSystemAdmin: false,
+          isBuiltIn: true,
+          permissions: [
+            { module: 'dashboard', actions: ['create', 'read', 'update', 'delete'] },
+            { module: 'patients', actions: ['create', 'read', 'update', 'delete'] },
+            { module: 'appointments', actions: ['create', 'read', 'update', 'delete'] },
+            { module: 'billing', actions: ['create', 'read', 'update', 'delete'] },
+            { module: 'accounting', actions: ['create', 'read', 'update', 'delete'] },
+            { module: 'inventory', actions: ['create', 'read', 'update', 'delete'] },
+            { module: 'emr', actions: ['create', 'read', 'update', 'delete'] },
+            { module: 'prescriptions', actions: ['create', 'read', 'update', 'delete'] },
+            { module: 'users', actions: ['create', 'read', 'update', 'delete'] },
+            { module: 'branches', actions: ['create', 'read', 'update', 'delete'] },
+            { module: 'settings', actions: ['create', 'read', 'update', 'delete'] },
+            { module: 'roles', actions: ['create', 'read', 'update', 'delete'] },
+            { module: 'chat', actions: ['create', 'read', 'update', 'delete'] },
+          ],
+        }], { session });
+        clinicAdminRole = created.toObject();
+      } catch (err) {
+        if (err.code !== 11000) throw err;
+        clinicAdminRole = await Role.findOne({ key: 'clinic_admin', tenant: tenant._id }).session(session).lean();
+      }
+    }
 
-  const amount = planDoc?.price ?? 99;
-  await Subscription.create({
-    tenant: tenant._id,
-    plan: tenant.plan,
-    status: tenantStatus === 'active' ? 'active' : 'pending',
-    amount,
-    currentPeriodStart: new Date(),
-    currentPeriodEnd: subscriptionEndsAt || tenant.trialEndsAt,
+    const [clinicAdmin] = await User.create([{
+      tenant: tenant._id,
+      name: name,
+      email,
+      password,
+      roleId: clinicAdminRole._id,
+      branch: defaultBranch._id,
+      isActive: true,
+    }], { session });
+
+    const amount = planDoc?.price ?? 99;
+    await Subscription.create([{
+      tenant: tenant._id,
+      plan: tenant.plan,
+      status: tenantStatus === 'active' ? 'active' : 'pending',
+      amount,
+      currentPeriodStart: new Date(),
+      currentPeriodEnd: subscriptionEndsAt || tenant.trialEndsAt,
+    }], { session });
+
+    return { tenant, clinicAdmin };
   });
 
   const tenantObj = tenant.toObject();
@@ -221,6 +237,7 @@ export async function createTenant({ name, email, phone, plan, status, address, 
     usersCount: 1,
     adminCredentials: {
       email: clinicAdmin.email,
+      password,
       loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/login`,
     },
   };
@@ -243,6 +260,17 @@ export async function updateTenant(id, { name, email, phone, plan, status, addre
   if (plan) {
     const planDoc = await Plan.findOne({ key: plan, isActive: true }).lean();
     tenant.updatePlanSettings(planDoc);
+
+    // Keep the tenant's subscription in sync so a plan change via this route
+    // never leaves Subscription.amount/plan stale (it is what the billing
+    // reports and the payment/activation flows read).
+    const subscription = await Subscription.findOne({ tenant: id });
+    if (subscription) {
+      subscription.plan = plan;
+      subscription.amount = await getPlanPrice(plan, subscription.billingCycle);
+      await subscription.save();
+    }
+    await cacheDel('modules', String(id));
   }
   if (status && status !== tenant.status) {
     tenant.status = status;

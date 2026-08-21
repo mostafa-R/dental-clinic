@@ -14,6 +14,12 @@ import { currentTenant, filterByBranch, resolveBranchForCreate, toObjectId } fro
 import { sendSuccess } from "../../utils/sendSuccess.js";
 import { withTransaction } from "../../core/transaction.js";
 import { emitToBranch } from '../../socket/index.js';
+import { stripPHI } from '../../middleware/phiRestrict.js';
+
+function serializePHI(value, req) {
+  if (!req.isImpersonation) return value;
+  return value && typeof value.toJSON === 'function' ? stripPHI(value.toJSON()) : stripPHI(value);
+}
 
 /* ----------------------------------------------------------------- Expenses */
 
@@ -250,7 +256,7 @@ export const listCommissions = asyncHandler(async (req, res) => {
   ]);
 
   return sendSuccess(res, {
-    commissions,
+    commissions: req.isImpersonation ? commissions.map((c) => serializePHI(c, req)) : commissions,
     pagination: {
       page,
       limit,
@@ -281,7 +287,7 @@ export const updateCommissionStatus = asyncHandler(async (req, res) => {
   await commission.populate("doctor", "name commissionRate");
 
   emitToBranch(String(commission.branch || ''), 'commission:updated', { commission });
-  return sendSuccess(res, { commission });
+  return sendSuccess(res, { commission: serializePHI(commission, req) });
 });
 
 /**

@@ -19,6 +19,100 @@ const POPULATE = [
   { path: 'createdBy', select: 'name' },
 ];
 
+/**
+ * Resolve the doctor eligible for commission on an invoice.
+ *
+ * 1. The invoice's own appointment (appointment-linked invoices).
+ * 2. For plan-sourced invoices (`appointment: null`) the treatment plan whose
+ *    items back-link to this invoice — prefer a doctor referenced by any plan
+ *    item's appointment, then fall back to the plan's creator. This makes
+ *    plan-generated revenue accrue commission like appointment revenue does.
+ */
+async function resolveCommissionDoctor(invoice, session) {
+  if (invoice.appointment) {
+    const appt = await Appointment.findById(invoice.appointment)
+      .select('doctor')
+      .session(session)
+      .lean();
+    if (appt?.doctor) return appt.doctor;
+  }
+
+  const { default: TreatmentPlan } = await import('../emr/treatmentPlan.model.js');
+  const plan = await TreatmentPlan.findOne({ 'items.invoice': invoice._id })
+    .select('createdBy items.appointment')
+    .session(session)
+    .lean();
+  if (!plan) return null;
+
+  const itemAppointmentIds = (plan.items || [])
+    .map((item) => item.appointment)
+    .filter(Boolean);
+  if (itemAppointmentIds.length > 0) {
+    const appt = await Appointment.findOne({ _id: { $in: itemAppointmentIds } })
+      .select('doctor')
+      .session(session)
+      .lean();
+    if (appt?.doctor) return appt.doctor;
+  }
+  return plan.createdBy || null;
+}
+
+/**
+ * Accrue (or grow) the doctor commission when an invoice is fully paid.
+ * Uses the full invoice total so partial instalments never over/under-accrue.
+ */
+async function accrueCommissionForInvoice(invoice, session, userId) {
+  const doctorId = await resolveCommissionDoctor(invoice, session);
+  if (!doctorId) return;
+
+  const doctor = await User.findById(doctorId)
+    .select('commissionRate name branch')
+    .session(session)
+    .lean();
+  if (!doctor || (doctor.commissionRate || 0) <= 0) return;
+
+  const baseAmount = round2(invoice.total || 0);
+  if (baseAmount <= 0) return;
+
+  const existing = await Commission.findOne({
+    invoice: invoice._id,
+    doctor: doctor._id,
+  }).session(session);
+
+  if (existing) {
+    existing.baseAmount = baseAmount;
+    existing.amount = round2((baseAmount * (existing.rate || 0)) / 100);
+    // A fully refunded invoice voids its commission; if it is paid in full
+    // again, the commission is earned again.
+    if (existing.status === 'void') {
+      existing.status = 'pending';
+      existing.paidDate = null;
+    }
+    await existing.save({ session });
+  } else {
+    try {
+      await Commission.create(
+        [
+          {
+            tenant: invoice.tenant,
+            branch: invoice.branch,
+            doctor: doctor._id,
+            patient: invoice.patient,
+            invoice: invoice._id,
+            procedureName: `Invoice payment — ${invoice.invoiceNo}`,
+            baseAmount,
+            rate: doctor.commissionRate,
+            createdBy: userId,
+          },
+        ],
+        { session },
+      );
+    } catch (err) {
+      // ignore duplicate key errors (race condition)
+    }
+  }
+}
+
 async function resolveSearchFilter(search, patientId, branchFilter) {
   const filter = {};
   if (patientId) filter.patient = toObjectId(patientId);
@@ -267,157 +361,142 @@ export async function updateInvoice(id, branchFilter, data, userId) {
 }
 
 /**
- * Add a payment to an invoice inside a transaction.
+ * Apply a payment to an invoice inside an already-open transaction session.
+ *
+ * Shared by `addPayment` (REST) and `payInstallment` (installment plan pay),
+ * which both run inside a `withTransaction` block, so the invoice ledger and
+ * the plan ledger stay consistent. Handles the idempotency check, balance
+ * guards, payment push, status-transition changelog, optional wallet debit,
+ * and commission accrual on full payment.
  *
  * Race-condition guard: the invoice is ALWAYS re-read inside the session
- * (optimistic read) so two concurrent requests cannot both pass the
- * balance check.  An idempotency key is checked atomically inside the
- * same transaction to prevent duplicate charges.
- *
- * Uses MongoDB's __v (version key) as an optimistic concurrency token:
- * after processing, the version must still match.  If another request
- * modified the invoice in the meantime, the save will fail and the
- * transaction aborts.
+ * (optimistic read) so two concurrent requests cannot both pass the balance
+ * check. An idempotency key is checked atomically inside the same transaction
+ * to prevent duplicate charges.
  */
-export async function addPayment(id, branchFilter, { amount, method, reference, date, notes, idempotencyKey, userId }) {
-  if (!mongoose.isValidObjectId(id)) {
+export async function applyInvoicePayment(
+  {
+    invoiceId,
+    branchFilter,
+    amount,
+    method,
+    reference,
+    date,
+    notes,
+    idempotencyKey,
+    userId,
+    skipWalletDebit = false,
+  },
+  session,
+) {
+  if (!mongoose.isValidObjectId(invoiceId)) {
     throw ApiError.badRequest('Invalid invoice id');
   }
 
-  const result = await withTransaction(async (session) => {
-    // ALWAYS read inside the transaction — this is the race-condition fix.
-    const fresh = await Invoice.findOne({ _id: id, ...branchFilter }).session(session);
-    if (!fresh) {
-      throw ApiError.notFound('Invoice not found');
+  // ALWAYS read inside the transaction — this is the race-condition fix.
+  const fresh = await Invoice.findOne({ _id: invoiceId, ...branchFilter }).session(session);
+  if (!fresh) {
+    throw ApiError.notFound('Invoice not found');
+  }
+  if (fresh.status === 'void') {
+    throw ApiError.conflict('Cannot record a payment on a void invoice');
+  }
+
+  // Idempotency: check INSIDE the transaction and BEFORE the balance guard so
+  // replaying the idempotency key of the completing payment returns the
+  // idempotent result instead of a confusing "already fully paid" 409.
+  if (idempotencyKey) {
+    const exists = (fresh.payments || []).some(
+      (p) => p.idempotencyKey && p.idempotencyKey === idempotencyKey,
+    );
+    if (exists) {
+      await fresh.populate(POPULATE);
+      return { invoice: fresh, idempotent: true };
     }
-    if (fresh.status === 'void') {
-      throw ApiError.conflict('Cannot record a payment on a void invoice');
-    }
+  }
 
-    // Idempotency: check INSIDE the transaction and BEFORE the balance guard so
-    // replaying the idempotency key of the completing payment returns the
-    // idempotent result instead of a confusing "already fully paid" 409.
-    if (idempotencyKey) {
-      const exists = (fresh.payments || []).some(
-        (p) => p.idempotencyKey && p.idempotencyKey === idempotencyKey,
-      );
-      if (exists) {
-        await fresh.populate(POPULATE);
-        return { invoice: fresh, idempotent: true };
-      }
-    }
+  const balance = round2(fresh.total - fresh.paidAmount);
+  if (balance <= 0) {
+    throw ApiError.conflict('This invoice is already fully paid');
+  }
+  if (amount > balance + 0.01) {
+    throw ApiError.badRequest(
+      `Payment exceeds the outstanding balance (${balance.toFixed(2)})`,
+      { amount: 'exceeds balance' },
+    );
+  }
 
-    const balance = round2(fresh.total - fresh.paidAmount);
-    if (balance <= 0) {
-      throw ApiError.conflict('This invoice is already fully paid');
-    }
-    if (amount > balance + 0.01) {
-      throw ApiError.badRequest(
-        `Payment exceeds the outstanding balance (${balance.toFixed(2)})`,
-        { amount: 'exceeds balance' },
-      );
-    }
+  const statusBefore = fresh.status;
 
-    const statusBefore = fresh.status;
-
-    // Push payment
-    fresh.payments.push({
-      amount,
-      method,
-      reference: reference || '',
-      idempotencyKey: idempotencyKey || undefined,
-      date: date ? new Date(date) : new Date(),
-      notes: notes || '',
-      recordedBy: userId,
-    });
-
-    // save() will recompute totals via pre-validate hook.
-    // __v increment provides optimistic concurrency.
-    await fresh.save({ session });
-
-    if (fresh.status !== statusBefore) {
-      fresh.changelog.push({
-        field: 'status',
-        oldValue: statusBefore,
-        newValue: fresh.status,
-        changedBy: userId,
-      });
-      await fresh.save({ session });
-    }
-
-    // Wallet debit — atomic within the same transaction
-    if (method === 'wallet') {
-      const patient = await Patient.findOne({ _id: fresh.patient }).session(session);
-      if (!patient) throw ApiError.badRequest('Patient not found for wallet payment');
-      await addTransaction(patient, {
-        type: 'debit',
-        amount,
-        reference: reference || fresh.invoiceNo,
-        description: notes || `Payment for invoice ${fresh.invoiceNo}`,
-        invoice: fresh._id,
-      }, userId, session);
-    }
-
-    // Commission — accrue ONCE, when the invoice is FULLY paid, based on the
-    // full invoice total. Partial payments never create or grow a commission,
-    // so totals can't over/under-accrue across instalments (ISSUE-014).
-    if (fresh.status === 'paid' && fresh.appointment) {
-      const appt = await Appointment.findById(fresh.appointment)
-        .select('doctor')
-        .session(session)
-        .lean();
-      if (appt?.doctor) {
-        const doctor = await User.findById(appt.doctor)
-          .select('commissionRate name branch')
-          .session(session)
-          .lean();
-        if (doctor && (doctor.commissionRate || 0) > 0) {
-          const baseAmount = round2(fresh.total || 0);
-          if (baseAmount > 0) {
-            const existing = await Commission.findOne({
-              invoice: fresh._id,
-              doctor: doctor._id,
-            }).session(session);
-
-            if (existing) {
-              existing.baseAmount = baseAmount;
-              existing.amount = round2(baseAmount * (existing.rate || 0) / 100);
-              // A fully refunded invoice voids its commission; if it is paid
-              // in full again, the commission is earned again.
-              if (existing.status === 'void') {
-                existing.status = 'pending';
-                existing.paidDate = null;
-              }
-              await existing.save({ session });
-            } else {
-              try {
-                await Commission.create(
-                  [
-                    {
-                      tenant: fresh.tenant,
-                      branch: fresh.branch,
-                      doctor: doctor._id,
-                      patient: fresh.patient,
-                      invoice: fresh._id,
-                      procedureName: `Invoice payment — ${fresh.invoiceNo}`,
-                      baseAmount,
-                      rate: doctor.commissionRate,
-                      createdBy: userId,
-                    },
-                  ],
-                  { session },
-                );
-              } catch (err) {
-                // ignore duplicate key errors (race condition)
-              }
-            }
-          }
-        }
-      }
-    }
-
-    return fresh;
+  // Push payment
+  fresh.payments.push({
+    amount,
+    method,
+    reference: reference || '',
+    idempotencyKey: idempotencyKey || undefined,
+    date: date ? new Date(date) : new Date(),
+    notes: notes || '',
+    recordedBy: userId,
   });
+
+  // save() will recompute totals via pre-validate hook.
+  // __v increment provides optimistic concurrency.
+  await fresh.save({ session });
+
+  if (fresh.status !== statusBefore) {
+    fresh.changelog.push({
+      field: 'status',
+      oldValue: statusBefore,
+      newValue: fresh.status,
+      changedBy: userId,
+    });
+    await fresh.save({ session });
+  }
+
+  // Wallet debit — atomic within the same transaction. The installment flow
+  // already debits the wallet itself, so it passes skipWalletDebit: true.
+  if (method === 'wallet' && !skipWalletDebit) {
+    const patient = await Patient.findOne({ _id: fresh.patient }).session(session);
+    if (!patient) throw ApiError.badRequest('Patient not found for wallet payment');
+    await addTransaction(patient, {
+      type: 'debit',
+      amount,
+      reference: reference || fresh.invoiceNo,
+      description: notes || `Payment for invoice ${fresh.invoiceNo}`,
+      invoice: fresh._id,
+    }, userId, session);
+  }
+
+  // Commission — accrue ONCE, when the invoice is FULLY paid, based on the
+  // full invoice total. Partial payments never create or grow a commission,
+  // so totals can't over/under-accrue across instalments (ISSUE-014).
+  if (fresh.status === 'paid') {
+    await accrueCommissionForInvoice(fresh, session, userId);
+  }
+
+  return fresh;
+}
+
+/**
+ * Add a payment to an invoice inside a transaction.
+ */
+export async function addPayment(id, branchFilter, { amount, method, reference, date, notes, idempotencyKey, userId }) {
+  const result = await withTransaction(async (session) =>
+    applyInvoicePayment(
+      {
+        invoiceId: id,
+        branchFilter,
+        amount,
+        method,
+        reference,
+        date,
+        notes,
+        idempotencyKey,
+        userId,
+      },
+      session,
+    ),
+  );
 
   if (result.idempotent) {
     await result.invoice.populate(POPULATE);
@@ -472,6 +551,17 @@ export async function voidInvoice(id, branchFilter, { reason, userId } = {}) {
     // them here to avoid double-crediting the balance on void.
     const walletPaid = netWalletReversal(invoice.payments);
 
+    // Record the non-wallet collected amount (cash/card/bank/check) that was
+    // actually received before voiding. Wallet debits are reversed back to the
+    // wallet, but these were real external payments — this entry preserves the
+    // figure in the audit trail so accounting can see what was collected from
+    // the voided sale instead of silently erasing it.
+    const nonWalletCollected = round2(
+      (invoice.payments || [])
+        .filter((p) => p.method !== 'wallet' && !p.isRefund)
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
+    );
+
     invoice.status = 'void';
     invoice.changelog.push({
       field: 'status',
@@ -480,6 +570,15 @@ export async function voidInvoice(id, branchFilter, { reason, userId } = {}) {
       reason: reason || '',
       changedBy: userId || null,
     });
+    if (nonWalletCollected > 0) {
+      invoice.changelog.push({
+        field: 'collectedAmount',
+        oldValue: nonWalletCollected,
+        newValue: 0,
+        reason: `Voided invoice ${invoice.invoiceNo}`,
+        changedBy: userId || null,
+      });
+    }
     await invoice.save({ session });
 
     // Reverse wallet debits
