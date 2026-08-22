@@ -77,7 +77,7 @@ export const resolveErrorLog = asyncHandler(async (req, res) => {
   const log = await ErrorLog.findByIdAndUpdate(
     req.params.id,
     { resolved: true, resolvedAt: new Date(), resolvedBy: req.user?._id || null },
-    { new: true },
+    { returnDocument: "after" },
   );
   if (!log) throw ApiError.notFound('Error log not found');
   return sendSuccess(res, { log });

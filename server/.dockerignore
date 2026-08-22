@@ -4,3 +4,8 @@ npm-debug.log*
 *.log
 .git
 .gitignore
+.wwebjs_cache
+.wwebjs_auth
+backups
+__tests__
+.github

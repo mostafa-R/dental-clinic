@@ -1175,6 +1175,12 @@ const options = {
 const swaggerSpec = swaggerJsdoc(options);
 
 export function setupSwagger(app) {
+  // Docs are public API surface — disabled in production unless explicitly
+  // enabled with ENABLE_API_DOCS=true.
+  const docsEnabled =
+    process.env.NODE_ENV !== "production" || process.env.ENABLE_API_DOCS === "true";
+  if (!docsEnabled) return;
+
   app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
     customSiteTitle: "Dental OS API Docs",
     customCss: ".swagger-ui .topbar { display: none }",

@@ -102,7 +102,7 @@ export async function updateItem(id, branchFilter, data) {
   const item = await InventoryItem.findOneAndUpdate(
     { _id: id, ...branchFilter },
     { $set: update },
-    { new: true, runValidators: true },
+    { returnDocument: "after", runValidators: true },
   );
   if (!item) {
     throw ApiError.notFound('Inventory item not found');
@@ -117,7 +117,7 @@ export async function deleteItem(id, branchFilter) {
   const item = await InventoryItem.findOneAndUpdate(
     { _id: id, ...branchFilter },
     { $set: { isActive: false } },
-    { new: true },
+    { returnDocument: "after" },
   );
   if (!item) {
     throw ApiError.notFound('Inventory item not found');
@@ -163,7 +163,7 @@ export async function adjustStock(id, branchFilter, { type, quantity, reason, re
           },
         },
       },
-      { new: true, runValidators: true },
+      { returnDocument: "after", runValidators: true },
     );
     if (!item) {
       throw ApiError.conflict('Insufficient stock for this operation');
@@ -186,7 +186,7 @@ export async function adjustStock(id, branchFilter, { type, quantity, reason, re
         },
       },
     },
-    { new: true, runValidators: true },
+    { returnDocument: "after", runValidators: true },
   );
   if (!item) {
     throw ApiError.notFound('Inventory item not found');
@@ -223,7 +223,7 @@ export async function deductForProcedure(branchId, tenantId, toothState, procedu
     if (toDeduct <= 0) break;
     const take = Math.min(item.quantity, toDeduct);
 
-    const opts = { new: true };
+    const opts = { returnDocument: "after" };
     if (session) opts.session = session;
 
     // Atomic decrement with guard.

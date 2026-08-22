@@ -27,6 +27,10 @@ dotenv.config({ path: path.join(__dirname, ".env"), quiet: true });
 const app = express();
 const isProd = process.env.NODE_ENV === "production";
 
+// Must be set before any middleware that inspects req.ip (rate limiters,
+// CSRF, abuse monitor) so the proxy hop is correctly skipped.
+app.set("trust proxy", 1);
+
 const allowedOrigins = process.env.CLIENT_URL
   ? process.env.CLIENT_URL.split(",").map((url) => url.trim()).filter(Boolean)
   : ["http://localhost:5173"];
@@ -84,8 +88,6 @@ app.use(cookieParser());
 app.use(csrfProtection(allowedOrigins));
 
 setupSwagger(app);
-
-app.set("trust proxy", 1);
 
 app.use(httpLogger);
 

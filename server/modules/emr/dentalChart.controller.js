@@ -25,7 +25,7 @@ export const getDentalChart = asyncHandler(async (req, res) => {
   const chart = await DentalChart.findOneAndUpdate(
     { patient: patient._id, branch: patient.branch },
     { $setOnInsert: { tenant: patient.tenant, updatedBy: req.user._id } },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
+    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
   );
 
   if (!chart.populated('patient')) {

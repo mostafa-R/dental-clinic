@@ -394,7 +394,7 @@ export const updateAppointment = asyncHandler(async (req, res) => {
   const appointment = await Appointment.findOneAndUpdate(
     { _id: id, ...branchFilter },
     { $set: setPayload },
-    { new: true, runValidators: true },
+    { returnDocument: "after", runValidators: true },
   ).populate(POPULATE);
 
   if (!appointment) {

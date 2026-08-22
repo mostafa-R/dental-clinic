@@ -182,7 +182,7 @@ export const updatePatient = asyncHandler(async (req, res) => {
   const patient = await Patient.findOneAndUpdate(
     { _id: id, ...branchFilter },
     { $set: payload },
-    { new: true, runValidators: true },
+    { returnDocument: "after", runValidators: true },
   ).populate('branch', 'name');
 
   if (!patient) {
@@ -203,7 +203,7 @@ export const archivePatient = asyncHandler(async (req, res) => {
   const patient = await Patient.findOneAndUpdate(
     { _id: id, ...branchFilter },
     { isActive: false },
-    { new: true },
+    { returnDocument: "after" },
   );
 
   if (!patient) {

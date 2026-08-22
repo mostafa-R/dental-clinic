@@ -82,7 +82,7 @@ export const deleteExpense = asyncHandler(async (req, res) => {
   const expense = await Expense.findOneAndUpdate(
     { _id: req.params.id, ...filterByBranch(req), isActive: true },
     { $set: { isActive: false } },
-    { new: true },
+    { returnDocument: "after" },
   );
   if (!expense) {
     throw ApiError.notFound("Expense not found");

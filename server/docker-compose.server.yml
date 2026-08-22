@@ -1,13 +1,55 @@
-version: '3.8'
 services:
+  mongo:
+    image: mongo:7
+    container_name: d_ph-com-sa-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # Not published to the host — reachable only inside the compose network.
+
+  redis:
+    image: redis:7-alpine
+    container_name: d_ph-com-sa-redis
+    restart: unless-stopped
+    # AOF persistence so rate-limit/abuse counters survive container restarts.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   server:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: d_ph-com-sa-server
+    restart: unless-stopped
     ports:
       - "7000:7000"
     env_file:
       - .env
     environment:
       - NODE_ENV=production
+      # Inside the compose network the services are reachable by service name.
+      # These override any MONGO_URI/REDIS_URL values from .env — update .env
+      # only for non-Docker deployments.
+      - MONGO_URI=mongodb://mongo:27017/dental-clinic
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  mongo_data:
+  redis_data:

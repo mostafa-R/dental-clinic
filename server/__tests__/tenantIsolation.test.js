@@ -56,6 +56,9 @@ describe('Cross-Tenant Isolation', () => {
     const Branch = (await import('../modules/users/branch.model.js')).default;
     const User = (await import('../modules/users/user.model.js')).default;
     const SiteAdmin = (await import('../modules/site/admin/admin.model.js')).default;
+    // Register Role so User.populate('roleId') does not throw MissingSchemaError
+    // (in the real app the model is registered via role.routes.js at startup)
+    await import('../modules/users/role.model.js');
 
     // Clean up test data
     await Promise.all([

@@ -62,7 +62,7 @@ export const refresh = asyncHandler(async (req, res) => {
   const updated = await User.findOneAndUpdate(
     { _id: decoded.sub, tokenVersion: decoded.tokenVersion },
     { $inc: { tokenVersion: 1 } },
-    { new: true },
+    { returnDocument: "after" },
   );
   if (!updated) {
     throw ApiError.unauthorized('Token has been rotated, please log in again');
@@ -90,7 +90,7 @@ export const updatePreferences = asyncHandler(async (req, res) => {
   if (language !== undefined) update['preferences.language'] = language;
   if (theme !== undefined) update['preferences.theme'] = theme;
 
-  const user = await User.findByIdAndUpdate(req.user._id, { $set: update }, { new: true })
+  const user = await User.findByIdAndUpdate(req.user._id, { $set: update }, { returnDocument: "after" })
     .populate('branch', 'name address phone isActive')
     .populate('tenant', 'plan planModules planId status name isActive');
 

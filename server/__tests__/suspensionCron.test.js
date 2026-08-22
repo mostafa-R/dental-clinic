@@ -60,16 +60,29 @@ describe("suspensionCron - checkAndSuspend", () => {
     await checkAndSuspend();
 
     expect(Tenant.findByIdAndUpdate).toHaveBeenCalledTimes(2);
-    expect(Tenant.findByIdAndUpdate).toHaveBeenCalledWith("t1", {
-      status: "suspended",
-      isActive: false,
-    });
-    expect(Tenant.findByIdAndUpdate).toHaveBeenCalledWith("t2", {
-      status: "suspended",
-      isActive: false,
-    });
-    expect(Subscription.findByIdAndUpdate).toHaveBeenCalledWith("s1", { status: "past_due" });
-    expect(Subscription.findByIdAndUpdate).toHaveBeenCalledWith("s2", { status: "past_due" });
+    // Writes run inside a transaction, so they receive { session } as the
+    // third argument (withTransaction is mocked to pass an empty session).
+    const sessionOpts = { session: {} };
+    expect(Tenant.findByIdAndUpdate).toHaveBeenCalledWith(
+      "t1",
+      { status: "suspended", isActive: false },
+      sessionOpts,
+    );
+    expect(Tenant.findByIdAndUpdate).toHaveBeenCalledWith(
+      "t2",
+      { status: "suspended", isActive: false },
+      sessionOpts,
+    );
+    expect(Subscription.findByIdAndUpdate).toHaveBeenCalledWith(
+      "s1",
+      { status: "past_due" },
+      sessionOpts,
+    );
+    expect(Subscription.findByIdAndUpdate).toHaveBeenCalledWith(
+      "s2",
+      { status: "past_due" },
+      sessionOpts,
+    );
     expect(invalidateTenant).toHaveBeenCalledTimes(2);
     expect(invalidateTenant).toHaveBeenCalledWith("t1");
     expect(invalidateTenant).toHaveBeenCalledWith("t2");

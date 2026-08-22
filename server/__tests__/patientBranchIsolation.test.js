@@ -172,7 +172,7 @@ describe('Patient branch reassignment isolation', () => {
     let nextErr = null;
     await updatePatient(req, res, (err) => { nextErr = err; });
 
-    expect(nextErr).toBeUndefined();
+    expect(nextErr).toBeNull();
     expect(res.statusCode).toBe(200);
 
     const reloaded = await Patient.findById(patient._id);

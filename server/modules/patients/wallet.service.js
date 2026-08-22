@@ -20,7 +20,7 @@ export async function getOrCreateWallet(patient) {
             patient: patient._id,
           },
         },
-        { upsert: true, new: true, runValidators: true },
+        { upsert: true, returnDocument: "after", runValidators: true },
       );
     } catch (err) {
       if (err.code === 11000) {
@@ -64,7 +64,7 @@ export async function addTransaction(patient, data, userId, externalSession = nu
               patient: patient._id,
             },
           },
-          { upsert: true, new: true, runValidators: true, session },
+          { upsert: true, returnDocument: "after", runValidators: true, session },
         );
       } catch (err) {
         if (err.code === 11000) {
@@ -80,7 +80,7 @@ export async function addTransaction(patient, data, userId, externalSession = nu
       const updated = await Wallet.findOneAndUpdate(
         { _id: wallet._id, balance: { $gte: amount } },
         { $inc: { balance: -amount } },
-        { new: true, session },
+        { returnDocument: "after", session },
       );
       if (!updated) {
         throw ApiError.badRequest('Insufficient wallet balance');
@@ -91,7 +91,7 @@ export async function addTransaction(patient, data, userId, externalSession = nu
       wallet = await Wallet.findOneAndUpdate(
         { _id: wallet._id },
         { $inc: { balance: amount } },
-        { new: true, session },
+        { returnDocument: "after", session },
       );
     }
 
