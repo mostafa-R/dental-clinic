@@ -8,17 +8,18 @@ import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { abuseMonitor } from "./middleware/abuseMonitor.js";
+import { csrfProtection } from "./middleware/csrf.js";
 import { errorHandler, notFound } from "./middleware/error.js";
 import { httpLogger } from "./middleware/httpLogger.js";
-import { logError } from "./middleware/logError.js";
-import { requestId } from "./middleware/requestId.js";
-import { userRateLimit } from "./middleware/userRateLimit.js";
-import { csrfProtection } from "./middleware/csrf.js";
-import { maintenance } from "./middleware/maintenance.js";
 import { ipAllowlist } from "./middleware/ipAllowlist.js";
+import { logError } from "./middleware/logError.js";
+import { maintenance } from "./middleware/maintenance.js";
+import { requestId } from "./middleware/requestId.js";
+import { tenantRouter } from "./middleware/tenantRouter.js";
+import { userRateLimit } from "./middleware/userRateLimit.js";
 import apiRouter from "./routes/routes.js";
-import { perfMiddleware } from "./utils/perfMonitor.js";
 import { setupSwagger } from "./swagger.js";
+import { perfMiddleware } from "./utils/perfMonitor.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -152,7 +153,7 @@ const generalLimiter = rateLimit({
   message: { success: false, message: "Too many requests, please slow down" },
 });
 
-app.use("/api", requestId, generalLimiter, perfMiddleware, abuseMonitor, userRateLimit({ windowMs: 60000, max: 200 }), maintenance, ipAllowlist, apiRouter);
+app.use("/api", requestId, generalLimiter, perfMiddleware, abuseMonitor, userRateLimit({ windowMs: 60000, max: 200 }), maintenance, ipAllowlist, tenantRouter, apiRouter);
 
 app.use(logError);
 app.use(notFound);

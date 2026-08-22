@@ -52,6 +52,7 @@ export const listItemsQuerySchema = z.object({
 export const adjustStockSchema = z.object({
   type: z.enum(STOCK_TX_TYPES),
   quantity: z.number().min(0.01, 'Quantity must be positive'),
-  reason: z.string().max(200).optional(),
+  // PRD §6.8 BR-INV: adjustments must always carry a documented reason.
+  reason: z.string().min(1, 'Reason is required').max(200),
   reference: z.string().max(200).optional(),
 });

@@ -157,16 +157,30 @@ export const payInstallment = asyncHandler(async (req, res) => {
       throw ApiError.conflict('This installment has already been paid');
     }
 
-    const remaining = round2(installment.amount - installment.paidAmount);
+    // PRD §6.3: a late fee can only be applied when settling an OVERDUE
+    // installment, and it can only grow (never shrink) once recorded.
+    if (data.lateFee != null && data.lateFee > 0) {
+      if (installment.status !== 'overdue') {
+        throw ApiError.badRequest('A late fee can only be applied to an overdue installment');
+      }
+      installment.lateFee = round2(Math.max(installment.lateFee || 0, data.lateFee));
+    }
+
+    const dueTotal = round2(installment.amount + (installment.lateFee || 0));
+    const remaining = round2(dueTotal - installment.paidAmount);
     if (data.amount > remaining) {
       throw ApiError.badRequest(`Payment exceeds remaining balance of ${remaining}`);
     }
 
     // Overpayment guard: ensure total paid doesn't exceed plan total
+    // (late fees are included in what the patient owes).
+    const totalDuePlan = round2(
+      plan.installments.reduce((s, inst) => s + inst.amount + (inst.lateFee || 0), 0),
+    );
     const totalPaidBefore = round2(plan.installments.reduce((s, inst) => s + inst.paidAmount, 0));
     const newTotalPaid = round2(totalPaidBefore + data.amount);
-    if (newTotalPaid > plan.totalAmount) {
-      throw ApiError.badRequest(`Payment would exceed plan total of ${plan.totalAmount} (currently paid: ${totalPaidBefore})`);
+    if (newTotalPaid > totalDuePlan) {
+      throw ApiError.badRequest(`Payment would exceed plan total of ${totalDuePlan} (currently paid: ${totalPaidBefore})`);
     }
 
     installment.paidAmount = round2(installment.paidAmount + data.amount);
@@ -190,7 +204,7 @@ export const payInstallment = asyncHandler(async (req, res) => {
       );
     }
 
-    if (installment.paidAmount >= installment.amount) {
+    if (installment.paidAmount >= dueTotal) {
       installment.status = 'paid';
       installment.paidDate = new Date();
     }

@@ -271,7 +271,7 @@ router.delete('/:id', protect, checkPermission('inventory', 'delete'), deleteIte
  *             properties:
  *               type: { type: string, enum: [stock_in, stock_out, adjustment, expired, initial] }
  *               quantity: { type: number, minimum: 0.01 }
- *               reason: { type: string, maxLength: 200 }
+ *               reason: { type: string, maxLength: 200, required: true }
  *               reference: { type: string, maxLength: 200 }
  *     responses:
  *       '200':

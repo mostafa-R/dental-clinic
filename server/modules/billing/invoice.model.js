@@ -203,8 +203,11 @@ invoiceSchema.pre("validate", async function assignInvoiceNo() {
   // Skip auto-generation if invoiceNo is already set (e.g., from transactional create)
   // This prevents double-increment of the counter
   if (!this.invoiceNo) {
-    const nextSeq = await Counter.next('invoice', this.tenant, this.$session?.());
-    this.invoiceNo = `INV-${String(nextSeq).padStart(5, "0")}`;
+    // PRD §6.6: the sequence is per tenant per fiscal year (calendar year),
+    // so the counter id carries a year suffix and numbering restarts annually.
+    const year = new Date().getFullYear();
+    const nextSeq = await Counter.next('invoice', this.tenant, this.$session?.(), year);
+    this.invoiceNo = `INV-${year}-${String(nextSeq).padStart(5, "0")}`;
   }
   const financialFields = ['items', 'discount', 'discountType', 'discountRate', 'tax', 'taxRate', 'payments'];
   const needsRecompute = this.isNew || financialFields.some((f) => this.isModified(f));

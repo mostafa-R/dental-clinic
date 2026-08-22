@@ -146,7 +146,7 @@ describe('Invoice Counter Transaction', () => {
       });
 
       expect(invoice.invoiceNo).toBeDefined();
-      expect(invoice.invoiceNo).toMatch(/^INV-\d{5}$/);
+      expect(invoice.invoiceNo).toMatch(/^INV-\d{4}-\d{5}$/);
 
       // Create another invoice and verify sequence
       const invoice2 = await Invoice.create({
@@ -162,11 +162,12 @@ describe('Invoice Counter Transaction', () => {
 
     it('should have proper invoice number format', async () => {
       const Counter = (await import('../core/counters.js')).default;
-      
+
       const seq = 123;
-      const invoiceNo = `INV-${String(seq).padStart(5, '0')}`;
-      
-      expect(invoiceNo).toBe('INV-00123');
+      const year = new Date().getFullYear();
+      const invoiceNo = `INV-${year}-${String(seq).padStart(5, '0')}`;
+
+      expect(invoiceNo).toBe(`INV-${year}-00123`);
     });
   });
 

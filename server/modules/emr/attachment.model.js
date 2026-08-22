@@ -34,6 +34,12 @@ const medicalAttachmentSchema = new mongoose.Schema(
       index: true,
       trim: true,
     },
+    encryptedFilename: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: 255,
+    },
     originalName: {
       type: String,
       required: true,

@@ -5,6 +5,8 @@ import Commission from "../billing/commission.model.js";
 import Expense from "./expense.model.js";
 import Invoice from "../billing/invoice.model.js";
 import OwnerDrawing from "./ownerDrawing.model.js";
+import DayClose from "./dayClose.model.js";
+import JournalEntry from "./journalEntry.model.js";
 import Patient from "../patients/patient.model.js";
 import User from "../users/user.model.js";
 import { addTransaction } from "../patients/wallet.service.js";
@@ -15,6 +17,7 @@ import { sendSuccess } from "../../utils/sendSuccess.js";
 import { withTransaction } from "../../core/transaction.js";
 import { emitToBranch } from '../../socket/index.js';
 import { stripPHI } from '../../middleware/phiRestrict.js';
+import { postJournalEntry } from './journal.service.js';
 
 function serializePHI(value, req) {
   if (!req.isImpersonation) return value;
@@ -57,16 +60,43 @@ export const listExpenses = asyncHandler(async (req, res) => {
 export const createExpense = asyncHandler(async (req, res) => {
   const data = req.validatedBody;
   const branch = await resolveBranchForCreate(req, data.branch);
+  const tenant = currentTenant(req);
 
-  const expense = await Expense.create({
-    branch,
-    tenant: currentTenant(req),
-    category: data.category,
-    description: data.description,
-    amount: data.amount,
-    date: data.date ? new Date(data.date) : new Date(),
-    paymentMethod: data.paymentMethod || "cash",
-    recordedBy: req.user._id,
+  const expense = await withTransaction(async (session) => {
+    const [expenseDoc] = await Expense.create([
+      {
+        branch,
+        tenant,
+        category: data.category,
+        description: data.description,
+        amount: data.amount,
+        date: data.date ? new Date(data.date) : new Date(),
+        paymentMethod: data.paymentMethod || "cash",
+        recordedBy: req.user._id,
+      },
+    ], { session });
+
+    // BR-BL-05: expenses leave cash/bank — debit the expense account.
+    await postJournalEntry({
+      tenant,
+      branch,
+      date: expenseDoc.date,
+      sourceType: 'expense',
+      sourceId: expenseDoc._id,
+      sourceModel: 'Expense',
+      description: `Expense ${expenseDoc.expenseNo || expenseDoc._id} — ${data.category}`,
+      lines: [
+        { account: 'expenses', debit: data.amount, memo: data.category },
+        {
+          account: (data.paymentMethod || 'cash') === 'cash' ? 'cash' : 'bank',
+          credit: data.amount,
+          memo: data.paymentMethod || 'cash',
+        },
+      ],
+      userId: req.user._id,
+    }, session);
+
+    return expenseDoc;
   });
 
   await expense.populate("recordedBy", "name");
@@ -182,6 +212,31 @@ export const createDrawing = asyncHandler(async (req, res) => {
         description: data.description || `Owner drawing ${drawing.drawingNo}`,
       }, req.user._id, session);
     }
+
+    // BR-BL-05: owner drawings leave cash/bank (or a patient wallet).
+    await postJournalEntry({
+      tenant,
+      branch,
+      date: drawing.date,
+      sourceType: 'drawing',
+      sourceId: drawing._id,
+      sourceModel: 'OwnerDrawing',
+      description: `Owner drawing ${drawing.drawingNo} — ${owner.name}`,
+      lines: [
+        { account: 'owner_drawing', debit: data.amount, memo: data.paymentMethod || 'cash' },
+        {
+          account:
+            (data.paymentMethod || 'cash') === 'wallet'
+              ? 'wallet_clearing'
+              : (data.paymentMethod || 'cash') === 'cash'
+                ? 'cash'
+                : 'bank',
+          credit: data.amount,
+          memo: data.paymentMethod || 'cash',
+        },
+      ],
+      userId: req.user._id,
+    }, session);
 
     await drawing.populate("owner", "name");
     return drawing;
@@ -438,5 +493,233 @@ export const getAccountingSummary = asyncHandler(async (req, res) => {
       count: r.count,
     })),
     commissions,
+  });
+});
+
+/* -------------------------------------------------------------- Day Close */
+
+function startOfDay(d) {
+  const date = new Date(d);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function endOfDay(d) {
+  const date = new Date(d);
+  date.setHours(23, 59, 59, 999);
+  return date;
+}
+
+/** Normalize any payment-method label onto the four Day Close buckets. */
+function dayCloseBucket(method) {
+  if (method === 'cash') return 'cash';
+  if (method === 'wallet') return 'wallet';
+  if (method === 'card') return 'card';
+  return 'transfer'; // transfer + bank
+}
+
+/**
+ * Snapshot the expected takings of a branch for one day, from the ledgers:
+ * invoice payments in (net of refunds) minus cash expenses and owner drawings.
+ */
+async function computeExpectedTakings(branchFilter, start, end) {
+  const paymentMatch = { ...branchFilter };
+  const [paymentAgg, expenseAgg, drawingAgg] = await Promise.all([
+    Invoice.aggregate([
+      { $match: { ...paymentMatch, payments: { $exists: true, $ne: [] } } },
+      { $unwind: '$payments' },
+      { $match: { 'payments.date': { $gte: start, $lte: end } } },
+      {
+        $group: {
+          _id: '$payments.method',
+          total: { $sum: '$payments.amount' },
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+    Expense.aggregate([
+      {
+        $match: {
+          ...branchFilter,
+          isActive: { $ne: false },
+          date: { $gte: start, $lte: end },
+        },
+      },
+      { $group: { _id: '$paymentMethod', total: { $sum: '$amount' }, count: { $sum: 1 } } },
+    ]),
+    OwnerDrawing.aggregate([
+      {
+        $match: {
+          ...branchFilter,
+          isActive: { $ne: false },
+          date: { $gte: start, $lte: end },
+        },
+      },
+      { $group: { _id: '$paymentMethod', total: { $sum: '$amount' }, count: { $sum: 1 } } },
+    ]),
+  ]);
+
+  const expected = { cash: 0, card: 0, transfer: 0, wallet: 0 };
+  for (const row of paymentAgg) {
+    expected[dayCloseBucket(row._id)] += row.total;
+  }
+  // Money that left the drawer during the day reduces the expected float.
+  for (const row of [...expenseAgg, ...drawingAgg]) {
+    expected[dayCloseBucket(row._id)] -= row.total;
+  }
+  for (const key of Object.keys(expected)) {
+    expected[key] = round2(expected[key]);
+  }
+  return expected;
+}
+
+/**
+ * GET /accounting/day-close?date=YYYY-MM-DD
+ * PRD §7.5: preview the day's expected takings per method before closing.
+ */
+export const getDayClosePreview = asyncHandler(async (req, res) => {
+  const branchFilter = filterByBranch(req);
+  const date = req.validatedQuery?.date ? new Date(req.validatedQuery.date) : new Date();
+  const start = startOfDay(date);
+  const end = endOfDay(date);
+
+  const expected = await computeExpectedTakings(branchFilter, start, end);
+
+  const existing = await DayClose.findOne({ ...branchFilter, date: start }).populate(
+    'closedBy',
+    'name',
+  );
+
+  return sendSuccess(res, {
+    dayClose: {
+      date: start,
+      expected,
+      countedCash: existing?.countedCash ?? null,
+      difference: existing?.difference ?? null,
+      closedBy: existing?.closedBy ?? null,
+      closedAt: existing?.closedAt ?? null,
+      isClosed: !!existing,
+    },
+  });
+});
+
+/**
+ * POST /accounting/day-close/close
+ * BR-BL-04: lock the day with a cash count. Only users holding
+ * `accounting:update` (clinic managers/accountants by role config) may close.
+ * The snapshot is immutable — re-closing returns 409.
+ */
+export const closeDay = asyncHandler(async (req, res) => {
+  const branchFilter = filterByBranch(req);
+  const tenant = currentTenant(req);
+  const { date: dateStr, branch: branchId, countedCash, notes } = req.validatedBody;
+
+  // Day close is always scoped to ONE branch — system admins must pass one.
+  const resolvedBranch =
+    branchFilter.branch ?? (branchId ? toObjectId(branchId) : null) ?? (req.query.branch ? toObjectId(req.query.branch) : null);
+  if (!resolvedBranch) {
+    throw ApiError.badRequest('A branch is required to close the day', {
+      branch: 'required',
+    });
+  }
+
+  const start = startOfDay(dateStr ? new Date(dateStr) : new Date());
+  const end = endOfDay(start);
+
+  const alreadyClosed = await DayClose.findOne({
+    branch: resolvedBranch,
+    date: start,
+  }).select('_id');
+  if (alreadyClosed) {
+    throw ApiError.conflict('This day has already been closed', { date: 'already closed' });
+  }
+
+  const expected = await computeExpectedTakings(
+    { ...(tenant ? { tenant } : {}), branch: resolvedBranch },
+    start,
+    end,
+  );
+  const difference = round2(Number(countedCash) - expected.cash);
+
+  const [dayClose] = await DayClose.create([
+    {
+      tenant,
+      branch: resolvedBranch,
+      date: start,
+      expected,
+      countedCash,
+      difference,
+      notes: notes || '',
+      closedBy: req.user._id,
+    },
+  ]);
+  await dayClose.populate('closedBy', 'name');
+
+  emitToBranch(String(resolvedBranch), 'dayclose:closed', { dayClose });
+
+  return sendSuccess(res, { dayClose }, 201);
+});
+
+/**
+ * GET /accounting/day-close/list?from&to
+ * History of closed days for reconciliation review.
+ */
+export const listDayCloses = asyncHandler(async (req, res) => {
+  const branchFilter = filterByBranch(req);
+  const { from, to, page, limit } = req.validatedQuery;
+
+  const filter = { ...branchFilter };
+  const range = {};
+  if (from) range.$gte = startOfDay(new Date(from));
+  if (to) range.$lte = endOfDay(new Date(to));
+  if (Object.keys(range).length) filter.date = range;
+
+  const skip = (page - 1) * limit;
+  const [dayCloses, total] = await Promise.all([
+    DayClose.find(filter)
+      .populate('closedBy', 'name')
+      .sort('-date')
+      .skip(skip)
+      .limit(limit),
+    DayClose.countDocuments(filter),
+  ]);
+
+  return sendSuccess(res, {
+    dayCloses,
+    pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) },
+  });
+});
+
+/**
+ * GET /accounting/journal
+ * BR-BL-05: double-entry ledger listing for verification/reporting.
+ */
+export const listJournalEntries = asyncHandler(async (req, res) => {
+  const branchFilter = filterByBranch(req);
+  const { from, to, page, limit } = req.validatedQuery;
+
+  const filter = { ...branchFilter };
+  const range = {};
+  if (from) range.$gte = new Date(from);
+  if (to) range.$lte = new Date(to);
+  if (Object.keys(range).length) filter.date = range;
+
+  const skip = (page - 1) * limit;
+  const [entries, total, totals] = await Promise.all([
+    JournalEntry.find(filter).sort('-date').skip(skip).limit(limit),
+    JournalEntry.countDocuments(filter),
+    JournalEntry.aggregate([
+      { $match: filter },
+      { $group: { _id: null, debit: { $sum: '$totalDebit' }, credit: { $sum: '$totalCredit' } } },
+    ]),
+  ]);
+
+  return sendSuccess(res, {
+    entries,
+    pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) },
+    balances: {
+      totalDebit: round2(totals[0]?.debit ?? 0),
+      totalCredit: round2(totals[0]?.credit ?? 0),
+    },
   });
 });

@@ -24,6 +24,8 @@ export const createInstallmentPlanSchema = z.object({
 export const payInstallmentSchema = z.object({
   installmentId: z.string().length(24, 'Invalid installment id'),
   amount: z.number().positive('Payment amount must be positive'),
+  // PRD §6.3: an overdue installment can be settled with an optional late fee.
+  lateFee: z.number().min(0, 'Late fee cannot be negative').optional(),
   paymentMethod: z.enum(['cash', 'card', 'transfer', 'wallet']).optional(),
   paymentRef: z.string().max(100).optional(),
   notes: z.string().max(300).optional(),

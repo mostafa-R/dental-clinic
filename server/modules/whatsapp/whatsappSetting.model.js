@@ -22,7 +22,15 @@ const whatsappSettingSchema = new mongoose.Schema({
   settings: {
     appointmentReminder: { type: Boolean, default: false },
     appointmentConfirm: { type: Boolean, default: false },
+    // Primary short-window reminder (PRD §6.4 default schedule: 2h before).
     reminderHours: { type: Number, default: 2, min: 1, max: 72 },
+    // Secondary long-window reminder (PRD §6.4 default schedule: 24h before).
+    // Set to 0 to disable the second reminder entirely.
+    reminderHoursSecondary: { type: Number, default: 24, min: 0, max: 168 },
+    // Notify patients on WhatsApp about overdue installments (§6.3 cron).
+    installmentReminder: { type: Boolean, default: false },
+    // Send a reschedule suggestion when a patient is marked no-show (BR-PT-04).
+    noShowReminder: { type: Boolean, default: false },
   },
   status: {
     type: String,

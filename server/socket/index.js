@@ -22,6 +22,12 @@ function chatChannelRoom(tenantId, channel) {
   return channel ? `chat:${String(tenantId)}:${String(channel)}` : null;
 }
 
+// PRD §6.2 Live Queue: clinic-wide waiting-room screens subscribe to the
+// tenant queue room so they see called patients across all branches.
+function tenantQueueRoom(tenantId) {
+  return tenantId ? `queue:${String(tenantId)}` : null;
+}
+
 const ADMIN_ROOM = 'admin';
 const CHAT_CHANNELS = ['doctors', 'accounting', 'general'];
 
@@ -181,6 +187,20 @@ export function initSocket(httpServer) {
         socket.leave(branchRoom(branchId));
       }
     });
+
+    socket.on('subscribe:queue', () => {
+      // Only authenticated clinic staff of the tenant (never impersonated
+      // sessions) may watch the live queue room.
+      if (!socket.user.impersonating && socket.user.tenant) {
+        socket.join(tenantQueueRoom(socket.user.tenant));
+      }
+    });
+
+    socket.on('unsubscribe:queue', () => {
+      if (socket.user.tenant) {
+        socket.leave(tenantQueueRoom(socket.user.tenant));
+      }
+    });
   });
 
   return io;
@@ -211,6 +231,25 @@ function sanitize(payload) {
 export function emitToBranch(branchId, event, payload) {
   if (!io) return;
   const room = branchRoom(branchId);
+  if (!room) return;
+  const roomSockets = io.sockets.adapter.rooms.get(room);
+  if (!roomSockets) return;
+  for (const socketId of roomSockets) {
+    const socket = io.sockets.sockets.get(socketId);
+    if (!socket) continue;
+    const data = socket.user?.impersonating ? sanitize(payload) : payload;
+    io.to(socketId).emit(event, data);
+  }
+}
+
+/**
+ * Emit a Live Queue event (PRD §6.2) to the tenant queue room
+ * (`queue:{tenantId}`). Impersonated sockets in the room receive PHI-stripped
+ * payloads, mirroring emitToBranch semantics.
+ */
+export function emitToTenantQueue(tenantId, event, payload) {
+  if (!io) return;
+  const room = tenantQueueRoom(tenantId);
   if (!room) return;
   const roomSockets = io.sockets.adapter.rooms.get(room);
   if (!roomSockets) return;

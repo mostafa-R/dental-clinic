@@ -1,14 +1,18 @@
 import { Router } from 'express';
 
 import {
+  closeDay,
   createDrawing,
   createExpense,
   deleteDrawing,
   deleteExpense,
   getAccountingSummary,
+  getDayClosePreview,
   listCommissions,
+  listDayCloses,
   listDrawings,
   listExpenses,
+  listJournalEntries,
   updateCommissionStatus,
 } from './accounting.controller.js';
 import { protect } from '../../middleware/auth.js';
@@ -17,9 +21,12 @@ import { phiRestrict } from '../../middleware/phiRestrict.js';
 import { validate } from '../../middleware/validate.js';
 import {
   accountingSummaryQuerySchema,
+  closeDaySchema,
   createDrawingSchema,
   createExpenseSchema,
+  dayCloseQuerySchema,
   listCommissionQuerySchema,
+  listDayCloseQuerySchema,
   listDrawingQuerySchema,
   listExpenseQuerySchema,
   payCommissionSchema,
@@ -433,5 +440,106 @@ router.patch('/commissions/:id', protect, checkPermission('accounting', 'update'
  *         $ref: '#/components/responses/Forbidden'
  */
 router.get('/summary', protect, checkPermission('accounting', 'read'), phiRestrict, validate(accountingSummaryQuerySchema, 'query'), getAccountingSummary);
+
+/**
+ * @swagger
+ * /api/v1/accounting/day-close:
+ *   get:
+ *     tags: [Accounting]
+ *     summary: Day Close preview
+ *     description: Requires `accounting:read`. Returns the expected takings per payment method for one day (net of refunds, expenses and drawings) and whether the day is already closed.
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date
+ *         schema: { type: string }
+ *         description: Defaults to today
+ *     responses:
+ *       '200':
+ *         description: Expected takings and close state
+ */
+router.get('/day-close', protect, checkPermission('accounting', 'read'), phiRestrict, validate(dayCloseQuerySchema, 'query'), getDayClosePreview);
+
+/**
+ * @swagger
+ * /api/v1/accounting/day-close/close:
+ *   post:
+ *     tags: [Accounting]
+ *     summary: Close the day (BR-BL-04)
+ *     description: >
+ *       Requires `accounting:update` (clinic manager/accountant). Snapshots the
+ *       expected takings, records the counted cash with the resulting
+ *       difference as an immutable audit record, and notifies the branch over
+ *       the socket. Re-closing a closed day returns 409.
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [countedCash]
+ *             properties:
+ *               date: { type: string, description: Defaults to today }
+ *               branch: { $ref: '#/components/schemas/ObjectId' }
+ *               countedCash: { type: number, minimum: 0 }
+ *               notes: { type: string, maxLength: 500 }
+ *     responses:
+ *       '201':
+ *         description: Day closed
+ *       '409':
+ *         description: Already closed
+ */
+router.post('/day-close/close', protect, checkPermission('accounting', 'update'), phiRestrict, validate(closeDaySchema), closeDay);
+
+/**
+ * @swagger
+ * /api/v1/accounting/day-close/list:
+ *   get:
+ *     tags: [Accounting]
+ *     summary: Day Close history
+ *     description: Requires `accounting:read`.
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/PaginationPage'
+ *       - $ref: '#/components/parameters/PaginationLimit'
+ *       - in: query
+ *         name: from
+ *         schema: { type: string }
+ *       - in: query
+ *         name: to
+ *         schema: { type: string }
+ *     responses:
+ *       '200':
+ *         description: Closed days
+ */
+router.get('/day-close/list', protect, checkPermission('accounting', 'read'), phiRestrict, validate(listDayCloseQuerySchema, 'query'), listDayCloses);
+
+/**
+ * @swagger
+ * /api/v1/accounting/journal:
+ *   get:
+ *     tags: [Accounting]
+ *     summary: Double-entry journal ledger (BR-BL-05)
+ *     description: Requires `accounting:read`. Returns posted journal entries plus running debit/credit totals — the two must always match.
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/PaginationPage'
+ *       - $ref: '#/components/parameters/PaginationLimit'
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       '200':
+ *         description: Journal entries
+ */
+router.get('/journal', protect, checkPermission('accounting', 'read'), phiRestrict, validate(listDayCloseQuerySchema, 'query'), listJournalEntries);
 
 export default router;

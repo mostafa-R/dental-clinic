@@ -17,7 +17,7 @@ const FAIL_PREFIX = 'login:fail:';
 const LOCK_PREFIX = 'login:lock:';
 const WINDOW_SECONDS = 15 * 60; // counting window for consecutive failures
 const MAX_FAILED = 5;
-const LOCK_SECONDS = 15 * 60;
+const LOCK_SECONDS = 30 * 60; // PRD §6.1: lock for 30 minutes
 
 export function loginThrottleConfig() {
   return { MAX_FAILED, LOCK_SECONDS, WINDOW_SECONDS };

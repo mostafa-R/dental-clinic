@@ -61,3 +61,7 @@ export const listPatientsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   isActive: z.enum(['true', 'false']).optional(),
 });
+
+export const mergePatientSchema = z.object({
+  duplicateOf: z.string().length(24, 'Invalid patient id'),
+});

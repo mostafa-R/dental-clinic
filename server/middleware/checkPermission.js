@@ -151,3 +151,54 @@ export function checkPermission(module, action) {
     }
   };
 }
+
+/**
+ * Middleware factory: allow the request when the caller holds ANY of the
+ * listed [module, action] pairs (PRD e.g. refunds need billing.delete OR
+ * accounting.update). The plan gate passes when at least one candidate
+ * module is included in the tenant's plan.
+ */
+export function checkAnyPermission(pairs) {
+  return async function anyPermissionMiddleware(req, _res, next) {
+    try {
+      if (!req.user) {
+        return next(ApiError.unauthorized('Not authenticated'));
+      }
+
+      const planAllowed = pairs.some(([mod]) =>
+        planIncludesModule(req.user.tenant, mod),
+      );
+      if (!planAllowed) {
+        const [firstModule] = pairs[0];
+        return next(
+          ApiError.forbidden(
+            `Your plan does not include the ${firstModule} module. Contact your platform administrator to upgrade.`,
+          ),
+        );
+      }
+
+      if (!req._roleResolved) {
+        req._roleResolved = await resolveRole(req);
+      }
+
+      const { isSystemAdmin, permissionMap } = req._roleResolved;
+      if (isSystemAdmin) return next();
+
+      const perms = permissionMap();
+      const allowed = pairs.some(
+        ([mod, act]) => (perms[mod] || []).includes(act),
+      );
+
+      if (!allowed) {
+        const label = pairs.map(([m, a]) => `${a} ${m}`).join(' or ');
+        return next(
+          ApiError.forbidden(`You do not have permission to ${label}`),
+        );
+      }
+
+      return next();
+    } catch (err) {
+      return next(err);
+    }
+  };
+}

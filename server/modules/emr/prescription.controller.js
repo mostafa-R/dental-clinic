@@ -2,6 +2,8 @@ import mongoose from 'mongoose';
 
 import Prescription from './prescription.model.js';
 import User from '../users/user.model.js';
+import Branch from '../users/branch.model.js';
+import Tenant from '../site/tenant/tenant.model.js';
 import { emitToBranch } from '../../socket/index.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
@@ -124,4 +126,44 @@ export const deletePrescription = asyncHandler(async (req, res) => {
   emitRx(patient.branch, 'prescription:deleted', { _id: rx._id });
 
   return sendSuccess(res, { message: 'Prescription deleted' });
+});
+
+/**
+ * GET /patients/:patientId/prescriptions/:rxId/print
+ * PRD §6.5: A5 print payload — clinic letterhead (name/logo/address/phone),
+ * doctor signature block and the full prescription in one response so the
+ * frontend can render the printable view without extra round-trips.
+ */
+export const getPrescriptionPrint = asyncHandler(async (req, res) => {
+  const patient = await loadScopedPatient(req, req.params.patientId);
+  const rx = await loadRx(patient._id, req.params.rxId, patient.branch);
+  if (!rx) {
+    throw ApiError.notFound('Prescription not found');
+  }
+
+  const [tenantDoc, branchDoc, doctor] = await Promise.all([
+    rx.tenant ? Tenant.findById(rx.tenant).select('name phone address').lean() : null,
+    Branch.findById(rx.branch).select('name phone address').lean(),
+    User.findById(rx.doctor && rx.doctor._id ? rx.doctor._id : rx.doctor)
+      .select('name specialty')
+      .lean(),
+  ]);
+
+  return sendSuccess(res, {
+    print: {
+      prescription: req.isImpersonation ? stripPHI(rx.toJSON()) : rx,
+      clinic: {
+        name: tenantDoc?.name || branchDoc?.name || '',
+        logoUrl: tenantDoc?.logo || null,
+        address: branchDoc?.address || tenantDoc?.address || '',
+        phone: branchDoc?.phone || tenantDoc?.phone || '',
+      },
+      doctor: {
+        name: doctor?.name || '',
+        specialty: doctor?.specialty || '',
+        signatureUrl: null,
+      },
+      issuedAt: rx.issuedAt,
+    },
+  });
 });

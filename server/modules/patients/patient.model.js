@@ -90,6 +90,13 @@ const patientSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // PRD §6.3 duplicate management: set when this record was merged into
+    // another patient; the record is archived and kept for audit trail.
+    mergedInto: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Patient",
+      default: null,
+    },
   },
   { timestamps: true },
 );
@@ -117,6 +124,18 @@ patientSchema.pre("validate", async function assignPatientId() {
 patientSchema.index({ tenant: 1, patientId: 1 }, { unique: true });
 patientSchema.index({ firstName: 1, lastName: 1 });
 patientSchema.index({ branch: 1, isActive: 1 });
+
+// PRD §6.3: phone numbers are unique per Tenant+Branch (app-level check
+// returns a friendly 409; this backstop closes the check-then-insert race).
+// The partial filter skips empty phones so legacy records stay valid.
+patientSchema.index(
+  { tenant: 1, branch: 1, phone: 1 },
+  {
+    unique: true,
+    name: "unique_phone_per_tenant_branch",
+    partialFilterExpression: { phone: { $exists: true, $gt: "" } },
+  },
+);
 
 const Patient = mongoose.model("Patient", patientSchema);
 

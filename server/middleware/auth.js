@@ -1,7 +1,7 @@
-import ApiError from '../utils/ApiError.js';
-import { ACCESS_COOKIE, verifyAccessToken } from '../utils/jwt.js';
 import User from '../modules/users/user.model.js';
-import { getCachedTenant, cacheTenant, invalidateTenant } from '../utils/cache.js';
+import ApiError from '../utils/ApiError.js';
+import { cacheTenant, getCachedTenant } from '../utils/cache.js';
+import { ACCESS_COOKIE, verifyAccessToken } from '../utils/jwt.js';
 
 /**
  * Authentication middleware for clinic users.
@@ -28,6 +28,9 @@ export async function protect(req, _res, next) {
       throw ApiError.unauthorized('Invalid or expired access token');
     }
 
+    // NOTE: role is intentionally NOT populated here — RBAC resolution happens
+    // lazily in middleware/checkPermission.js resolveRole() (Redis-cached,
+    // tenant-scoped). Populating it here would double-query on every request.
     const user = await User.findById(decoded.sub)
       .populate('branch', 'name address phone isActive')
       .populate('tenant', 'plan planModules planId status name isActive subscriptionEndsAt');

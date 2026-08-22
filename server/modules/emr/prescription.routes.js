@@ -4,6 +4,7 @@ import {
   createPrescription,
   deletePrescription,
   getPrescription,
+  getPrescriptionPrint,
   listPrescriptions,
   updatePrescription,
 } from './prescription.controller.js';
@@ -161,6 +162,63 @@ router.post('/', protect, checkPermission('prescriptions', 'create'), phiRestric
  *         $ref: '#/components/responses/NotFound'
  */
 router.get('/:rxId', protect, checkPermission('prescriptions', 'read'), phiRestrict, getPrescription);
+
+/**
+ * @swagger
+ * /api/v1/patients/{patientId}/prescriptions/{rxId}/print:
+ *   get:
+ *     tags: [Prescriptions]
+ *     summary: Get A5 print payload for a prescription
+ *     description: Requires `prescriptions:read`. Returns the prescription plus clinic letterhead and doctor signature block.
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: patientId
+ *         required: true
+ *         schema: { $ref: '#/components/schemas/ObjectId' }
+ *       - in: path
+ *         name: rxId
+ *         required: true
+ *         schema: { $ref: '#/components/schemas/ObjectId' }
+ *     responses:
+ *       '200':
+ *         description: Print payload
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     print:
+ *                       type: object
+ *                       properties:
+ *                         prescription: { $ref: '#/components/schemas/Prescription' }
+ *                         clinic:
+ *                           type: object
+ *                           properties:
+ *                             name: { type: string }
+ *                             logoUrl: { type: string, nullable: true }
+ *                             address: { type: string }
+ *                             phone: { type: string }
+ *                         doctor:
+ *                           type: object
+ *                           properties:
+ *                             name: { type: string }
+ *                             specialty: { type: string }
+ *                             signatureUrl: { type: string, nullable: true }
+ *                         issuedAt: { type: string, format: date-time }
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ *       '404':
+ *         $ref: '#/components/responses/NotFound'
+ */
+router.get('/:rxId/print', protect, checkPermission('prescriptions', 'read'), phiRestrict, getPrescriptionPrint);
 
 /**
  * @swagger

@@ -8,8 +8,12 @@ import Branch from "../modules/users/branch.model.js";
 import { sendWhatsAppMessage } from "./whatsapp.js";
 
 const REMINDER_CHECK_INTERVAL = "*/30 * * * *";
+// Egypt weekend (Fri/Sat): the 24h reminder for a weekend appointment is
+// shifted a full day earlier so it lands on the preceding workday (PRD §6.4).
+const WEEKEND_DAYS = [5, 6]; // getDay(): 5=Friday, 6=Saturday
+const WINDOW_TOLERANCE_MS = 30 * 60 * 1000;
 
-async function buildMessage(patient, appointment, type) {
+function buildMessage(patient, appointment, type) {
   const date = new Date(appointment.start);
   const day = date.toLocaleDateString("ar-EG", {
     weekday: "long",
@@ -22,7 +26,7 @@ async function buildMessage(patient, appointment, type) {
     minute: "2-digit",
   });
 
-  if (type === "reminder") {
+  if (type === "reminder" || type === "reminder24") {
     return `تذكير موعد عيادة الأسنان 🦷\n\nمرحباً ${patient.firstName}،\nنذكرك بموعدك في عيادتنا:\n📅 ${day}\n🕒 ${time}\n\nنتمنى لك يوماً سعيداً.`;
   }
 
@@ -33,31 +37,74 @@ async function buildMessage(patient, appointment, type) {
   return "";
 }
 
+/**
+ * PRD §6.4 default schedule: reminders go out `reminderHours` before the
+ * appointment AND `reminderHoursSecondary` hours before (default 24h).
+ * Appointments falling on the weekend use the secondary window +24h so the
+ * notice arrives on a workday.
+ */
 async function sendMessagesForTenant(settings, type) {
   const tenantId = settings.tenant;
   const isReminder = type === "reminder";
-  const reminderHours = settings.settings?.reminderHours || 2;
+  const isReminder24 = type === "reminder24";
+
+  // The short-window reminder uses settings.reminderHours; the long window
+  // uses settings.reminderHoursSecondary (0 disables it — handled by caller).
+  let hoursAhead = settings.settings?.reminderHours || 2;
+  if (isReminder24) {
+    hoursAhead = settings.settings?.reminderHoursSecondary ?? 24;
+  }
 
   const now = new Date();
-  const windowEnd = new Date(now.getTime() + reminderHours * 60 * 60 * 1000);
-  const windowStart = isReminder ? now : new Date(now.getTime() - 60 * 60 * 1000);
+  let windowStart = now;
+  let windowEnd = new Date(now.getTime() + hoursAhead * 60 * 60 * 1000);
+
+  if (isReminder) {
+    // Short window: appointments starting within [now, now + reminderHours].
+    windowEnd = new Date(now.getTime() + hoursAhead * 60 * 60 * 1000);
+  } else if (isReminder24) {
+    // Long window targets the exact hour band around (start − hoursAhead):
+    // with a 30-min cron, a ±30 min band fires exactly once per appointment.
+    windowStart = new Date(now.getTime() + (hoursAhead - 1) * 60 * 60 * 1000);
+    windowEnd = new Date(now.getTime() + (hoursAhead + 1) * 60 * 60 * 1000);
+  } else {
+    // Confirmations: appointments confirmed within the last hour or upcoming.
+    windowStart = new Date(now.getTime() - 60 * 60 * 1000);
+  }
 
   const branches = await Branch.find({ tenant: tenantId }).select("_id").lean();
   const branchIds = branches.map((b) => b._id);
   if (branchIds.length === 0) return;
 
-  const filterField = isReminder ? "reminderSentAt" : "confirmSentAt";
+  const filterField = isReminder
+    ? "reminderSentAt"
+    : isReminder24
+      ? "secondaryReminderSentAt"
+      : "confirmSentAt";
+  const statuses = isReminder || isReminder24
+    ? { $in: ["scheduled", "confirmed"] }
+    : "confirmed";
 
   const appointments = await Appointment.find({
     branch: { $in: branchIds },
-    status: isReminder ? { $in: ["scheduled", "confirmed"] } : "confirmed",
-    start: isReminder ? { $gte: now, $lte: windowEnd } : { $gte: windowStart, $lte: windowEnd },
+    status: statuses,
+    start: { $gte: windowStart, $lte: windowEnd },
     [filterField]: null,
   })
     .populate("patient", "firstName phone")
     .lean();
 
-  const eligible = appointments.filter((apt) => apt.patient?.phone);
+  // Weekend shift for the 24h reminder: appointments landing Fri/Sat are
+  // reminded 48h ahead instead of 24h (message arrives on the workday).
+  let eligible = appointments.filter((apt) => apt.patient?.phone);
+  if (isReminder24 && hoursAhead > 0) {
+    eligible = eligible.filter((apt) => {
+      const day = new Date(apt.start).getDay();
+      const shiftedHours = WEEKEND_DAYS.includes(day) ? hoursAhead + 24 : hoursAhead;
+      const target = new Date(apt.start).getTime() - shiftedHours * 60 * 60 * 1000;
+      return Math.abs(target - now.getTime()) <= WINDOW_TOLERANCE_MS;
+    });
+  }
 
   const BATCH_SIZE = 5;
   const BATCH_DELAY_MS = 2000;
@@ -70,11 +117,11 @@ async function sendMessagesForTenant(settings, type) {
           await sendWhatsAppMessage(String(tenantId), apt.patient.phone, message);
           await Appointment.findByIdAndUpdate(apt._id, { [filterField]: new Date() });
           console.log(
-            `[WhatsApp-${type === "reminder" ? "Reminder" : "Confirm"}] Sent to ${apt.patient.firstName} (${apt.patient.phone}) for appointment ${apt._id}`,
+            `[WhatsApp-${type}] Sent to ${apt.patient.firstName} (${apt.patient.phone}) for appointment ${apt._id}`,
           );
         } catch (err) {
           console.error(
-            `[WhatsApp-${type === "reminder" ? "Reminder" : "Confirm"}] Failed for appointment ${apt._id}: ${err.message}`,
+            `[WhatsApp-${type}] Failed for appointment ${apt._id}: ${err.message}`,
           );
         }
       }),
@@ -94,8 +141,15 @@ async function processReminders() {
       "settings.appointmentReminder": true,
     }).lean();
 
-    const reminderPromises = activeSettings.map((s) => sendMessagesForTenant(s, "reminder"));
-    await Promise.allSettled(reminderPromises);
+    const jobs = [];
+    for (const s of activeSettings) {
+      jobs.push(sendMessagesForTenant(s, "reminder"));
+      // PRD §6.4: second reminder window (default 24h). A value of 0 opts out.
+      if ((s.settings?.reminderHoursSecondary ?? 24) > 0) {
+        jobs.push(sendMessagesForTenant(s, "reminder24"));
+      }
+    }
+    await Promise.allSettled(jobs);
 
     // Delay between tenant batches to avoid cross-tenant rate limiting.
     await new Promise((resolve) => setTimeout(resolve, 3000));

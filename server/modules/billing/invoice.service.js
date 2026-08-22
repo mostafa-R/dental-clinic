@@ -11,6 +11,7 @@ import { addTransaction } from '../patients/wallet.service.js';
 import User from '../users/user.model.js';
 import Commission from './commission.model.js';
 import Invoice from './invoice.model.js';
+import { postJournalEntry } from '../accounting/journal.service.js';
 
 const POPULATE = [
   { path: 'patient', select: 'patientId firstName lastName phone' },
@@ -18,6 +19,13 @@ const POPULATE = [
   { path: 'payments.recordedBy', select: 'name' },
   { path: 'createdBy', select: 'name' },
 ];
+
+/** Map a payment method to the asset account money moves through. */
+function accountForMethod(method) {
+  if (method === 'cash') return 'cash';
+  if (method === 'wallet') return 'wallet_clearing';
+  return 'bank'; // card / transfer
+}
 
 /**
  * Resolve the doctor eligible for commission on an invoice.
@@ -59,7 +67,12 @@ async function resolveCommissionDoctor(invoice, session) {
 
 /**
  * Accrue (or grow) the doctor commission when an invoice is fully paid.
- * Uses the full invoice total so partial instalments never over/under-accrue.
+ *
+ * BR-BL-02: commission is computed PER TREATMENT ITEM and never applies to
+ * discounts or taxes — each line's base is qty×price minus its own discount
+ * minus its proportional share of any invoice-level discount. Invoices
+ * without usable line items (legacy data) fall back to one record on the
+ * full total so partial instalments never over/under-accrue.
  */
 async function accrueCommissionForInvoice(invoice, session, userId) {
   const doctorId = await resolveCommissionDoctor(invoice, session);
@@ -71,45 +84,81 @@ async function accrueCommissionForInvoice(invoice, session, userId) {
     .lean();
   if (!doctor || (doctor.commissionRate || 0) <= 0) return;
 
-  const baseAmount = round2(invoice.total || 0);
-  if (baseAmount <= 0) return;
+  const lines = (Array.isArray(invoice.items) && invoice.items.length > 0 ? invoice.items : [])
+    .map((item) => {
+      const gross = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
+      const net = Math.max(0, gross - (Number(item.discount) || 0));
+      return { name: String(item.description || '').trim(), net };
+    })
+    .filter((line) => line.name && line.net > 0);
 
-  const existing = await Commission.findOne({
-    invoice: invoice._id,
-    doctor: doctor._id,
-  }).session(session);
-
-  if (existing) {
-    existing.baseAmount = baseAmount;
-    existing.amount = round2((baseAmount * (existing.rate || 0)) / 100);
-    // A fully refunded invoice voids its commission; if it is paid in full
-    // again, the commission is earned again.
-    if (existing.status === 'void') {
-      existing.status = 'pending';
-      existing.paidDate = null;
-    }
-    await existing.save({ session });
+  let desired;
+  if (lines.length > 0) {
+    const pool = round2(lines.reduce((sum, line) => sum + line.net, 0));
+    if (pool <= 0) return;
+    // Spread the invoice-level discount across items by their share of the
+    // commissionable pool, so discounts never inflate the commission base.
+    const invoiceDiscount = round2(Math.min(Math.max(Number(invoice.discount) || 0, 0), pool));
+    const factor = (pool - invoiceDiscount) / pool;
+    desired = lines
+      .map((line) => ({
+        procedureName: line.name.slice(0, 120),
+        baseAmount: round2(line.net * factor),
+      }))
+      .filter((entry) => entry.baseAmount > 0);
   } else {
-    try {
-      await Commission.create(
-        [
-          {
-            tenant: invoice.tenant,
-            branch: invoice.branch,
-            doctor: doctor._id,
-            patient: invoice.patient,
-            invoice: invoice._id,
-            procedureName: `Invoice payment — ${invoice.invoiceNo}`,
-            baseAmount,
-            rate: doctor.commissionRate,
-            createdBy: userId,
-          },
-        ],
-        { session },
-      );
-    } catch (err) {
-      // ignore duplicate key errors (race condition)
+    const baseAmount = round2(invoice.total || 0);
+    if (baseAmount <= 0) return;
+    desired = [
+      { procedureName: `Invoice payment — ${invoice.invoiceNo}`, baseAmount },
+    ];
+  }
+  if (desired.length === 0) return;
+
+  const existing =
+    (await Commission.find({ invoice: invoice._id, doctor: doctor._id }).session(session)) || [];
+  const unmatched = new Map(existing.map((c) => [c.procedureName, c]));
+
+  for (const entry of desired) {
+    const match = unmatched.get(entry.procedureName);
+    if (match) {
+      match.baseAmount = entry.baseAmount;
+      match.amount = round2((entry.baseAmount * (match.rate || doctor.commissionRate)) / 100);
+      // A fully refunded invoice voids its commissions; if it is paid in full
+      // again, they are earned again.
+      if (match.status === 'void') {
+        match.status = 'pending';
+        match.paidDate = null;
+      }
+      await match.save({ session });
+      unmatched.delete(entry.procedureName);
+    } else {
+      try {
+        await Commission.create(
+          [
+            {
+              tenant: invoice.tenant,
+              branch: invoice.branch,
+              doctor: doctor._id,
+              patient: invoice.patient,
+              invoice: invoice._id,
+              procedureName: entry.procedureName,
+              baseAmount: entry.baseAmount,
+              rate: doctor.commissionRate,
+              createdBy: userId,
+            },
+          ],
+          { session },
+        );
+      } catch (err) {
+        // ignore duplicate key errors (race condition)
+      }
     }
+  }
+
+  // Items removed from the invoice since the last accrual lose their record.
+  for (const stale of unmatched.values()) {
+    await stale.deleteOne({ session });
   }
 }
 
@@ -239,10 +288,12 @@ export async function createInvoice({ data, branch, tenant, userId }) {
   // Create invoice within a transaction to ensure counter and invoice are atomic
   // This prevents invoice number gaps if creation fails after counter increment
   const result = await withTransaction(async (session) => {
-    // Get the next invoice number within the transaction
+    // Get the next invoice number within the transaction. The counter is
+    // scoped to the fiscal year (PRD §6.6) so numbering restarts annually.
     const Counter = (await import('../../core/counters.js')).default;
-    const nextSeq = await Counter.next('invoice', tenant, session);
-    const invoiceNo = `INV-${String(nextSeq).padStart(5, '0')}`;
+    const year = new Date().getFullYear();
+    const nextSeq = await Counter.next('invoice', tenant, session, year);
+    const invoiceNo = `INV-${year}-${String(nextSeq).padStart(5, '0')}`;
 
     // Create the invoice with the pre-generated invoice number
     const [invoice] = await Invoice.create(
@@ -419,18 +470,18 @@ export async function applyInvoicePayment(
   if (balance <= 0) {
     throw ApiError.conflict('This invoice is already fully paid');
   }
-  if (amount > balance + 0.01) {
-    throw ApiError.badRequest(
-      `Payment exceeds the outstanding balance (${balance.toFixed(2)})`,
-      { amount: 'exceeds balance' },
-    );
-  }
+
+  // BR-BL-03: a payment larger than the outstanding balance is not rejected.
+  // The balance-clearing portion is applied to the invoice and the excess is
+  // automatically credited to the patient's wallet.
+  const applied = Math.min(amount, balance);
+  const excess = round2(amount - applied);
 
   const statusBefore = fresh.status;
 
   // Push payment
   fresh.payments.push({
-    amount,
+    amount: applied,
     method,
     reference: reference || '',
     idempotencyKey: idempotencyKey || undefined,
@@ -455,16 +506,30 @@ export async function applyInvoicePayment(
 
   // Wallet debit — atomic within the same transaction. The installment flow
   // already debits the wallet itself, so it passes skipWalletDebit: true.
-  if (method === 'wallet' && !skipWalletDebit) {
+  // BR-BL-03: any overpayment excess is auto-credited to the wallet.
+  if ((method === 'wallet' && !skipWalletDebit) || excess >= 0.01) {
     const patient = await Patient.findOne({ _id: fresh.patient }).session(session);
     if (!patient) throw ApiError.badRequest('Patient not found for wallet payment');
-    await addTransaction(patient, {
-      type: 'debit',
-      amount,
-      reference: reference || fresh.invoiceNo,
-      description: notes || `Payment for invoice ${fresh.invoiceNo}`,
-      invoice: fresh._id,
-    }, userId, session);
+    if (method === 'wallet' && !skipWalletDebit) {
+      await addTransaction(patient, {
+        type: 'debit',
+        amount: applied,
+        reference: reference || fresh.invoiceNo,
+        description: notes || `Payment for invoice ${fresh.invoiceNo}`,
+        invoice: fresh._id,
+      }, userId, session);
+    }
+    if (excess >= 0.01) {
+      await addTransaction(patient, {
+        type: 'credit',
+        amount: excess,
+        reference: reference || fresh.invoiceNo,
+        description: notes
+          ? `${notes} — overpayment credited to wallet`
+          : `Overpayment auto-credit for invoice ${fresh.invoiceNo}`,
+        invoice: fresh._id,
+      }, userId, session);
+    }
   }
 
   // Commission — accrue ONCE, when the invoice is FULLY paid, based on the
@@ -473,6 +538,34 @@ export async function applyInvoicePayment(
   if (fresh.status === 'paid') {
     await accrueCommissionForInvoice(fresh, session, userId);
   }
+
+  // BR-BL-05: double-entry record of the collected money. The applied portion
+  // is revenue; an overpayment excess sits in the patient's wallet (liability)
+  // rather than revenue until it is spent.
+  const paymentLines = [
+    { account: accountForMethod(method), debit: applied, memo: method },
+    { account: 'revenue', credit: applied, memo: fresh.invoiceNo },
+  ];
+  // Overpaid cash/card sits as a wallet liability until spent (a wallet-method
+  // payment never leaves the wallet, so nothing moves).
+  if (excess >= 0.01 && method !== 'wallet') {
+    paymentLines.push({ account: accountForMethod(method), debit: excess });
+    paymentLines.push({ account: 'wallet_clearing', credit: excess, memo: 'overpayment' });
+  }
+  await postJournalEntry(
+    {
+      tenant: fresh.tenant,
+      branch: fresh.branch,
+      date: date ? new Date(date) : new Date(),
+      sourceType: 'payment',
+      sourceId: fresh._id,
+      sourceModel: 'Invoice',
+      description: `Invoice ${fresh.invoiceNo} payment (${method})`,
+      lines: paymentLines,
+      userId,
+    },
+    session,
+  );
 
   return fresh;
 }
@@ -707,21 +800,47 @@ export async function refundPayment(id, branchFilter, { amount, method, referenc
       }
     }
 
-    // Adjust commission
+    // BR-BL-05: reverse the money movement — refunds hit the dedicated
+    // 'refunds' account, not revenue.
+    await postJournalEntry(
+      {
+        tenant: invoice.tenant,
+        branch: invoice.branch,
+        date: date ? new Date(date) : new Date(),
+        sourceType: 'refund',
+        sourceId: invoice._id,
+        sourceModel: 'Invoice',
+        description: `Refund for invoice ${invoice.invoiceNo} (${refundMethod})`,
+        lines: [
+          { account: 'refunds', debit: refundAmount, memo: invoice.invoiceNo },
+          {
+            account: shouldCreditWallet ? 'wallet_clearing' : accountForMethod(refundMethod),
+            credit: refundAmount,
+            memo: refundMethod,
+          },
+        ],
+        userId,
+      },
+      session,
+    );
+
+    // Adjust commissions (BR-BL-02: one record per invoice line item).
     const totalPaidBeforeRefund = round2(
       (invoice.payments || [])
         .filter((p) => !p.isRefund)
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
     );
-    const commission = await Commission.findOne({ invoice: invoice._id }).session(session);
-    if (commission && totalPaidBeforeRefund > 0) {
-      const refundRatio = refundAmount / totalPaidBeforeRefund;
-      if (refundRatio >= 0.999) {
-        commission.status = 'void';
-        await commission.save({ session });
-      } else {
-        commission.baseAmount = round2(commission.baseAmount * (1 - refundRatio));
-        await commission.save({ session });
+    if (totalPaidBeforeRefund > 0) {
+      const commissions = await Commission.find({ invoice: invoice._id }).session(session);
+      for (const commission of commissions) {
+        const refundRatio = refundAmount / totalPaidBeforeRefund;
+        if (refundRatio >= 0.999) {
+          commission.status = 'void';
+          await commission.save({ session });
+        } else {
+          commission.baseAmount = round2(commission.baseAmount * (1 - refundRatio));
+          await commission.save({ session });
+        }
       }
     }
 

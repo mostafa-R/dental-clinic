@@ -73,6 +73,23 @@ export const addPayment = asyncHandler(async (req, res) => {
     userId: req.user._id,
   });
   emitInvoice(invoice.branch, 'invoice:updated', invoice);
+  // PRD §6.6 trigger 5: a dedicated realtime event for recorded payments so
+  // reception/accounting screens can react without refetching the invoice.
+  const lastPayment = invoice.payments?.[invoice.payments.length - 1];
+  emitToBranch(invoice.branch, 'payment.recorded', {
+    invoiceId: String(invoice._id),
+    invoiceNo: invoice.invoiceNo,
+    payment: lastPayment
+      ? {
+          amount: lastPayment.amount,
+          method: lastPayment.method,
+          date: lastPayment.date,
+          reference: lastPayment.reference,
+        }
+      : null,
+    paidAmount: invoice.paidAmount,
+    status: invoice.status,
+  });
   return sendSuccess(res, { invoice: serializeInvoice(invoice, req) });
 });
 

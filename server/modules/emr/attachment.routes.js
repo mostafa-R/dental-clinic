@@ -59,7 +59,7 @@ async function getTenantKey(tenantId) {
  *   post:
  *     tags: [EMR Attachments]
  *     summary: Upload a medical attachment
- *     description: "Requires `emr:create` and multipart/form-data. Files are encrypted at rest. Allowed types: image/jpeg, image/png, image/webp, image/gif, application/pdf, application/dicom. Max 20MB."
+ *     description: "Requires `emr:create` and multipart/form-data. Files are encrypted at rest. Allowed types: image/jpeg, image/png, image/webp, image/gif, application/pdf, application/dicom. Max 50MB."
  *     security:
  *       - cookieAuth: []
  *     requestBody:
@@ -137,6 +137,7 @@ router.post(
         patient: patient._id,
         type: type || 'xray',
         filename: req.file.filename,
+        encryptedFilename: path.basename(encryptedPath),
         originalName: req.file.originalname,
         mimeType: req.file.mimetype,
         size: req.file.size,

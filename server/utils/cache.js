@@ -114,9 +114,12 @@ export async function getCachedRole(roleId) {
 /**
  * Invalidate cached Role. Called when role is updated or deleted.
  */
-export async function invalidateRole(roleId) {
-  await cacheDel('role', roleId);
+export function invalidateRole(roleId) {
+  return cacheDel('role', roleId);
 }
+
+// Alias kept for callers/tests that use the longer name.
+export const invalidateRoleCache = invalidateRole;
 
 /**
  * Invalidate all cached roles for a tenant.

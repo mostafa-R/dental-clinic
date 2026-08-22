@@ -6,13 +6,16 @@ import { round2 } from '../../constants/accounting.js';
 /**
  * Find or create a wallet for a patient.
  * Uses upsert with duplicate-key race handling.
+ * PRD §6.3: one wallet per patient per branch — the lookup is keyed on the
+ * compound {patient, branch} so a branch reassignment opens a fresh wallet.
  */
 export async function getOrCreateWallet(patient) {
-  let wallet = await Wallet.findOne({ patient: patient._id });
+  const key = { patient: patient._id, branch: patient.branch };
+  let wallet = await Wallet.findOne(key);
   if (!wallet) {
     try {
       wallet = await Wallet.findOneAndUpdate(
-        { patient: patient._id },
+        key,
         {
           $setOnInsert: {
             branch: patient.branch,
@@ -24,7 +27,7 @@ export async function getOrCreateWallet(patient) {
       );
     } catch (err) {
       if (err.code === 11000) {
-        wallet = await Wallet.findOne({ patient: patient._id });
+        wallet = await Wallet.findOne(key);
       } else {
         throw err;
       }
@@ -52,11 +55,13 @@ export async function addTransaction(patient, data, userId, externalSession = nu
       throw ApiError.badRequest('Amount must be positive');
     }
 
-    let wallet = await Wallet.findOne({ patient: patient._id }).session(session);
+    // PRD §6.3: wallets are keyed per patient per branch.
+    const walletKey = { patient: patient._id, branch: patient.branch };
+    let wallet = await Wallet.findOne(walletKey).session(session);
     if (!wallet) {
       try {
         wallet = await Wallet.findOneAndUpdate(
-          { patient: patient._id },
+          walletKey,
           {
             $setOnInsert: {
               branch: patient.branch,
@@ -68,7 +73,7 @@ export async function addTransaction(patient, data, userId, externalSession = nu
         );
       } catch (err) {
         if (err.code === 11000) {
-          wallet = await Wallet.findOne({ patient: patient._id }).session(session);
+          wallet = await Wallet.findOne(walletKey).session(session);
         } else {
           throw err;
         }

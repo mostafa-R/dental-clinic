@@ -54,6 +54,14 @@ const userSchema = new mongoose.Schema(
       trim: true,
       maxlength: 254,
     },
+    // PRD §6.1: users can log in with a username instead of their email.
+    username: {
+      type: String,
+      lowercase: true,
+      trim: true,
+      maxlength: 60,
+      default: null,
+    },
     password: {
       type: String,
       required: true,
@@ -149,7 +157,7 @@ const userSchema = new mongoose.Schema(
 
 userSchema.pre("save", async function hashPassword() {
   if (!this.isModified("password")) return;
-  const salt = await bcrypt.genSalt(10);
+  const salt = await bcrypt.genSalt(12);
   this.password = await bcrypt.hash(this.password, salt);
 });
 
@@ -222,6 +230,16 @@ userSchema.methods.isAvailableAt = function (start, end) {
 };
 
 userSchema.index({ tenant: 1, email: 1 }, { unique: true });
+
+// Usernames are optional but, when set, unique per clinic (PRD §6.1).
+userSchema.index(
+  { tenant: 1, username: 1 },
+  {
+    unique: true,
+    name: "unique_username_per_tenant",
+    partialFilterExpression: { username: { $type: "string" } },
+  },
+);
 
 const User = mongoose.model("User", userSchema);
 

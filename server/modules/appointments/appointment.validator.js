@@ -23,6 +23,8 @@ export const createAppointmentSchema = z
     chair: z.string().max(60).optional(),
     start: dateTimeSchema.optional(),
     end: dateTimeSchema.optional(),
+    // PRD §6.4: when `end` is omitted the duration is slotDuration × slots.
+    slots: z.number().int().min(1).max(3, 'Slots can be extended up to ×3').optional(),
     status: z.enum(['scheduled', 'confirmed']).optional(),
     reason: z.string().max(300).optional(),
     notes: z.string().max(1000).optional(),
@@ -43,6 +45,7 @@ export const updateAppointmentSchema = z
     chair: z.string().max(60).optional(),
     start: dateTimeSchema.optional(),
     end: dateTimeSchema.optional(),
+    slots: z.number().int().min(1).max(3, 'Slots can be extended up to ×3').optional(),
     reason: z.string().max(300).optional(),
     notes: z.string().max(1000).optional(),
   })
@@ -59,6 +62,10 @@ export const updateAppointmentSchema = z
 
 export const transitionSchema = z.object({
   status: z.enum(APPOINTMENT_STATUS),
+});
+
+export const callNextSchema = z.object({
+  doctor: objectIdSchema.optional(),
 });
 
 export const listAppointmentsQuerySchema = z.object({

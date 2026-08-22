@@ -15,7 +15,8 @@ function secrets() {
 }
 
 function accessExpiry() {
-  return process.env.ACCESS_TOKEN_EXPIRY || "15m";
+  // PRD §6.1: clinic sessions last up to 12 hours; refresh tokens cover 7 days.
+  return process.env.ACCESS_TOKEN_EXPIRY || "12h";
 }
 
 function refreshExpiry() {

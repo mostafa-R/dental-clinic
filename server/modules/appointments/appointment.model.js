@@ -94,9 +94,25 @@ const appointmentSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    secondaryReminderSentAt: {
+      type: Date,
+      default: null,
+    },
     confirmSentAt: {
       type: Date,
       default: null,
+    },
+    // Set when the patient is checked in (BR-PT-03 late-arrival detection).
+    checkedInAt: {
+      type: Date,
+      default: null,
+    },
+    // BR-PT-03: flagged when the patient arrives after more than 50% of the
+    // slot has elapsed — reception is notified and the visit can be pushed to
+    // the end of the queue.
+    lateArrival: {
+      flagged: { type: Boolean, default: false },
+      minutesLate: { type: Number, default: 0 },
     },
   },
   { timestamps: true },
@@ -124,8 +140,8 @@ appointmentSchema.pre("validate", async function assertNoDoctorOverlap() {
   if (!ACTIVE_STATUSES.includes(this.status)) return;
   if (!this.branch || !this.doctor || !this.start || !this.end) return;
 
-  const clash = await this.constructor
-    .findOne({
+  const candidates = await this.constructor
+    .find({
       branch: this.branch,
       doctor: this.doctor,
       status: { $in: ACTIVE_STATUSES },
@@ -133,8 +149,33 @@ appointmentSchema.pre("validate", async function assertNoDoctorOverlap() {
       end: { $gt: this.start },
       _id: { $ne: this._id },
     })
-    .select("_id")
+    .select("_id start end")
+    .limit(20)
     .lean();
+
+  if (candidates.length === 0) return;
+
+  // BR-PT-02: honor the branch bufferTime — small spillovers are tolerated,
+  // only overlaps longer than the buffer are rejected at the model level too.
+  let bufferMinutes = 0;
+  try {
+    const branchDoc = await mongoose
+      .model("Branch")
+      .findById(this.branch)
+      .select("bufferTime")
+      .lean();
+    bufferMinutes = branchDoc?.bufferTime ?? 0;
+  } catch {
+    bufferMinutes = 0; // Branch model unavailable → strict overlap check
+  }
+  const bufferMs = (bufferMinutes || 0) * 60000;
+
+  const clash = candidates.find((c) => {
+    const overlapMs =
+      Math.min(this.end.getTime(), c.end.getTime()) -
+      Math.max(this.start.getTime(), c.start.getTime());
+    return overlapMs > bufferMs;
+  });
 
   if (clash) {
     this.invalidate("start", "Doctor already has an overlapping appointment");

@@ -4,6 +4,7 @@ import InventoryItem from './inventory.model.js';
 import { toObjectId } from '../../utils/branchScope.js';
 import ApiError from '../../utils/ApiError.js';
 import { escapeRegex } from '../../utils/escapeRegex.js';
+import { emitItemAlerts } from '../../services/inventoryCron.js';
 
 export async function listItems(branchFilter, { search, category, lowStock, page, limit }) {
   const filter = { ...branchFilter, isActive: true };
@@ -168,6 +169,7 @@ export async function adjustStock(id, branchFilter, { type, quantity, reason, re
     if (!item) {
       throw ApiError.conflict('Insufficient stock for this operation');
     }
+    emitItemAlerts(item);
     return item;
   }
 
@@ -191,6 +193,7 @@ export async function adjustStock(id, branchFilter, { type, quantity, reason, re
   if (!item) {
     throw ApiError.notFound('Inventory item not found');
   }
+  emitItemAlerts(item);
   return item;
 }
 
@@ -252,6 +255,13 @@ export async function deductForProcedure(branchId, tenantId, toothState, procedu
   if (toDeduct > 0) {
     console.warn(`[Inventory] Insufficient stock for procedure ${procedureName}: ${toDeduct} units short`);
     throw ApiError.conflict(`Insufficient inventory to complete procedure: ${procedureName}`);
+  }
+
+  // PRD §6.8: raise stock.low / stock.expiring alerts after auto-deductions
+  // cross a threshold. Emissions happen outside the transaction's critical
+  // path and degrade silently when no socket server is attached.
+  for (const item of items) {
+    emitItemAlerts(item);
   }
 
   return deductions;

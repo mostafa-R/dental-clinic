@@ -3,8 +3,10 @@ import { Router } from 'express';
 import {
   archivePatient,
   createPatient,
+  findDuplicatePatients,
   getPatient,
   listPatients,
+  mergePatients,
   updatePatient,
 } from './patient.controller.js';
 import { protect } from '../../middleware/auth.js';
@@ -14,6 +16,7 @@ import { validate } from '../../middleware/validate.js';
 import {
   createPatientSchema,
   listPatientsQuerySchema,
+  mergePatientSchema,
   updatePatientSchema,
 } from './patient.validator.js';
 
@@ -64,6 +67,42 @@ const router = Router();
  *         $ref: '#/components/responses/Forbidden'
  */
 router.get('/', protect, checkPermission('patients', 'read'), phiRestrict, validate(listPatientsQuerySchema, 'query'), listPatients);
+
+/**
+ * @swagger
+ * /api/v1/patients/duplicates:
+ *   get:
+ *     tags: [Patients]
+ *     summary: Find suspected duplicate patient records
+ *     description: Requires `patients:read`. Groups active patients that share a phone number or name+date of birth within the same branch.
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       '200':
+ *         description: Duplicate groups
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     groups:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           matchedOn: { type: string, enum: [phone, name+dob] }
+ *                           key: { type: string }
+ *                           count: { type: integer }
+ *                           patients:
+ *                             type: array
+ *                             items: { $ref: '#/components/schemas/Patient' }
+ *                     total: { type: integer }
+ */
+router.get('/duplicates', protect, checkPermission('patients', 'read'), phiRestrict, findDuplicatePatients);
 
 /**
  * @swagger
@@ -246,5 +285,55 @@ router.patch('/:id', protect, checkPermission('patients', 'update'), phiRestrict
  *         $ref: '#/components/responses/NotFound'
  */
 router.delete('/:id', protect, checkPermission('patients', 'delete'), phiRestrict, archivePatient);
+
+/**
+ * @swagger
+ * /api/v1/patients/{id}/merge:
+ *   post:
+ *     tags: [Patients]
+ *     summary: Merge a duplicate patient into another record
+ *     description: Requires `patients:update`. All references are repointed to the surviving record, wallet balances combine, and the duplicate is archived with `mergedInto` set.
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { $ref: '#/components/schemas/ObjectId' }
+ *         description: The duplicate record to retire
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [duplicateOf]
+ *             properties:
+ *               duplicateOf: { $ref: '#/components/schemas/ObjectId' }
+ *     responses:
+ *       '200':
+ *         description: Patients merged
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     message: { type: string }
+ *                     mergedId: { $ref: '#/components/schemas/ObjectId' }
+ *                     survivorId: { $ref: '#/components/schemas/ObjectId' }
+ *       '400':
+ *         $ref: '#/components/responses/ValidationError'
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ *       '404':
+ *         $ref: '#/components/responses/NotFound'
+ */
+router.post('/:id/merge', protect, checkPermission('patients', 'update'), phiRestrict, validate(mergePatientSchema), mergePatients);
 
 export default router;

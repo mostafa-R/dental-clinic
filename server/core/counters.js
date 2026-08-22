@@ -21,8 +21,13 @@ const counterSchema = new mongoose.Schema(
  * transaction aborts, burning sequence numbers, and two concurrent upserts
  * of the same counter document could surface a spurious E11000/409.
  */
-counterSchema.statics.next = async function next(name, tenantId, session) {
-  const counterId = tenantId ? `${name}:${String(tenantId)}` : name;
+counterSchema.statics.next = async function next(name, tenantId, session, period) {
+  // Optional `period` suffix (e.g. a fiscal year) lets per-tenant sequences
+  // reset annually (PRD §6.6) without affecting existing counters.
+  const periodSuffix = period ? `:${period}` : '';
+  const counterId = tenantId
+    ? `${name}:${String(tenantId)}${periodSuffix}`
+    : `${name}${periodSuffix}`;
 
   const options = {
     returnDocument: 'after',

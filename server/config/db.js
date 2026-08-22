@@ -7,6 +7,10 @@ export async function connectDB() {
     process.exit(1);
   }
 
+  // Never let a query buffer forever when the connection drops: fail after
+  // 10s so requests return a clean error instead of hanging (NFR 11.2).
+  mongoose.set("bufferTimeoutMS", 10000);
+
   mongoose.connection.on("connected", () => {
     console.log("MongoDB connected");
   });

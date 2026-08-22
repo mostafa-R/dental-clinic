@@ -17,7 +17,7 @@ const ALLOWED_MIMES = new Set([
   'application/dicom', // DICOM X-ray
 ]);
 
-const MAX_SIZE = 20 * 1024 * 1024; // 20 MB
+const MAX_SIZE = 50 * 1024 * 1024; // PRD §6.5: max 50 MB
 
 const storage = multer.diskStorage({
   destination(_req, _file, cb) {

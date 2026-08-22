@@ -14,7 +14,7 @@ vi.mock("../modules/users/user.model.js", () => ({
 }));
 
 vi.mock("../modules/billing/commission.model.js", () => ({
-  default: { findOne: vi.fn(), create: vi.fn() },
+  default: { find: vi.fn(), create: vi.fn() },
 }));
 
 vi.mock("../modules/patients/patient.model.js", () => ({
@@ -23,6 +23,10 @@ vi.mock("../modules/patients/patient.model.js", () => ({
 
 vi.mock("../modules/patients/wallet.service.js", () => ({
   addTransaction: vi.fn(),
+}));
+
+vi.mock("../modules/accounting/journal.service.js", () => ({
+  postJournalEntry: vi.fn(),
 }));
 
 vi.mock("../core/transaction.js", () => ({
@@ -99,12 +103,12 @@ describe("addPayment — commission on full payment (ISSUE-014)", () => {
     vi.mocked(Invoice.findOne).mockReturnValue({ session: vi.fn().mockResolvedValue(fresh) });
     mockAppointmentDoctor();
     mockDoctor(10);
-    vi.mocked(Commission.findOne).mockReturnValue({ session: vi.fn().mockResolvedValue(null) });
+    vi.mocked(Commission.find).mockReturnValue({ session: vi.fn().mockResolvedValue([]) });
     vi.mocked(Commission.create).mockResolvedValue([{}]);
 
     await addPayment(INV_ID, {}, { amount: 100, method: "cash", userId: "u1" });
 
-    expect(Commission.findOne).toHaveBeenCalledTimes(1);
+    expect(Commission.find).toHaveBeenCalledTimes(1);
     expect(Commission.create).toHaveBeenCalledWith(
       [expect.objectContaining({ baseAmount: 100, rate: 10, invoice: INV_ID })],
       expect.objectContaining({ session: { mock: true } }),
@@ -117,7 +121,7 @@ describe("addPayment — commission on full payment (ISSUE-014)", () => {
     vi.mocked(Invoice.findOne).mockReturnValue({ session: vi.fn().mockResolvedValue(fresh) });
     mockAppointmentDoctor();
     mockDoctor(10);
-    vi.mocked(Commission.findOne).mockReturnValue({ session: vi.fn().mockResolvedValue(null) });
+    vi.mocked(Commission.find).mockReturnValue({ session: vi.fn().mockResolvedValue([]) });
     vi.mocked(Commission.create).mockResolvedValue([{}]);
 
     await addPayment(INV_ID, {}, { amount: 30, method: "cash", userId: "u1" });
@@ -130,6 +134,37 @@ describe("addPayment — commission on full payment (ISSUE-014)", () => {
     );
   });
 
+  it("accrues one commission per item, excluding discounts and tax (BR-BL-02)", async () => {
+    const fresh = makeFresh({ total: 215 });
+    // Pool excludes taxes and is net of item discounts; X-Ray is fully
+    // discounted so it never enters the commissionable pool.
+    fresh.items = [
+      { description: "Filling", quantity: 1, unitPrice: 100, discount: 10, tax: 0, total: 90 },
+      { description: "Cleaning", quantity: 2, unitPrice: 50, discount: 0, tax: 5, total: 105 },
+      { description: "X-Ray", quantity: 1, unitPrice: 40, discount: 40, tax: 0, total: 0 },
+    ];
+    fresh.discount = 20;
+    vi.mocked(Invoice.findOne).mockReturnValue({ session: vi.fn().mockResolvedValue(fresh) });
+    mockAppointmentDoctor();
+    mockDoctor(10);
+    vi.mocked(Commission.find).mockReturnValue({ session: vi.fn().mockResolvedValue([]) });
+    vi.mocked(Commission.create).mockResolvedValue([{}]);
+
+    await addPayment(INV_ID, {}, { amount: 215, method: "cash", userId: "u1" });
+
+    // Pool = (100-10) + (2×50) = 190; invoice discount 20 → factor 170/190.
+    // Filling: 90 × 170/190 = 80.53 ; Cleaning: 100 × 170/190 = 89.47.
+    expect(Commission.create).toHaveBeenCalledTimes(2);
+    expect(Commission.create).toHaveBeenCalledWith(
+      [expect.objectContaining({ procedureName: "Filling", baseAmount: 80.53 })],
+      expect.anything(),
+    );
+    expect(Commission.create).toHaveBeenCalledWith(
+      [expect.objectContaining({ procedureName: "Cleaning", baseAmount: 89.47 })],
+      expect.anything(),
+    );
+  });
+
   it("does not accrue commission on a partial payment", async () => {
     const fresh = makeFresh({ total: 100 });
     vi.mocked(Invoice.findOne).mockReturnValue({ session: vi.fn().mockResolvedValue(fresh) });
@@ -138,7 +173,7 @@ describe("addPayment — commission on full payment (ISSUE-014)", () => {
 
     await addPayment(INV_ID, {}, { amount: 50, method: "cash", userId: "u1" });
 
-    expect(Commission.findOne).not.toHaveBeenCalled();
+    expect(Commission.find).not.toHaveBeenCalled();
     expect(Commission.create).not.toHaveBeenCalled();
   });
 
@@ -153,9 +188,10 @@ describe("addPayment — commission on full payment (ISSUE-014)", () => {
       baseAmount: 0,
       amount: 0,
       rate: 10,
+      procedureName: "Invoice payment — INV-00001",
       save: vi.fn().mockResolvedValue(undefined),
     };
-    vi.mocked(Commission.findOne).mockReturnValue({ session: vi.fn().mockResolvedValue(existing) });
+    vi.mocked(Commission.find).mockReturnValue({ session: vi.fn().mockResolvedValue([existing]) });
     vi.mocked(Commission.create).mockResolvedValue([{}]);
 
     await addPayment(INV_ID, {}, { amount: 0.01, method: "cash", userId: "u1" });
@@ -176,7 +212,7 @@ describe("addPayment — commission on full payment (ISSUE-014)", () => {
 
     await addPayment(INV_ID, {}, { amount: 100, method: "cash", userId: "u1" });
 
-    expect(Commission.findOne).not.toHaveBeenCalled();
+    expect(Commission.find).not.toHaveBeenCalled();
     expect(Commission.create).not.toHaveBeenCalled();
   });
 });

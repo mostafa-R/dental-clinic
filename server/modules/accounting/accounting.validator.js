@@ -77,3 +77,24 @@ export const accountingSummaryQuerySchema = z.object({
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
 });
+
+/* ---------------------------------------------------------------- Day Close */
+
+export const dayCloseQuerySchema = z.object({
+  date: z.string().min(4).max(40).optional(),
+  branch: objectId.optional(),
+});
+
+export const closeDaySchema = z.object({
+  date: z.string().min(4).max(40).optional(),
+  branch: objectId.optional(),
+  countedCash: z.number().min(0, 'Counted cash cannot be negative'),
+  notes: z.string().max(500).optional(),
+});
+
+export const listDayCloseQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  from: z.string().min(4).max(40).optional(),
+  to: z.string().min(4).max(40).optional(),
+});

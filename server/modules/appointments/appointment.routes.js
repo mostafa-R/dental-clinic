@@ -8,11 +8,13 @@ import {
   transitionAppointment,
   updateAppointment,
 } from './appointment.controller.js';
+import { callNextPatient, getQueue } from './queue.controller.js';
 import { protect } from '../../middleware/auth.js';
 import { checkPermission } from '../../middleware/checkPermission.js';
 import { phiRestrict } from '../../middleware/phiRestrict.js';
 import { validate } from '../../middleware/validate.js';
 import {
+  callNextSchema,
   createAppointmentSchema,
   listAppointmentsQuerySchema,
   transitionSchema,
@@ -81,6 +83,79 @@ const router = Router();
  *         $ref: '#/components/responses/Forbidden'
  */
 router.get('/', protect, checkPermission('appointments', 'read'), phiRestrict, validate(listAppointmentsQuerySchema, 'query'), listAppointments);
+
+/**
+ * @swagger
+ * /api/v1/appointments/queue:
+ *   get:
+ *     tags: [Appointments]
+ *     summary: Live queue board for today
+ *     description: Requires `appointments:read`. Returns waiting (checked_in) and in-chair (in_progress) patients plus completed count.
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       '200':
+ *         description: Today's queue
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     queue:
+ *                       type: object
+ *                       properties:
+ *                         waiting:
+ *                           type: array
+ *                           items: { $ref: '#/components/schemas/Appointment' }
+ *                         inChair:
+ *                           type: array
+ *                           items: { $ref: '#/components/schemas/Appointment' }
+ *                         completedToday: { type: integer }
+ *                         updatedAt: { type: string, format: date-time }
+ */
+router.get('/queue', protect, checkPermission('appointments', 'read'), phiRestrict, getQueue);
+
+/**
+ * @swagger
+ * /api/v1/appointments/queue/call-next:
+ *   post:
+ *     tags: [Appointments]
+ *     summary: Call the next waiting patient to a chair
+ *     description: >
+ *       Requires `appointments:update`. Atomically claims the earliest waiting
+ *       (checked_in) appointment of the day and moves it to in_progress,
+ *       emitting `queue.patient.called` on the branch room and the tenant
+ *       `queue:{tenantId}` room. Pass `doctor` to call per-doctor queues.
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               doctor: { $ref: '#/components/schemas/ObjectId' }
+ *     responses:
+ *       '200':
+ *         description: Patient called
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     appointment: { $ref: '#/components/schemas/Appointment' }
+ *       '404':
+ *         description: No waiting patients
+ */
+router.post('/queue/call-next', protect, checkPermission('appointments', 'update'), phiRestrict, validate(callNextSchema), callNextPatient);
 
 /**
  * @swagger

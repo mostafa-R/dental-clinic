@@ -85,6 +85,16 @@ export const createUser = asyncHandler(async (req, res) => {
     throw ApiError.conflict('A user with this email already exists in this clinic');
   }
 
+  // Username uniqueness within tenant (PRD §6.1 username login).
+  if (data.username) {
+    const usernameFilter = { username: String(data.username).toLowerCase() };
+    if (tenant) usernameFilter.tenant = tenant;
+    const existingUsername = await User.findOne(usernameFilter);
+    if (existingUsername) {
+      throw ApiError.conflict('A user with this username already exists in this clinic');
+    }
+  }
+
   // Plan limit: enforce maxDoctors when creating a doctor.
   if (data.isDoctor && tenant) {
     const tenantDoc = await Tenant.findById(tenant).select('settings');
@@ -219,6 +229,20 @@ export const updateUser = asyncHandler(async (req, res) => {
     if (existing) {
       throw ApiError.conflict('A user with this email already exists in this clinic');
     }
+  }
+
+  // Username uniqueness within tenant (PRD §6.1 username login).
+  if (data.username !== undefined) {
+    const normalizedUsername = data.username ? String(data.username).toLowerCase() : null;
+    if (normalizedUsername) {
+      const usernameFilter = { username: normalizedUsername, _id: { $ne: user._id } };
+      if (tenant) usernameFilter.tenant = tenant;
+      const existingUsername = await User.findOne(usernameFilter);
+      if (existingUsername) {
+        throw ApiError.conflict('A user with this username already exists in this clinic');
+      }
+    }
+    user.username = normalizedUsername;
   }
 
   // Validate branch belongs to same tenant

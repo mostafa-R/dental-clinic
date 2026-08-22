@@ -85,6 +85,24 @@ const dentalChartSchema = new mongoose.Schema(
       type: [toothSchema],
       default: defaultTeeth,
     },
+    // PRD §6.5: every tooth edit is archived here so prior states can be
+    // reviewed/rolled back (who/when/what).
+    history: {
+      type: [
+        new mongoose.Schema(
+          {
+            number: { type: Number, required: true, min: 1, max: 32 },
+            state: { type: String, enum: TOOTH_STATES, required: true },
+            surfaces: { type: surfaceSchema, default: () => ({}) },
+            notes: { type: String, trim: true, maxlength: 500, default: '' },
+            editedAt: { type: Date, default: () => new Date() },
+            editedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
     notes: {
       type: String,
       trim: true,
@@ -99,6 +117,14 @@ const dentalChartSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+// Cap the embedded history so charts cannot grow without bound.
+const MAX_CHART_HISTORY = 500;
+dentalChartSchema.pre('save', function capHistory() {
+  if (this.isModified('history') && this.history.length > MAX_CHART_HISTORY) {
+    this.history = this.history.slice(-MAX_CHART_HISTORY);
+  }
+});
 
 /**
  * Ensure every chart always carries a full 32-tooth array, even if it was

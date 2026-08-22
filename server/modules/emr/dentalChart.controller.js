@@ -12,6 +12,21 @@ function emitChart(branchId, chart) {
 }
 
 /**
+ * PRD §6.5: archive the CURRENT state of a tooth into the chart history
+ * before it is mutated, so any prior state can be reviewed/rolled back.
+ */
+function archiveToothState(chart, tooth, userId) {
+  chart.history.push({
+    number: tooth.number,
+    state: tooth.state,
+    surfaces: tooth.surfaces?.toObject ? tooth.surfaces.toObject() : { ...tooth.surfaces },
+    notes: tooth.notes,
+    editedAt: new Date(),
+    editedBy: userId,
+  });
+}
+
+/**
  * GET /patients/:patientId/dental-chart
  * Returns the patient's chart, creating a fresh sound chart on first access
  * so the doctor never sees an empty/broken chart.
@@ -63,6 +78,7 @@ export const updateDentalChart = asyncHandler(async (req, res) => {
       }
       const existing = byNumber.get(incoming.number);
       if (!existing) continue;
+      archiveToothState(chart, existing, req.user._id);
       if (incoming.state) existing.state = incoming.state;
       if (incoming.surfaces) Object.assign(existing.surfaces, incoming.surfaces);
       if (incoming.notes !== undefined) existing.notes = incoming.notes;
@@ -101,6 +117,8 @@ export const updateTooth = asyncHandler(async (req, res) => {
   if (!tooth) {
     throw ApiError.notFound('Tooth not found in chart');
   }
+
+  archiveToothState(chart, tooth, req.user._id);
 
   if (data.state) tooth.state = data.state;
   if (data.surfaces) Object.assign(tooth.surfaces, data.surfaces);

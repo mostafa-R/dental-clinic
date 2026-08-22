@@ -13,7 +13,7 @@ import {
   voidInvoice,
 } from './invoice.controller.js';
 import { protect } from '../../middleware/auth.js';
-import { checkPermission } from '../../middleware/checkPermission.js';
+import { checkAnyPermission, checkPermission } from '../../middleware/checkPermission.js';
 import { phiRestrict } from '../../middleware/phiRestrict.js';
 import { validate } from '../../middleware/validate.js';
 import {
@@ -392,7 +392,7 @@ router.post('/:id/payments', protect, checkPermission('billing', 'update'), phiR
  *   post:
  *     tags: [Billing]
  *     summary: Refund a payment
- *     description: Requires `billing:update`. Records a negative payment. Wallet refunds credit the patient wallet; commissions are adjusted proportionally. Deduplicated via `x-idempotency-key`.
+ *     description: Requires `billing.delete` or `accounting.update` (PRD §6.6 — reception alone cannot refund). Records a negative payment. Wallet refunds credit the patient wallet; commissions are adjusted proportionally. Deduplicated via `x-idempotency-key`.
  *     security:
  *       - cookieAuth: []
  *     parameters:
@@ -441,7 +441,7 @@ router.post('/:id/payments', protect, checkPermission('billing', 'update'), phiR
  *       '409':
  *         description: Cannot refund a void invoice
  */
-router.post('/:id/refund', protect, checkPermission('billing', 'update'), phiRestrict, validate(refundSchema), refundPayment);
+router.post('/:id/refund', protect, checkAnyPermission([['billing', 'delete'], ['accounting', 'update']]), phiRestrict, validate(refundSchema), refundPayment);
 
 /**
  * @swagger

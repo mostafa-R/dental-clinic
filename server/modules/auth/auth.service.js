@@ -18,13 +18,19 @@ export async function assertTenantActive(tenantId) {
   }
 }
 
-export async function authenticateUser(email, password) {
-  await assertNotLocked(email);
+export async function authenticateUser(emailOrUsername, password) {
+  const identifier = String(emailOrUsername || '').trim().toLowerCase();
+  await assertNotLocked(identifier);
 
-  const user = await User.findOne({ email }).select('+password').populate('branch');
+  // PRD §6.1: login accepts either the email address or the username.
+  const user = await User.findOne({
+    $or: [{ email: identifier }, { username: identifier }],
+  })
+    .select('+password')
+    .populate('branch');
   if (!user) {
-    // No lockout state for unknown accounts (avoids lockout-DoS via email
-    // enumeration); the per-IP/per-email rate limiters still apply.
+    // No lockout state for unknown accounts (avoids lockout-DoS via account
+    // enumeration); the per-IP/per-account rate limiters still apply.
     throw ApiError.unauthorized('Invalid email or password');
   }
   if (!user.isActive) {
@@ -32,10 +38,10 @@ export async function authenticateUser(email, password) {
   }
   const ok = await user.comparePassword(password);
   if (!ok) {
-    await recordFailedLogin(email);
+    await recordFailedLogin(identifier);
     throw ApiError.unauthorized('Invalid email or password');
   }
-  await resetFailedLogins(email);
+  await resetFailedLogins(identifier);
   await assertTenantActive(user.tenant);
   return user;
 }

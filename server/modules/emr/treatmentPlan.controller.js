@@ -185,6 +185,16 @@ export const updateTreatmentItem = asyncHandler(async (req, res) => {
     item.completedDate = new Date();
   }
 
+  // PRD §6.5: a plan auto-completes once every non-cancelled item is done.
+  const activeItems = plan.items.filter((i) => i.status !== 'cancelled');
+  if (
+    plan.status === 'active' &&
+    activeItems.length > 0 &&
+    activeItems.every((i) => i.status === 'completed')
+  ) {
+    plan.status = 'completed';
+  }
+
   plan.updatedBy = req.user._id;
   await plan.save();
   await plan.populate(POPULATE);

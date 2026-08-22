@@ -9,6 +9,8 @@ import { startAbuseCron, stopAbuseCron, stopAbuseFlusher } from "./services/abus
 import { startWhatsAppReminderCron, stopWhatsAppReminderCron } from "./services/whatsappReminderCron.js";
 import { startBackupCron, stopBackupCron } from "./services/backupCron.js";
 import { startInstallmentCron, stopInstallmentCron } from "./services/installmentCron.js";
+import { startNoShowCron, stopNoShowCron } from "./services/noShowCron.js";
+import { startInventoryCron, stopInventoryCron } from "./services/inventoryCron.js";
 import { disconnectAllWhatsAppClients } from "./services/whatsapp.js";
 import { runMigrations } from "./migrations/runner.js";
 
@@ -62,6 +64,8 @@ async function start() {
     console.error("[Backup-Cron] Failed to initialize:", err.message);
   });
   startInstallmentCron();
+  startNoShowCron();
+  startInventoryCron();
 
   const shutdown = async (signal) => {
     console.log(`\n${signal} received. Shutting down gracefully...`);
@@ -72,6 +76,8 @@ async function start() {
     stopWhatsAppReminderCron();
     stopBackupCron();
     stopInstallmentCron();
+    stopNoShowCron();
+    stopInventoryCron();
 
     await disconnectAllWhatsAppClients();
 

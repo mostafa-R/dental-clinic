@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-import { emitToBranch } from '../../socket/index.js';
+import { emitToBranch, emitToTenantQueue } from '../../socket/index.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { currentTenant, filterByBranch, resolveBranchForCreate, toObjectId } from '../../utils/branchScope.js';
@@ -43,6 +43,21 @@ function emitAppointment(branchId, event, appointment) {
   };
   const resolved = branchId?._id ?? branchId;
   emitToBranch(String(resolved), event, payload);
+}
+
+/**
+ * PRD §6.2: mirror queue-relevant status changes onto the branch room and the
+ * tenant Live Queue room so waiting-room screens stay in sync.
+ */
+const QUEUE_RELEVANT_STATUSES = new Set(['checked_in', 'in_progress', 'completed', 'no_show']);
+
+function emitQueueStatusChange(appointment) {
+  if (!QUEUE_RELEVANT_STATUSES.has(appointment.status)) return;
+  const payload = {
+    appointment: appointment.toJSON ? appointment.toJSON() : appointment,
+  };
+  emitToBranch(String(appointment.branch), 'queue.status.changed', payload);
+  emitToTenantQueue(appointment.tenant ? String(appointment.tenant) : null, 'queue.status.changed', payload);
 }
 
 /**
@@ -143,9 +158,43 @@ async function assertReferences(payload, branchFilter) {
 }
 
 const ACTIVE_STATUSES = ['scheduled', 'confirmed', 'checked_in', 'in_progress'];
+const DEFAULT_SLOT_MINUTES = 30;
+
+/** BR-PT-02: true only when the real overlap exceeds the buffer window. */
+function exceedsBuffer(start, end, conflictStart, conflictEnd, bufferMinutes) {
+  const overlapMs =
+    Math.min(end.getTime(), conflictEnd.getTime()) -
+    Math.max(start.getTime(), conflictStart.getTime());
+  return overlapMs > (bufferMinutes || 0) * 60000;
+}
+
+/** Resolve branch.bufferTime (BR-PT-02), tolerating ids or populated docs. */
+async function getBufferMinutes(branch) {
+  if (!branch) return 0;
+  if (branch.bufferTime != null) return branch.bufferTime;
+  const doc = await Branch.findById(branch._id || branch).select('bufferTime').lean();
+  return doc?.bufferTime ?? 0;
+}
 
 /**
- * Check for doctor appointment overlaps
+ * PRD §6.4: when `end` is omitted the duration defaults to the branch
+ * slotDuration extended by `slots` (×1/×2/×3).
+ */
+async function resolveDefaultEnd(branch, start, slots) {
+  if (!start || !slots) return null;
+  let slotMinutes = DEFAULT_SLOT_MINUTES;
+  if (branch?.slotDuration != null) {
+    slotMinutes = branch.slotDuration;
+  } else {
+    const doc = await Branch.findById(branch?._id || branch).select('slotDuration').lean();
+    if (doc?.slotDuration != null) slotMinutes = doc.slotDuration;
+  }
+  return new Date(start.getTime() + slotMinutes * slots * 60000);
+}
+
+/**
+ * Check for doctor appointment overlaps. Overlaps within the branch
+ * bufferTime are tolerated (BR-PT-02); anything longer conflicts.
  */
 async function assertNoDoctorOverlap({ doctor, branch, start, end, excludeId }) {
   if (!start || !end) return;
@@ -157,7 +206,11 @@ async function assertNoDoctorOverlap({ doctor, branch, start, end, excludeId }) 
     end: { $gt: start },
   };
   if (excludeId) filter._id = { $ne: toObjectId(excludeId) };
-  const conflict = await Appointment.findOne(filter).select('_id start end').lean();
+  const candidates = await Appointment.find(filter).select('_id start end').limit(20).lean();
+  const bufferMinutes = await getBufferMinutes(branch);
+  const conflict = candidates.find((c) =>
+    exceedsBuffer(start, end, c.start, c.end, bufferMinutes),
+  );
   if (conflict) {
     throw ApiError.conflict('The doctor already has an appointment in this time slot', {
       overlappingAppointment: conflict._id,
@@ -179,12 +232,50 @@ async function assertNoPatientOverlap({ patient, branch, start, end, excludeId }
     end: { $gt: start },
   };
   if (excludeId) filter._id = { $ne: toObjectId(excludeId) };
-  const conflict = await Appointment.findOne(filter).select('_id start end doctor').populate('doctor', 'name').lean();
+  const candidates = await Appointment.find(filter)
+    .select('_id start end doctor')
+    .populate('doctor', 'name')
+    .limit(20)
+    .lean();
+  const bufferMinutes = await getBufferMinutes(branch);
+  const conflict = candidates.find((c) =>
+    exceedsBuffer(start, end, c.start, c.end, bufferMinutes),
+  );
   if (conflict) {
     throw ApiError.conflict('The patient already has an appointment in this time slot', {
       overlappingAppointment: conflict._id,
       overlappingTime: { start: conflict.start, end: conflict.end },
       withDoctor: conflict.doctor?.name || 'Unknown',
+    });
+  }
+}
+
+/**
+ * Check for chair double-booking — the same physical chair cannot host two
+ * live appointments at once (PRD §6.4).
+ */
+async function assertNoChairOverlap({ chair, branch, start, end, excludeId }) {
+  if (!start || !end) return;
+  const normalizedChair = String(chair || '').trim();
+  if (!normalizedChair) return;
+
+  const filter = {
+    chair: normalizedChair,
+    branch: toObjectId(branch),
+    status: { $in: ACTIVE_STATUSES },
+    start: { $lt: end },
+    end: { $gt: start },
+  };
+  if (excludeId) filter._id = { $ne: toObjectId(excludeId) };
+  const candidates = await Appointment.find(filter).select('_id start end').limit(20).lean();
+  const bufferMinutes = await getBufferMinutes(branch);
+  const conflict = candidates.find((c) =>
+    exceedsBuffer(start, end, c.start, c.end, bufferMinutes),
+  );
+  if (conflict) {
+    throw ApiError.conflict('The chair is already booked for this time slot', {
+      overlappingAppointment: conflict._id,
+      overlappingTime: { start: conflict.start, end: conflict.end },
     });
   }
 }
@@ -263,7 +354,11 @@ export const createAppointment = asyncHandler(async (req, res) => {
   );
 
   const start = data.start ? new Date(data.start) : null;
-  const end = data.end ? new Date(data.end) : null;
+  let end = data.end ? new Date(data.end) : null;
+  // PRD §6.4: default duration = branch slotDuration × slots (×1/×2/×3).
+  if (!end && start) {
+    end = await resolveDefaultEnd(branch, start, data.slots);
+  }
 
   // Validate clinic working hours
   await assertClinicHours(branch, start, end);
@@ -282,6 +377,14 @@ export const createAppointment = asyncHandler(async (req, res) => {
   // Check for patient double-booking
   await assertNoPatientOverlap({
     patient: data.patient,
+    branch,
+    start,
+    end,
+  });
+
+  // Check for chair double-booking
+  await assertNoChairOverlap({
+    chair: data.chair,
     branch,
     start,
     end,
@@ -332,7 +435,13 @@ export const updateAppointment = asyncHandler(async (req, res) => {
 
   // Determine new values
   const newStart = data.start ? new Date(data.start) : existing.start;
-  const newEnd = data.end ? new Date(data.end) : existing.end;
+  let newEnd = data.end ? new Date(data.end) : existing.end;
+  // PRD §6.4: slots extends the duration from slotDuration when only the
+  // start is being moved.
+  if (!data.end && data.start && data.slots) {
+    const computed = await resolveDefaultEnd(existing.branch, newStart, data.slots);
+    if (computed) newEnd = computed;
+  }
   const newDoctor = data.doctor ? toObjectId(data.doctor) : existing.doctor;
   const newPatient = data.patient ? toObjectId(data.patient) : existing.patient;
 
@@ -352,8 +461,8 @@ export const updateAppointment = asyncHandler(async (req, res) => {
     }
   }
 
-  // Only run availability checks if time, doctor, or patient changes
-  if (data.start || data.end || data.doctor || data.patient) {
+  // Only run availability checks if time, doctor, patient, or chair changes
+  if (data.start || data.end || data.doctor || data.patient || data.chair) {
     // NOT lean: isWithinWorkingHours / isAvailableAt are schema methods and
     // are stripped from lean documents.
     const branch = await Branch.findById(existing.branch);
@@ -382,6 +491,15 @@ export const updateAppointment = asyncHandler(async (req, res) => {
       end: newEnd,
       excludeId: id,
     });
+
+    // Check for chair double-booking
+    await assertNoChairOverlap({
+      chair: data.chair !== undefined ? data.chair : existing.chair,
+      branch: existing.branch,
+      start: newStart,
+      end: newEnd,
+      excludeId: id,
+    });
   }
 
   const setPayload = { ...data };
@@ -390,6 +508,7 @@ export const updateAppointment = asyncHandler(async (req, res) => {
   if (setPayload.start) setPayload.start = new Date(setPayload.start);
   if (setPayload.end) setPayload.end = new Date(setPayload.end);
   delete setPayload.branch;
+  delete setPayload.slots; // scheduling helper, not a persisted field
 
   const appointment = await Appointment.findOneAndUpdate(
     { _id: id, ...branchFilter },
@@ -436,10 +555,31 @@ export const transitionAppointment = asyncHandler(async (req, res) => {
   }
 
   appointment.status = nextStatus;
+  // BR-PT-03: record the actual arrival time and flag late arrivals — a
+  // patient showing up after more than half their slot has passed is reported
+  // to reception so they can reorder today's queue.
+  if (nextStatus === 'checked_in') {
+    const now = new Date();
+    appointment.checkedInAt = now;
+    if (appointment.start && appointment.end) {
+      const slotMs = appointment.end.getTime() - appointment.start.getTime();
+      const minutesLate = Math.max(0, Math.round((now.getTime() - appointment.start.getTime()) / 60000));
+      if (slotMs > 0 && now.getTime() - appointment.start.getTime() > slotMs / 2) {
+        appointment.lateArrival = { flagged: true, minutesLate };
+      }
+    }
+  }
   await appointment.save();
   await appointment.populate(POPULATE);
 
   emitAppointment(appointment.branch, 'appointment:statusChanged', appointment);
+  if (nextStatus === 'checked_in' && appointment.lateArrival?.flagged) {
+    emitAppointment(appointment.branch, 'appointment.lateArrival', {
+      ...serializeAppointment(appointment, req),
+      minutesLate: appointment.lateArrival.minutesLate,
+    });
+  }
+  emitQueueStatusChange(appointment);
 
   return sendSuccess(res, { appointment: serializeAppointment(appointment, req) });
 });
@@ -470,6 +610,7 @@ export const cancelAppointment = asyncHandler(async (req, res) => {
   await appointment.populate(POPULATE);
 
   emitAppointment(appointment.branch, 'appointment:statusChanged', appointment);
+  emitQueueStatusChange(appointment);
 
   return sendSuccess(res, { appointment: serializeAppointment(appointment, req) });
 });

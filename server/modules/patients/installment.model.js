@@ -8,6 +8,9 @@ const installmentSchema = new mongoose.Schema(
     number: { type: Number, required: true },
     dueDate: { type: Date, required: true },
     amount: { type: Number, required: true, min: 0.01 },
+    // PRD §6.3: overdue installments may carry an optional late fee that is
+    // added to the amount due when the installment is settled.
+    lateFee: { type: Number, default: 0, min: 0 },
     paidAmount: { type: Number, default: 0, min: 0 },
     paidDate: { type: Date, default: null },
     status: { type: String, enum: INSTALLMENT_STATUS, default: 'pending' },
