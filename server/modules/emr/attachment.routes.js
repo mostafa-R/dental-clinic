@@ -174,6 +174,38 @@ router.post(
   }),
 );
 
+/**
+ * @swagger
+ * /api/v1/emr/attachments/{filename}/download:
+ *   get:
+ *     tags: [EMR Attachments]
+ *     summary: Download / preview a medical attachment
+ *     description: "Requires `emr:read`. Streams the decrypted file inline. The file must be registered AND owned by the caller's tenant/branch - knowing a filename is not enough to fetch files outside the caller's scope."
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: filename
+ *         required: true
+ *         schema: { type: string, maxLength: 255 }
+ *         description: Stored filename returned by the upload endpoint.
+ *     responses:
+ *       '200':
+ *         description: File stream (image or PDF content type)
+ *         content:
+ *           image/jpeg:
+ *             schema: { type: string, format: binary }
+ *           image/png:
+ *             schema: { type: string, format: binary }
+ *           application/pdf:
+ *             schema: { type: string, format: binary }
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ *       '404':
+ *         $ref: '#/components/responses/NotFound'
+ */
 router.get(
   '/:filename/download',
   protect,
@@ -274,6 +306,41 @@ router.get(
   }),
 );
 
+/**
+ * @swagger
+ * /api/v1/emr/attachments/{filename}:
+ *   delete:
+ *     tags: [EMR Attachments]
+ *     summary: Soft-delete a medical attachment
+ *     description: "Requires `emr:delete`. Marks the record inactive and removes the encrypted file from disk. Only attachments within the caller's tenant/branch scope can be deleted."
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: filename
+ *         required: true
+ *         schema: { type: string, maxLength: 255 }
+ *         description: Stored filename of the attachment.
+ *     responses:
+ *       '200':
+ *         description: Attachment deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     message: { type: string, example: 'Attachment deleted' }
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ *       '404':
+ *         $ref: '#/components/responses/NotFound'
+ */
 router.delete(
   '/:filename',
   protect,

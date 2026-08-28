@@ -1,7 +1,7 @@
 import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
 
-const options = {
+export const options = {
   definition: {
     openapi: "3.0.0",
     info: {
@@ -43,27 +43,28 @@ const options = {
       { name: "Prescriptions", description: "EMR prescriptions" },
       { name: "Dental Chart", description: "EMR dental charts" },
       { name: "Clinical Notes", description: "EMR clinical notes" },
-      { name: "Attachments", description: "EMR medical file attachments" },
+      { name: "EMR Attachments", description: "EMR medical file attachments" },
       { name: "Dashboard", description: "Dashboard statistics" },
       { name: "Search", description: "Global search" },
       { name: "Chat", description: "Staff chat" },
       { name: "WhatsApp", description: "WhatsApp messaging integration" },
       { name: "Site Auth", description: "Site admin authentication, recovery and 2FA" },
+      { name: "Site 2FA", description: "Two-factor authentication for site admins" },
       { name: "Site Impersonation", description: "Support impersonation of clinic users" },
       { name: "Site Admins", description: "Site admin management" },
       { name: "Site Tenants", description: "Tenant (clinic) management" },
       { name: "Site Branches", description: "Tenant branch management" },
       { name: "Site Users", description: "Tenant user management" },
-      { name: "Site Plans", description: "Subscription plans" },
-      { name: "Site Platform", description: "Platform settings" },
+      { name: "Platform Plans", description: "Subscription plans" },
+      { name: "Platform Settings", description: "Platform settings" },
       { name: "Site Subscriptions", description: "Tenant subscriptions and billing" },
       { name: "Site Feature Flags", description: "Per-tenant module toggles" },
       { name: "Site Quarantine", description: "Tenant quarantine" },
       { name: "Site Error Logs", description: "Error log inspection" },
       { name: "Site Analytics", description: "Platform analytics" },
-      { name: "Site Audit Logs", description: "Admin audit trail" },
+      { name: "Site Audit", description: "Admin audit trail" },
       { name: "Site Backups", description: "Database backups" },
-      { name: "Site Perf", description: "Performance monitoring" },
+      { name: "Platform Performance", description: "Performance monitoring" },
     ],
     components: {
       securitySchemes: {
@@ -1172,7 +1173,7 @@ const options = {
   apis: ["./swagger.js", "./modules/**/*.js", "./routes/**/*.js"],
 };
 
-const swaggerSpec = swaggerJsdoc(options);
+export const swaggerSpec = swaggerJsdoc(options);
 
 export function setupSwagger(app) {
   // Docs are public API surface — disabled in production unless explicitly
@@ -1180,6 +1181,29 @@ export function setupSwagger(app) {
   const docsEnabled =
     process.env.NODE_ENV !== "production" || process.env.ENABLE_API_DOCS === "true";
   if (!docsEnabled) return;
+
+  // swagger-ui-express serves its own HTML page with inline <script> init
+  // code that carries no nonce, so the app-wide Helmet CSP would block it.
+  // Override the CSP just for the docs routes — every other route keeps the
+  // strict policy set by helmet().
+  app.use("/api/docs", (_req, res, next) => {
+    res.setHeader(
+      "Content-Security-Policy",
+      [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob:",
+        "font-src 'self' data:",
+        "connect-src 'self'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "frame-ancestors 'self'",
+        "form-action 'self'",
+      ].join("; "),
+    );
+    next();
+  });
 
   app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
     customSiteTitle: "Dental OS API Docs",

@@ -15,6 +15,11 @@ import { ipAllowlist } from "./middleware/ipAllowlist.js";
 import { logError } from "./middleware/logError.js";
 import { maintenance } from "./middleware/maintenance.js";
 import { requestId } from "./middleware/requestId.js";
+import {
+  requestSizeLimiter,
+  securityAudit,
+  securityHeaders
+} from "./middleware/security.js";
 import { tenantRouter } from "./middleware/tenantRouter.js";
 import { userRateLimit } from "./middleware/userRateLimit.js";
 import apiRouter from "./routes/routes.js";
@@ -88,6 +93,14 @@ app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
 app.use(csrfProtection(allowedOrigins));
 
+// Enhanced security middleware. Input sanitization and SQL-pattern blocking
+// were removed intentionally: they false-positived on legitimate clinical
+// text (e.g. "<5mm pocket", notes containing "create"/"update") while zod
+// validators in each module already enforce strict input schemas.
+app.use(securityHeaders);
+app.use(requestSizeLimiter("55mb"));
+app.use(securityAudit);
+
 setupSwagger(app);
 
 app.use(httpLogger);
@@ -158,6 +171,10 @@ app.use("/api", requestId, generalLimiter, perfMiddleware, abuseMonitor, userRat
 app.use(logError);
 app.use(notFound);
 app.use(errorHandler);
+
+// Import and use error monitoring middleware
+import { errorMonitoringMiddleware } from "./utils/errorMonitor.js";
+app.use(errorMonitoringMiddleware);
 
 export async function upgradeRateLimitStore() {
   try {

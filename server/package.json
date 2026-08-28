@@ -14,7 +14,15 @@
     "check": "node --check app.js && node --check server.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "audit:prod": "npm audit --omit=dev --audit-level=high"
+    "test:coverage": "vitest run --coverage",
+    "test:performance": "vitest run __tests__/performance",
+    "test:security": "vitest run __tests__/security",
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
+    "load-test": "node scripts/load-test.js",
+    "load-test:heavy": "CONCURRENT_USERS=50 REQUESTS_PER_USER=200 node scripts/load-test.js",
+    "security-scan": "node scripts/security-scan.js",
+    "monitor:health": "curl -s http://localhost:7000/api/health | jq .",
+    "monitor:metrics": "curl -s http://localhost:7000/api/metrics | jq ."
   },
   "keywords": [],
   "author": "",

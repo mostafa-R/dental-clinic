@@ -3,16 +3,17 @@ import http from "node:http";
 import app, { upgradeRateLimitStore } from "./app.js";
 import { connectDB, disconnectDB } from "./config/db.js";
 import { connectRedis, disconnectRedis } from "./config/redis.js";
-import { getIO, initSocket } from "./socket/index.js";
-import { startSuspensionCron, stopSuspensionCron } from "./services/suspensionCron.js";
+import { runMigrations } from "./migrations/runner.js";
+import { setupDbMonitoring } from "./utils/dbMonitor.js";
 import { startAbuseCron, stopAbuseCron, stopAbuseFlusher } from "./services/abuseDetection.js";
-import { startWhatsAppReminderCron, stopWhatsAppReminderCron } from "./services/whatsappReminderCron.js";
 import { startBackupCron, stopBackupCron } from "./services/backupCron.js";
 import { startInstallmentCron, stopInstallmentCron } from "./services/installmentCron.js";
-import { startNoShowCron, stopNoShowCron } from "./services/noShowCron.js";
 import { startInventoryCron, stopInventoryCron } from "./services/inventoryCron.js";
+import { startNoShowCron, stopNoShowCron } from "./services/noShowCron.js";
+import { startSuspensionCron, stopSuspensionCron } from "./services/suspensionCron.js";
 import { disconnectAllWhatsAppClients } from "./services/whatsapp.js";
-import { runMigrations } from "./migrations/runner.js";
+import { startWhatsAppReminderCron, stopWhatsAppReminderCron } from "./services/whatsappReminderCron.js";
+import { getIO, initSocket } from "./socket/index.js";
 
 const PORT = Number(process.env.PORT || 5000);
 
@@ -47,6 +48,10 @@ async function start() {
   await runMigrations().catch((err) => {
     console.error('[Migrations] Migration failed:', err.message);
   });
+
+  // Setup database monitoring
+  setupDbMonitoring();
+
   await connectRedis();
   await upgradeRateLimitStore();
 
