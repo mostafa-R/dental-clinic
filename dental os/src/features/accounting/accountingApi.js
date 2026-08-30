@@ -18,6 +18,14 @@ export const accountingApi = {
   listCommissions: (params) => api.get('/accounting/commissions', { params }).then((r) => r.data.data),
   updateCommission: (id, payload) => api.patch(`/accounting/commissions/${id}`, payload).then((r) => r.data.data),
 
+  /* Day Close (BR-BL-04) */
+  getDayClose: (params) => api.get('/accounting/day-close', { params }).then((r) => r.data.data),
+  closeDay: (payload) => api.post('/accounting/day-close/close', payload).then((r) => r.data.data),
+  listDayCloses: (params) => api.get('/accounting/day-close/list', { params }).then((r) => r.data.data),
+
+  /* Journal ledger (BR-BL-05) */
+  listJournal: (params) => api.get('/accounting/journal', { params }).then((r) => r.data.data),
+
   /* Wallet (patient-scoped) */
   getWallet: (patientId) => api.get(`/patients/${patientId}/wallet`).then((r) => r.data.data),
   addWalletTransaction: (patientId, payload) =>

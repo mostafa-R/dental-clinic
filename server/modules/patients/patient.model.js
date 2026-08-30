@@ -117,7 +117,7 @@ patientSchema.set("toObject", { virtuals: true });
 
 patientSchema.pre("validate", async function assignPatientId() {
   if (this.patientId) return;
-  const nextSeq = await Counter.next("patient", this.tenant);
+  const nextSeq = await Counter.next("patient", this.tenant, this.$session?.());
   this.patientId = `PT-${String(nextSeq).padStart(5, "0")}`;
 });
 

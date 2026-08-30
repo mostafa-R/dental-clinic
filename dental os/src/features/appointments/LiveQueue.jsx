@@ -1,13 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { useSocket } from '../../hooks/useSocket';
-import { fetchAppointments, setDate, transitionAppointment, upsertFromSocket } from './appointmentSlice';
+import toast from 'react-hot-toast';
+import {
+  fetchAppointments,
+  fetchQueue,
+  setDate,
+  transitionAppointment,
+  upsertFromSocket,
+  upsertQueueFromSocket,
+  callNextPatient,
+} from './appointmentSlice';
 import { showErrorDialog } from '../ui/uiSlice';
+import { useSocket } from '../../hooks/useSocket';
+import { subscribeQueue, unsubscribeQueue } from '../../lib/socket';
 import QueueCard from './QueueCard';
 import VisitPanel from './VisitPanel';
 import EmptyState from '../../components/ui/EmptyState';
-import Spinner from '../../components/ui/Spinner';
 import { useT } from '../../lib/i18n';
 import { canTransition } from './statuses';
 
@@ -36,9 +45,10 @@ function useIsMobile(breakpoint = 640) {
 export default function LiveQueue() {
   const dispatch = useDispatch();
   const { t } = useT();
-  const { items, status, query } = useSelector((s) => s.appointments);
+  const { items, status, query, queue, queueStatus, callStatus } = useSelector((s) => s.appointments);
   const [selectedAppt, setSelectedAppt] = useState(null);
   const [expandedSections, setExpandedSections] = useState(() => new Set(['checked_in', 'in_progress', 'scheduled', 'completed']));
+  const [nextDoctor, setNextDoctor] = useState('');
   const isMobile = useIsMobile();
   const queryRef = useRef(query);
   queryRef.current = query;
@@ -58,11 +68,17 @@ export default function LiveQueue() {
     }
   }, [dispatch, query]);
 
+  useEffect(() => {
+    subscribeQueue();
+    return () => unsubscribeQueue();
+  }, []);
+
   const refetch = useCallback(() => {
     const q = queryRef.current;
     if (q.date) {
       dispatch(fetchAppointments({ ...q, date: q.date, limit: 200 }));
     }
+    dispatch(fetchQueue());
   }, [dispatch]);
 
   const socketEvents = useMemo(
@@ -70,6 +86,8 @@ export default function LiveQueue() {
       ['appointment:statusChanged', (payload) => dispatch(upsertFromSocket(payload.appointment))],
       ['appointment:updated', (payload) => dispatch(upsertFromSocket(payload.appointment))],
       ['appointment:created', (payload) => dispatch(upsertFromSocket(payload.appointment))],
+      ['queue.status.changed', (payload) => dispatch(upsertQueueFromSocket(payload.appointment))],
+      ['queue.patient.called', (payload) => dispatch(upsertQueueFromSocket(payload.appointment))],
     ],
     [dispatch],
   );
@@ -88,11 +106,21 @@ export default function LiveQueue() {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [refetch]);
 
+  // Merge today's list appointments with the live /appointments/queue payload
+  // so drag handles + lookup stay consistent on a single, deduped array.
+  const boardItems = useMemo(() => {
+    const map = new Map();
+    [...items, ...(Array.isArray(queue.waiting) ? queue.waiting : []), ...(Array.isArray(queue.inChair) ? queue.inChair : [])].forEach((a) => {
+      if (a && a._id) map.set(a._id, a);
+    });
+    return Array.from(map.values());
+  }, [items, queue.waiting, queue.inChair]);
+
   const activeQueue = useMemo(() => {
-    return items
+    return boardItems
       .filter((a) => !['cancelled', 'no_show'].includes(a.status))
       .sort((a, b) => (QUEUE_RANK[a.status] ?? 99) - (QUEUE_RANK[b.status] ?? 99) || new Date(a.start) - new Date(b.start));
-  }, [items]);
+  }, [boardItems]);
 
   const byColumn = useMemo(() => {
     const map = { checked_in: [], in_progress: [], scheduled: [], completed: [] };
@@ -114,6 +142,33 @@ export default function LiveQueue() {
     completed: t('appointments.queue.colCompleted'),
   }), [t]);
 
+  const doctorOptions = useMemo(() => {
+    const seen = new Set();
+    const list = [];
+    boardItems.forEach((a) => {
+      if (a.doctor && !seen.has(a.doctor._id)) {
+        seen.add(a.doctor._id);
+        list.push(a.doctor);
+      }
+    });
+    return list;
+  }, [boardItems]);
+
+  const handleCallNext = useCallback(async () => {
+    const body = nextDoctor ? { doctor: nextDoctor } : {};
+    try {
+      const appointment = await dispatch(callNextPatient(body)).unwrap();
+      toast.success(
+        appointment?.patient
+          ? `${appointment.patient.firstName} ${appointment.patient.lastName}`.trim()
+          : t('appointments.queue.called'),
+      );
+      if (appointment) dispatch(upsertQueueFromSocket(appointment));
+    } catch (err) {
+      dispatch(showErrorDialog(err));
+    }
+  }, [dispatch, nextDoctor, t]);
+
   const onDragEnd = useCallback(
     async (result) => {
       const { destination, source, draggableId } = result;
@@ -121,7 +176,7 @@ export default function LiveQueue() {
       if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
       const targetStatus = destination.droppableId;
-      const appt = items.find((a) => a._id === draggableId);
+      const appt = boardItems.find((a) => a._id === draggableId);
       if (!appt) return;
 
       const fromStatus = source.droppableId === 'scheduled' ? (appt.status === 'confirmed' ? 'confirmed' : 'scheduled') : source.droppableId;
@@ -134,12 +189,13 @@ export default function LiveQueue() {
       }
 
       try {
-        await dispatch(transitionAppointment({ id: draggableId, status: targetStatus })).unwrap();
+        const updated = await dispatch(transitionAppointment({ id: draggableId, status: targetStatus })).unwrap();
+        dispatch(upsertQueueFromSocket(updated));
       } catch (err) {
         dispatch(showErrorDialog(err));
       }
     },
-    [items, dispatch, t],
+    [boardItems, dispatch, t],
   );
 
   const toggleSection = (key) => {
@@ -155,23 +211,53 @@ export default function LiveQueue() {
     return <div className="py-10 text-center text-sm text-slate-400 dark:text-slate-500">{t('appointments.queue.loading')}</div>;
   }
 
+  const selectCls =
+    'rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200';
+
   return (
     <div className="space-y-3 sm:space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-slate-900 dark:text-white sm:text-lg">{t('appointments.queue.title')}</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
             {t('appointments.queue.subtitle')}
             <span className="ms-1.5 font-medium text-slate-700 dark:text-slate-300">({totalCount})</span>
+            <span className="ms-3 font-medium text-emerald-600 dark:text-emerald-400">
+              {t('appointments.queue.completedToday')}: {queue.completedToday}
+            </span>
           </p>
         </div>
-        <span className="flex shrink-0 items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-          {t('appointments.queue.live')}
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800">
+            {doctorOptions.length > 0 && (
+              <select value={nextDoctor} onChange={(e) => setNextDoctor(e.target.value)} className={selectCls} aria-label={t('appointments.allDoctors')}>
+                <option value="">{t('appointments.allDoctors')}</option>
+                {doctorOptions.map((d) => (
+                  <option key={d._id} value={d._id}>{d.name}</option>
+                ))}
+              </select>
+            )}
+            <button
+              type="button"
+              onClick={handleCallNext}
+              disabled={callStatus === 'loading'}
+              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-emerald-500 dark:hover:bg-emerald-400 sm:text-sm"
+            >
+              {callStatus === 'loading' ? t('appointments.queue.calling') : t('appointments.queue.callNext')}
+            </button>
+          </div>
+          <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+            {t('appointments.queue.live')}
+          </span>
+        </div>
       </div>
 
-      {activeQueue.length === 0 ? (
+      {queueStatus === 'failed' && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">{t('appointments.queue.queueLoadFailed')}</p>
+      )}
+
+      {activeQueue.length === 0 && queue.completedToday === 0 ? (
         <EmptyState title={t('appointments.queue.empty')} message={t('appointments.queue.emptyHint')} />
       ) : isMobile ? (
         <div className="space-y-2">
@@ -231,7 +317,7 @@ export default function LiveQueue() {
         <DragDropContext onDragEnd={onDragEnd}>
           <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 xl:gap-4">
             {COLUMN_DEFS.map((col) => (
-              <div key={col.key} className={`max-h-[calc(100vh-16rem)] overflow-y-auto rounded-xl bg-slate-50 p-2.5 dark:bg-slate-800/50 ${col.color} border-t-2 xl:p-3`}>
+              <div key={col.key} className={`max-h-[calc(100vh-19rem)] overflow-y-auto rounded-xl bg-slate-50 p-2.5 dark:bg-slate-800/50 ${col.color} border-t-2 xl:p-3`}>
                 <div className="mb-2.5 flex items-center justify-between xl:mb-3">
                   <h3 className={`text-xs font-semibold xl:text-sm ${col.countColor}`}>{labelMap[col.key]}</h3>
                   <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-500 dark:bg-slate-700 dark:text-slate-300">

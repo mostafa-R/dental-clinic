@@ -12,7 +12,10 @@ const whatsappSettingsSchema = z.object({
   settings: z.object({
     appointmentReminder: z.boolean().optional(),
     appointmentConfirm: z.boolean().optional(),
-    reminderHours: z.number().int().min(1).max(168).optional(),
+    reminderHours: z.number().int().min(1).max(72).optional(),
+    reminderHoursSecondary: z.number().int().min(0).max(168).optional(),
+    installmentReminder: z.boolean().optional(),
+    noShowReminder: z.boolean().optional(),
   }).optional(),
 });
 

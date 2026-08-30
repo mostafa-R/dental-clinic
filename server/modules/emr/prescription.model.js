@@ -113,7 +113,7 @@ const prescriptionSchema = new mongoose.Schema(
 
 prescriptionSchema.pre('validate', async function assignRxNo() {
   if (!this.rxNo) {
-    const nextSeq = await Counter.next('prescription', this.tenant);
+    const nextSeq = await Counter.next('prescription', this.tenant, this.$session?.());
     this.rxNo = `RX-${String(nextSeq).padStart(5, '0')}`;
   }
 });

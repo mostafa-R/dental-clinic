@@ -89,15 +89,24 @@ export async function generateInvoiceFromPlan(plan, patient, { itemIds, discount
       if (item.tooth) {
         const tooth = dentalChart?.teeth?.find((t) => t.number === item.tooth);
         const toothState = tooth?.state || '';
-        const deductions = await deductForProcedure(
-          patient.branch,
-          patient.tenant,
-          toothState,
-          item.procedureName,
-          userId,
-          session,
-        );
-        if (deductions.length) deductionLog.push({ item: item.procedureName, deductions });
+        // Auto-deduction is a secondary inventory effect. If it fails (e.g.
+        // insufficient stock) the invoice itself is still valid — log the
+        // shortfall and bill anyway rather than aborting the whole sale.
+        try {
+          const deductions = await deductForProcedure(
+            patient.branch,
+            patient.tenant,
+            toothState,
+            item.procedureName,
+            userId,
+            session,
+          );
+          if (deductions.length) deductionLog.push({ item: item.procedureName, deductions });
+        } catch (err) {
+          console.warn(
+            `[TreatmentPlan] Stock deduction skipped for "${item.procedureName}": ${err.message}`,
+          );
+        }
       }
     }
 

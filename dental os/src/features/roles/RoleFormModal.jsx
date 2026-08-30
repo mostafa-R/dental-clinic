@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Modal from '../../components/ui/Modal';
-import { createRole, resetFormState, updateRole, fetchModules } from './rolesSlice';
+import {
+  createRole,
+  createRoleFromTemplate,
+  resetFormState,
+  updateRole,
+  fetchModules,
+  fetchTemplates,
+} from './rolesSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { CRUD_ACTIONS, CRUD_SHORT, MODULES as LOCAL_MODULES } from './permissions';
 import { useT } from '../../lib/i18n';
@@ -12,11 +19,13 @@ export default function RoleFormModal({ open, onClose, role }) {
   const { t } = useT();
   const formStatus = useSelector((s) => s.roles.formStatus);
   const serverModules = useSelector((s) => s.roles.modules);
+  const templates = useSelector((s) => s.roles.templates);
 
   const MODULES = serverModules?.modules || LOCAL_MODULES;
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [templateRoleId, setTemplateRoleId] = useState('');
   // permissions: { [moduleKey]: Set<action> }
   const [perms, setPerms] = useState({});
 
@@ -24,6 +33,7 @@ export default function RoleFormModal({ open, onClose, role }) {
     if (!open) return;
     dispatch(resetFormState());
     dispatch(fetchModules());
+    if (!role) dispatch(fetchTemplates());
     if (role) {
       setName(role.name);
       setDescription(role.description || '');
@@ -36,11 +46,30 @@ export default function RoleFormModal({ open, onClose, role }) {
     } else {
       setName('');
       setDescription('');
+      setTemplateRoleId('');
       const map = {};
       for (const mod of MODULES) map[mod.key] = new Set();
       setPerms(map);
     }
   }, [open, role, dispatch]);
+
+  const templateOptions = [];
+  const allTemplates = templates || { defaultRoles: [], builtInRoles: [], customRoles: [] };
+  if (!role) {
+    (allTemplates.defaultRoles || []).forEach((tmpl) => {
+      // Default templates carry a key, not a database id; only built-in and
+      // custom roles (which have an id) can be passed as baseRoleId.
+      if (tmpl.id) templateOptions.push({ id: tmpl.id, name: tmpl.name, group: t('roles.template.default') });
+    });
+    (allTemplates.builtInRoles || []).forEach((tmpl) =>
+      templateOptions.push({ id: tmpl.id, name: tmpl.name, group: t('roles.template.builtIn') }),
+    );
+    (allTemplates.customRoles || []).forEach((tmpl) =>
+      templateOptions.push({ id: tmpl.id, name: tmpl.name, group: t('roles.template.custom') }),
+    );
+  }
+
+  const usesTemplate = !role && Boolean(templateRoleId);
 
   const toggleAction = (moduleKey, action) => {
     setPerms((prev) => {
@@ -79,6 +108,8 @@ export default function RoleFormModal({ open, onClose, role }) {
     try {
       if (role) {
         await dispatch(updateRole({ id: role._id, payload: { name: name.trim(), description: description.trim(), permissions } })).unwrap();
+      } else if (usesTemplate) {
+        await dispatch(createRoleFromTemplate({ name: name.trim(), description: description.trim(), baseRoleId: templateRoleId })).unwrap();
       } else {
         await dispatch(createRole({ name: name.trim(), description: description.trim(), permissions })).unwrap();
       }
@@ -128,10 +159,33 @@ export default function RoleFormModal({ open, onClose, role }) {
           </div>
         )}
 
+        {!role && templateOptions.length > 0 && (
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              {t('roles.template.label')}
+            </label>
+            <select
+              value={templateRoleId}
+              onChange={(e) => setTemplateRoleId(e.target.value)}
+              className={inputCls}
+            >
+              <option value="">{t('roles.template.none')}</option>
+              {templateOptions.map((tmpl) => (
+                <option key={tmpl.id} value={tmpl.id}>
+                  {tmpl.name} · {tmpl.group}
+                </option>
+              ))}
+            </select>
+            {usesTemplate && (
+              <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">{t('roles.template.note')}</p>
+            )}
+          </div>
+        )}
+
         {/* Permission Matrix */}
         <div>
           <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('roles.form.permissions')}</label>
-          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+          <div className={`overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 ${usesTemplate ? 'opacity-50' : ''}`}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50">
@@ -154,7 +208,7 @@ export default function RoleFormModal({ open, onClose, role }) {
                             type="checkbox"
                             checked={checked || false}
                             onChange={() => toggleAction(mod.key, a)}
-                            disabled={role?.isSystemAdmin}
+                            disabled={role?.isSystemAdmin || usesTemplate}
                             className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-40"
                           />
                         </td>
@@ -164,7 +218,7 @@ export default function RoleFormModal({ open, onClose, role }) {
                       <button
                         type="button"
                         onClick={() => toggleAll(mod.key)}
-                        disabled={role?.isSystemAdmin}
+                        disabled={role?.isSystemAdmin || usesTemplate}
                         className="text-xs font-medium text-indigo-600 transition hover:text-indigo-800 disabled:opacity-40 dark:text-indigo-400"
                       >
                         {perms[mod.key]?.size === CRUD_ACTIONS.length ? t('roles.clear') : t('roles.selectAll')}

@@ -18,7 +18,14 @@ export async function getWhatsAppSettings(tenantId) {
 }
 
 const ALLOWED_CONFIG_KEYS = ['phoneNumber', 'phoneNumberId', 'accessToken'];
-const ALLOWED_SETTINGS_KEYS = ['appointmentReminder', 'appointmentConfirm', 'reminderHours'];
+const ALLOWED_SETTINGS_KEYS = [
+  'appointmentReminder',
+  'appointmentConfirm',
+  'reminderHours',
+  'reminderHoursSecondary',
+  'installmentReminder',
+  'noShowReminder',
+];
 
 export async function updateWhatsAppSettings(tenantId, data) {
   let settings = await WhatsAppSetting.findOne({ tenant: tenantId });

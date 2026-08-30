@@ -413,6 +413,12 @@ export const getAccountingSummary = asyncHandler(async (req, res) => {
       Invoice.aggregate([
         { $match: { ...invoiceFilter, payments: { $exists: true, $ne: [] } } },
         { $unwind: "$payments" },
+        // Only count payments that actually fell inside the window. Without
+        // this, payments made before/after the range leak into the by-method
+        // and monthly revenue figures (invoice createdAt ≠ payment date).
+        ...(Object.keys(dateRange).length
+          ? [{ $match: { "payments.date": dateRange } }]
+          : []),
         {
           $facet: {
             byMethod: [

@@ -1,4 +1,5 @@
 import Appointment from "../modules/appointments/appointment.model.js";
+import ApiError from "./ApiError.js";
 
 const ACTIVE_STATUSES = ["scheduled", "confirmed", "checked_in", "in_progress"];
 
@@ -8,7 +9,9 @@ const ACTIVE_STATUSES = ["scheduled", "confirmed", "checked_in", "in_progress"];
  * to the same patient, branch, tenant and doctor so the WhatsApp reminder
  * cron can pick it up.
  *
- * Skips creation if the doctor already has an overlapping appointment.
+ * A doctor overlap raises a conflict error instead of silently skipping the
+ * booking — the caller (clinical note / treatment plan save) surfaces it so
+ * the user is told the follow-up could not be scheduled.
  *
  * @returns {Promise<import('mongoose').Types.ObjectId|null>} The created
  *   appointment's _id, or null if no date was provided.
@@ -48,7 +51,11 @@ export async function ensureNextAppointment({
     end: { $gt: start },
   }).select('_id').lean();
 
-  if (overlap) return null;
+  if (overlap) {
+    throw ApiError.conflict(
+      'The doctor already has an appointment overlapping this follow-up time.',
+    );
+  }
 
   const appt = await Appointment.create({
     patient,

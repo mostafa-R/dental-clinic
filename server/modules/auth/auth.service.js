@@ -54,13 +54,17 @@ export async function getUserWithTenant(userId) {
 
 export async function getUserWithTenantInfo(userObj) {
   if (userObj.tenant) {
-    const tenant = await Tenant.findById(userObj.tenant).select('status isActive name').lean();
+    const tenant = await Tenant.findById(userObj.tenant).select('status isActive name plan planModules').lean();
     if (tenant) {
       userObj.tenant = {
         _id: tenant._id,
         name: tenant.name,
         status: tenant.status,
         isActive: tenant.isActive,
+        plan: tenant.plan,
+        // planModules lets the client hide/disable UI for features that the
+        // tenant's plan does not include (e.g. no chat sidebar polling).
+        planModules: tenant.planModules || [],
       };
     }
   }

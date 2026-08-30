@@ -50,6 +50,29 @@ export const archivePatient = createAsyncThunk(
   },
 );
 
+export const fetchDuplicates = createAsyncThunk(
+  'patients/fetchDuplicates',
+  async (_, { rejectWithValue }) => {
+    try {
+      return await patientApi.duplicates();
+    } catch (err) {
+      return rejectWithValue(err.response?.data || { message: 'Failed to check duplicates' });
+    }
+  },
+);
+
+export const mergePatients = createAsyncThunk(
+  'patients/merge',
+  async ({ duplicateId, survivorId }, { rejectWithValue }) => {
+    try {
+      const result = await patientApi.merge(duplicateId, survivorId);
+      return { result, duplicateId };
+    } catch (err) {
+      return rejectWithValue(err.response?.data || { message: 'Failed to merge patients' });
+    }
+  },
+);
+
 const patientsSlice = createSlice({
   name: 'patients',
   initialState: {
@@ -60,6 +83,9 @@ const patientsSlice = createSlice({
     error: null,
     formStatus: 'idle',
     formError: null,
+    duplicates: { groups: [], total: 0, status: 'idle', error: null, open: false },
+    mergeStatus: 'idle',
+    mergeError: null,
   },
   reducers: {
     setSearch(state, action) {
@@ -82,6 +108,16 @@ const patientsSlice = createSlice({
     resetFormState(state) {
       state.formStatus = 'idle';
       state.formError = null;
+    },
+    openDuplicates(state) {
+      state.duplicates.open = true;
+    },
+    closeDuplicates(state) {
+      state.duplicates.open = false;
+      state.duplicates.groups = [];
+      state.duplicates.total = 0;
+      state.duplicates.status = 'idle';
+      state.duplicates.error = null;
     },
   },
   extraReducers: (builder) => {
@@ -128,6 +164,40 @@ const patientsSlice = createSlice({
       .addCase(archivePatient.fulfilled, (state, action) => {
         const patient = state.items.find((p) => p._id === action.payload);
         if (patient) patient.isActive = false;
+      })
+      .addCase(fetchDuplicates.pending, (state) => {
+        state.duplicates.status = 'loading';
+        state.duplicates.error = null;
+      })
+      .addCase(fetchDuplicates.fulfilled, (state, action) => {
+        state.duplicates.groups = action.payload.groups;
+        state.duplicates.total = action.payload.total;
+        state.duplicates.status = 'succeeded';
+      })
+      .addCase(fetchDuplicates.rejected, (state, action) => {
+        state.duplicates.status = 'failed';
+        state.duplicates.error = action.payload;
+      })
+      .addCase(mergePatients.pending, (state) => {
+        state.mergeStatus = 'loading';
+        state.mergeError = null;
+      })
+      .addCase(mergePatients.fulfilled, (state, action) => {
+        state.items = state.items.filter((p) => p._id !== action.payload.duplicateId);
+        state.duplicates.groups = state.duplicates.groups
+          .map((g) => ({
+            ...g,
+            patients: g.patients.filter((p) => p._id !== action.payload.duplicateId),
+            count: g.patients.length - 1,
+          }))
+          .filter((g) => g.count > 1);
+        state.duplicates.total = state.duplicates.groups.length;
+        state.mergeStatus = 'succeeded';
+        state.mergeError = null;
+      })
+      .addCase(mergePatients.rejected, (state, action) => {
+        state.mergeStatus = 'failed';
+        state.mergeError = action.payload;
       });
   },
 });
@@ -138,6 +208,8 @@ export const {
   setStatusFilter,
   resetPatients,
   resetFormState,
+  openDuplicates,
+  closeDuplicates,
 } = patientsSlice.actions;
 
 export default patientsSlice.reducer;

@@ -8,6 +8,7 @@ import { disconnectSocket } from '../../lib/socket';
 import { roleLabel } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
 import PreferencesControls from '../../features/preferences/PreferencesControls';
+import GlobalSearch from '../../features/search/GlobalSearch';
 
 function MenuIcon() {
   return (
@@ -205,6 +206,11 @@ export default function Topbar() {
           {t('topbar.newInvoice')}
         </button>
       </div>
+
+      <div className="flex-1" />
+
+      {/* Global search */}
+      <GlobalSearch />
 
       <div className="flex-1" />
 

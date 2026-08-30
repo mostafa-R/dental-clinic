@@ -118,6 +118,55 @@ export const updateCommission = createAsyncThunk(
   },
 );
 
+/* --------------------------------------------------------------- Day Close */
+
+export const fetchDayClose = createAsyncThunk(
+  'accounting/fetchDayClose',
+  async (params, { rejectWithValue }) => {
+    try {
+      return await accountingApi.getDayClose(params);
+    } catch (err) {
+      return rejectWithValue(errPayload(err, 'Failed to load day close preview'));
+    }
+  },
+);
+
+export const submitCloseDay = createAsyncThunk(
+  'accounting/submitCloseDay',
+  async (payload, { rejectWithValue }) => {
+    try {
+      const { dayClose } = await accountingApi.closeDay(payload);
+      return dayClose;
+    } catch (err) {
+      return rejectWithValue(errPayload(err, 'Failed to close the day'));
+    }
+  },
+);
+
+export const fetchDayCloses = createAsyncThunk(
+  'accounting/fetchDayCloses',
+  async (params, { rejectWithValue }) => {
+    try {
+      return await accountingApi.listDayCloses(params);
+    } catch (err) {
+      return rejectWithValue(errPayload(err, 'Failed to load day close history'));
+    }
+  },
+);
+
+/* -------------------------------------------------------------- Journal */
+
+export const fetchJournal = createAsyncThunk(
+  'accounting/fetchJournal',
+  async (params, { rejectWithValue }) => {
+    try {
+      return await accountingApi.listJournal(params);
+    } catch (err) {
+      return rejectWithValue(errPayload(err, 'Failed to load journal'));
+    }
+  },
+);
+
 /* --------------------------------------------------------------- slice */
 
 const initialState = {
@@ -125,10 +174,17 @@ const initialState = {
   expenses: { items: [], pagination: { page: 1, limit: 50, total: 0, pages: 1 }, status: 'idle', error: null },
   drawings: { items: [], pagination: { page: 1, limit: 50, total: 0, pages: 1 }, status: 'idle', error: null },
   commissions: { items: [], pagination: { page: 1, limit: 50, total: 0, pages: 1 }, status: 'idle', error: null },
+  dayClose: { preview: null, status: 'idle', error: null },
+  dayCloses: { items: [], pagination: { page: 1, limit: 50, total: 0, pages: 1 }, status: 'idle', error: null },
+  journal: { entries: [], balances: { totalDebit: 0, totalCredit: 0 }, pagination: { page: 1, limit: 50, total: 0, pages: 1 }, status: 'idle', error: null },
   summaryStatus: 'idle',
   summaryError: null,
   formStatus: 'idle',
   formError: null,
+  closeStatus: 'idle',
+  closeError: null,
+  journalStatus: 'idle',
+  journalError: null,
 };
 
 function replaceExpense(state, expense) {
@@ -255,7 +311,72 @@ const accountingSlice = createSlice({
         state.commissions.status = 'failed';
         state.commissions.error = action.payload;
       })
-      .addCase(updateCommission.fulfilled, replaceCommission);
+      .addCase(updateCommission.fulfilled, replaceCommission)
+
+      /* day close */
+      .addCase(fetchDayClose.pending, (state) => {
+        state.dayClose.status = 'loading';
+        state.dayClose.error = null;
+      })
+      .addCase(fetchDayClose.fulfilled, (state, action) => {
+        state.dayClose.preview = action.payload.dayClose;
+        state.dayClose.status = 'succeeded';
+      })
+      .addCase(fetchDayClose.rejected, (state, action) => {
+        state.dayClose.status = 'failed';
+        state.dayClose.error = action.payload;
+      })
+      .addCase(submitCloseDay.pending, (state) => {
+        state.closeStatus = 'loading';
+        state.closeError = null;
+      })
+      .addCase(submitCloseDay.fulfilled, (state, action) => {
+        state.dayClose.preview = {
+          ...action.payload,
+          expected: action.payload.expected,
+          countedCash: action.payload.countedCash,
+          difference: action.payload.difference,
+          closedBy: action.payload.closedBy,
+          closedAt: action.payload.closedAt,
+          isClosed: true,
+        };
+        state.dayCloses.items.unshift(action.payload);
+        state.summaryStatus = 'idle';
+        state.closeStatus = 'succeeded';
+      })
+      .addCase(submitCloseDay.rejected, (state, action) => {
+        state.closeStatus = 'failed';
+        state.closeError = action.payload;
+      })
+      .addCase(fetchDayCloses.pending, (state) => {
+        state.dayCloses.status = 'loading';
+        state.dayCloses.error = null;
+      })
+      .addCase(fetchDayCloses.fulfilled, (state, action) => {
+        state.dayCloses.items = action.payload.dayCloses;
+        state.dayCloses.pagination = action.payload.pagination;
+        state.dayCloses.status = 'succeeded';
+      })
+      .addCase(fetchDayCloses.rejected, (state, action) => {
+        state.dayCloses.status = 'failed';
+        state.dayCloses.error = action.payload;
+      })
+
+      /* journal */
+      .addCase(fetchJournal.pending, (state) => {
+        state.journal.status = 'loading';
+        state.journal.error = null;
+      })
+      .addCase(fetchJournal.fulfilled, (state, action) => {
+        state.journal.entries = action.payload.entries;
+        state.journal.balances = action.payload.balances;
+        state.journal.pagination = action.payload.pagination;
+        state.journal.status = 'succeeded';
+      })
+      .addCase(fetchJournal.rejected, (state, action) => {
+        state.journal.status = 'failed';
+        state.journal.error = action.payload;
+      });
   },
 });
 

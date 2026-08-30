@@ -156,7 +156,7 @@ const treatmentPlanSchema = new mongoose.Schema(
 
 treatmentPlanSchema.pre('validate', async function assignPlanNo() {
   if (!this.planNo) {
-    const nextSeq = await Counter.next('treatment_plan', this.tenant);
+    const nextSeq = await Counter.next('treatment_plan', this.tenant, this.$session?.());
     this.planNo = `TP-${String(nextSeq).padStart(5, '0')}`;
   }
 });

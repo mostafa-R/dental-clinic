@@ -15,4 +15,6 @@ export const appointmentApi = {
   update: (id, payload) => api.patch(`/appointments/${id}`, payload).then((r) => r.data.data),
   transition: (id, status) => api.patch(`/appointments/${id}/status`, { status }).then((r) => r.data.data),
   cancel: (id) => api.delete(`/appointments/${id}`).then((r) => r.data.data),
+  queue: () => api.get('/appointments/queue').then((r) => r.data.data.queue),
+  callNext: (body = {}) => api.post('/appointments/queue/call-next', body).then((r) => r.data.data),
 };

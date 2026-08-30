@@ -39,7 +39,7 @@ export function errorHandler(err, _req, res, _next) {
   } else if (err.name === 'MulterError') {
     statusCode = 400;
     if (err.code === 'LIMIT_FILE_SIZE') {
-      message = 'File too large. Maximum size is 20MB';
+      message = 'File too large. Maximum size is 50MB';
     } else if (err.code === 'LIMIT_UNEXPECTED_FILE') {
       message = 'Unexpected file field';
     } else {

@@ -6,6 +6,7 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_U
 
 let socket = null;
 let currentBranchId = null;
+let queueSubscribed = false;
 
 export function getSocket() {
   if (socket) return socket;
@@ -49,6 +50,9 @@ export function getSocket() {
     if (currentBranchId) {
       socket.emit('subscribe:branch', currentBranchId);
     }
+    if (queueSubscribed) {
+      socket.emit('subscribe:queue');
+    }
   });
 
   return socket;
@@ -71,8 +75,22 @@ export function unsubscribeCurrentBranch() {
   currentBranchId = null;
 }
 
+export function subscribeQueue() {
+  if (queueSubscribed) return;
+  getSocket().emit('subscribe:queue');
+  queueSubscribed = true;
+}
+
+export function unsubscribeQueue() {
+  if (!queueSubscribed) return;
+  const s = getSocket();
+  s.emit('unsubscribe:queue');
+  queueSubscribed = false;
+}
+
 export function disconnectSocket() {
   unsubscribeCurrentBranch();
+  unsubscribeQueue();
   if (socket) {
     socket.removeAllListeners();
     socket.disconnect();

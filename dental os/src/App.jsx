@@ -4,8 +4,20 @@ import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import RequirePermission from './components/RequirePermission';
 import RoleRedirect from './components/RoleRedirect';
+import SiteProtectedRoute from './features/site/SiteProtectedRoute';
+import SiteLayout from './features/site/SiteLayout';
 
 const Login = lazy(() => import('./features/auth/Login'));
+const SiteLogin = lazy(() => import('./pages/site/SiteLogin'));
+const PlatformDashboard = lazy(() => import('./pages/site/PlatformDashboard'));
+const SiteTenants = lazy(() => import('./pages/site/SiteTenants'));
+const SitePlans = lazy(() => import('./pages/site/SitePlans'));
+const SiteSubscriptions = lazy(() => import('./pages/site/SiteSubscriptions'));
+const SiteBranches = lazy(() => import('./pages/site/SiteBranches'));
+const SiteAuditLogs = lazy(() => import('./pages/site/SiteAuditLogs'));
+const SiteErrorLogs = lazy(() => import('./pages/site/SiteErrorLogs'));
+const SiteBackups = lazy(() => import('./pages/site/SiteBackups'));
+const SiteSettings = lazy(() => import('./pages/site/SiteSettings'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Patients = lazy(() => import('./pages/Patients'));
 const PatientEmr = lazy(() => import('./pages/PatientEmr'));
@@ -55,6 +67,23 @@ function App() {
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
+
+        <Route path="/platform/login" element={<SiteLogin />} />
+
+        <Route path="/platform" element={<SiteProtectedRoute />}>
+          <Route element={<SiteLayout />}>
+            <Route index element={<Navigate to="/platform/dashboard" replace />} />
+            <Route path="dashboard" element={<PlatformDashboard />} />
+            <Route path="tenants" element={<SiteTenants />} />
+            <Route path="plans" element={<SitePlans />} />
+            <Route path="subscriptions" element={<SiteSubscriptions />} />
+            <Route path="branches" element={<SiteBranches />} />
+            <Route path="audit" element={<SiteAuditLogs />} />
+            <Route path="error-logs" element={<SiteErrorLogs />} />
+            <Route path="backups" element={<SiteBackups />} />
+            <Route path="settings" element={<SiteSettings />} />
+          </Route>
+        </Route>
       </Routes>
     </Suspense>
   );

@@ -1,6 +1,7 @@
 import User from '../modules/users/user.model.js';
 import ApiError from '../utils/ApiError.js';
 import { cacheTenant, getCachedTenant } from '../utils/cache.js';
+import { enforceUserRateLimit } from './userRateLimit.js';
 import { ACCESS_COOKIE, verifyAccessToken } from '../utils/jwt.js';
 
 /**
@@ -93,6 +94,32 @@ export async function protect(req, _res, next) {
     delete req.user.refreshToken;
     delete req.user.tokenVersion;
     delete req.user.__v;
+
+    // Enforce tenant isolation: when this request was routed through a clinic
+    // subdomain (tenantRouter set req.isClinicRoute), the authenticated user
+    // MUST belong to that tenant. Without this cross-check the tenancy gate is
+    // inert — a user from clinic A holding a valid token could otherwise be
+    // served clinic A's data while browsing clinic B's subdomain.
+    if (
+      req.isClinicRoute &&
+      req.tenantId &&
+      user.tenant?._id &&
+      String(req.tenantId) !== String(user.tenant._id)
+    ) {
+      throw ApiError.forbidden('Cross-tenant access denied');
+    }
+
+    // Always surface the tenant context the authenticated user belongs to so
+    // downstream modules can rely on it even on api/localhost routes.
+    if (user.tenant?._id) {
+      req.tenantId = String(user.tenant._id);
+    }
+
+    // Per-user rate limiting (production: Redis; elsewhere: in-memory). The
+    // global userRateLimit middleware runs pre-auth and falls back to the
+    // client IP; binding the counter to the authenticated user here stops one
+    // user from exhausting the quota shared by every device behind one NAT.
+    await enforceUserRateLimit(req.user._id || String(user._id));
 
     // Propagate impersonation context so downstream middleware can restrict PHI.
     if (decoded.type === 'impersonation') {

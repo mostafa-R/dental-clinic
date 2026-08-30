@@ -10,6 +10,8 @@ import Spinner from '../components/ui/Spinner';
 import StatCard from '../components/ui/StatCard';
 import ExpenseModal from '../features/accounting/ExpenseModal';
 import OwnerDrawingModal from '../features/accounting/OwnerDrawingModal';
+import DayCloseTab from '../features/accounting/DayCloseTab';
+import JournalTab from '../features/accounting/JournalTab';
 import {
   deleteExpense,
   deleteDrawing,
@@ -33,6 +35,8 @@ const TABS = [
   { key: 'expenses', labelKey: 'accounting.tab.expenses' },
   { key: 'drawings', labelKey: 'accounting.tab.drawings' },
   { key: 'commissions', labelKey: 'accounting.tab.commissions' },
+  { key: 'dayclose', labelKey: 'accounting.tab.dayClose' },
+  { key: 'journal', labelKey: 'accounting.tab.journal' },
 ];
 
 export default function Accounting() {
@@ -431,6 +435,12 @@ export default function Accounting() {
           )}
         </div>
       )}
+
+      {/* Day Close */}
+      {tab === 'dayclose' && <DayCloseTab />}
+
+      {/* Journal */}
+      {tab === 'journal' && <JournalTab />}
 
       <ExpenseModal open={expenseModal} onClose={() => setExpenseModal(false)} />
       <OwnerDrawingModal open={drawingModal} onClose={() => setDrawingModal(false)} />

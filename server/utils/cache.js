@@ -150,6 +150,13 @@ export async function getCachedTenant(tenantId) {
  */
 export async function invalidateTenant(tenantId) {
   await cacheDel('tenant', tenantId);
+  // tenantRouter caches subdomain lookups under `tenant:slug:{slug}` keys.
+  // A tenantId → slug mapping is not derivable from the cache alone, so drop
+  // every tenant-slug entry. This is safe because tenant status/plan/feature
+  // changes are infrequent, and it ensures a suspension, subscription change,
+  // or feature toggle is honored by the subdomain router immediately instead
+  // of after the 5-minute slug TTL.
+  await cacheDelPattern('tenant:slug:*');
 }
 
 /**

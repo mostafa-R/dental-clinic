@@ -103,6 +103,17 @@ commissionSchema.set('toObject', { virtuals: true });
 commissionSchema.index({ tenant: 1, commissionNo: 1 }, { unique: true });
 commissionSchema.index({ branch: 1, doctor: 1, status: 1 });
 commissionSchema.index({ branch: 1, createdAt: -1 });
+// Idempotency backstop: one commission record per (invoice, doctor, procedure)
+// guarantees that the duplicate-key catch in accrueCommissionForInvoice is
+// actually enforced under concurrent full-payment races.
+commissionSchema.index(
+  { invoice: 1, doctor: 1, procedureName: 1 },
+  {
+    unique: true,
+    name: 'unique_commission_per_invoice_doctor_procedure',
+    partialFilterExpression: { invoice: { $type: 'objectId' } },
+  },
+);
 
 const Commission = mongoose.model('Commission', commissionSchema);
 

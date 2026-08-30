@@ -5,10 +5,12 @@ import Card from '../components/ui/Card';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import RoleFormModal from '../features/roles/RoleFormModal';
+import MatrixView from '../features/roles/MatrixView';
 import {
   deleteRole,
   fetchRoles,
   fetchModules,
+  toggleRoleStatus,
 } from '../features/roles/rolesSlice';
 import { showErrorDialog } from '../features/ui/uiSlice';
 import { useSocketEvent } from '../lib/socket';
@@ -24,6 +26,7 @@ export default function Roles() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [matrixOpen, setMatrixOpen] = useState(false);
   const canManage = canManageRoles();
 
   useEffect(() => {
@@ -49,6 +52,15 @@ export default function Roles() {
     }
   };
 
+  const onToggleStatus = async (role) => {
+    if (role.isActive && !window.confirm(t('roles.deactivateConfirm', { name: role.name }))) return;
+    try {
+      await dispatch(toggleRoleStatus({ id: role._id, isActive: !role.isActive })).unwrap();
+    } catch (err) {
+      dispatch(showErrorDialog(err));
+    }
+  };
+
   const isLoading = status === 'loading' || status === 'idle';
 
   const getPerm = (role, moduleKey) => {
@@ -64,13 +76,24 @@ export default function Roles() {
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('roles.title')}</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('roles.subtitle')}</p>
         </div>
-        {canManage && (
-          <button type="button" onClick={openCreate} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400">
-            {t('roles.new')}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {canManage && (
+            <button type="button" onClick={() => setMatrixOpen((v) => !v)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+              {matrixOpen ? t('roles.hideMatrix') : t('roles.viewMatrix')}
+            </button>
+          )}
+          {canManage && (
+            <button type="button" onClick={openCreate} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400">
+              {t('roles.new')}
+            </button>
+          )}
+        </div>
       </header>
 
+      {matrixOpen ? (
+        <MatrixView />
+      ) : (
+        <>
       {isLoading && <Spinner label={t('roles.loading')} />}
       {error && !isLoading && <EmptyState title={t('roles.loadFailed')} message={error?.message} />}
       {status === 'succeeded' && !error && items.length === 0 && <EmptyState title={t('roles.empty')} />}
@@ -103,9 +126,22 @@ export default function Roles() {
                       {t('common.edit')}
                     </button>
                     {!role.isBuiltIn && (
-                      <button type="button" onClick={() => onDelete(role)} className="rounded-md px-2 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/15">
-                        {t('common.archive')}
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => onToggleStatus(role)}
+                          className={`rounded-md px-2 py-1 text-xs font-medium transition ${
+                            role.isActive
+                              ? 'text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-500/15'
+                              : 'text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/15'
+                          }`}
+                        >
+                          {role.isActive ? t('roles.deactivate') : t('roles.activate')}
+                        </button>
+                        <button type="button" onClick={() => onDelete(role)} className="rounded-md px-2 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/15">
+                          {t('common.archive')}
+                        </button>
+                      </>
                     )}
                   </div>
                 )}
@@ -149,6 +185,8 @@ export default function Roles() {
       )}
 
       <RoleFormModal open={formOpen} onClose={closeForm} role={editing} />
+        </>
+      )}
     </div>
   );
 }

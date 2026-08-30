@@ -189,6 +189,12 @@ export async function requireBranchAccess(req, _res, next) {
       return next(ApiError.notFound('Branch not found'));
     }
 
+    // A branch without a tenant is a platform-level record; it cannot be
+    // verified against any tenant scope, so refuse to serve it here.
+    if (!branch.tenant) {
+      return next(ApiError.notFound('Branch not found'));
+    }
+
     // If tenant context is provided, verify branch belongs to that tenant
     if (tenantId && String(branch.tenant) !== String(tenantId)) {
       // Log potential cross-tenant access attempt
@@ -204,6 +210,13 @@ export async function requireBranchAccess(req, _res, next) {
       });
 
       return next(ApiError.notFound('Branch not found'));
+    }
+
+    // Without an explicit tenant context only a super_admin may address a
+    // branch by id. Every other site role must scope the request to a tenant
+    // so this middleware can verify the branch actually belongs to it.
+    if (!tenantId && req.siteAdmin?.role !== 'super_admin') {
+      return next(ApiError.forbidden('Tenant context required'));
     }
 
     // Attach branch to request for downstream use

@@ -8,24 +8,28 @@ import { playNotificationSound } from '../../lib/notificationSound';
 export default function ChatGlobalListener() {
   const dispatch = useDispatch();
   const user = useSelector((s) => s.auth.user);
+  // Only poll/act on chat when the tenant's plan includes the chat module —
+  // otherwise every fetch 403s ("Your plan does not include the chat module").
+  const chatEnabled = !!user?.tenant?.planModules?.includes('chat');
 
   useEffect(() => {
-    if (user) {
+    if (user && chatEnabled) {
       dispatch(fetchUnreadCounts());
     }
-  }, [dispatch, user]);
+  }, [dispatch, user, chatEnabled]);
 
   // Poll unread counts every 3s to keep sidebar/topbar badges accurate
   const pollingRef = useRef(null);
   useEffect(() => {
-    if (!user) return;
+    if (!user || !chatEnabled) return;
     pollingRef.current = setInterval(() => {
       dispatch(fetchUnreadCounts());
     }, 3000);
     return () => clearInterval(pollingRef.current);
-  }, [dispatch, user]);
+  }, [dispatch, user, chatEnabled]);
 
   const handleMessage = useCallback((msg) => {
+    if (!chatEnabled) return;
     if (String(msg.sender._id) === String(user?._id)) return;
     dispatch(addMessage(msg));
     if (document.hidden) {
@@ -34,12 +38,13 @@ export default function ChatGlobalListener() {
         new Notification(msg.sender.name, { body: msg.content, icon: '/favicon.ico' });
       }
     }
-  }, [dispatch, user]);
+  }, [dispatch, user, chatEnabled]);
 
   const handleRead = useCallback((payload) => {
+    if (!chatEnabled) return;
     dispatch(markMessagesAsRead(payload));
     dispatch(fetchUnreadCounts());
-  }, [dispatch]);
+  }, [dispatch, chatEnabled]);
 
   const events = useMemo(() => [
     ['chat:message', handleMessage],

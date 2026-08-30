@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
-import { fetchPatients, resetPatients, setPage } from '../features/patients/patientSlice';
+import { fetchPatients, openDuplicates, resetPatients, setPage } from '../features/patients/patientSlice';
 import PatientDetailModal from '../features/patients/PatientDetailModal';
 import PatientFormModal from '../features/patients/PatientFormModal';
 import PatientSearch from '../features/patients/PatientSearch';
 import PatientsTable from '../features/patients/PatientsTable';
+import DuplicatesPanel from '../features/patients/DuplicatesPanel';
 import Card from '../components/ui/Card';
 import EmptyState from '../components/ui/EmptyState';
 import Pagination from '../components/ui/Pagination';
@@ -24,6 +25,7 @@ export default function Patients() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
+  const duplicatesOpen = useSelector((s) => s.patients.duplicates.open);
 
   useEffect(() => {
     if (searchParams.get('new') === '1') {
@@ -70,16 +72,27 @@ export default function Patients() {
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('patients.title')}</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('patients.subtitle')}</p>
         </div>
-        {canManage && (
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={openCreate}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+            onClick={() => dispatch(openDuplicates())}
+            className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-50 dark:border-amber-500/40 dark:text-amber-400 dark:hover:bg-amber-500/10"
           >
-            {t('patients.new')}
+            {t('patients.checkDuplicates')}
           </button>
-        )}
+          {canManage && (
+            <button
+              type="button"
+              onClick={openCreate}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+            >
+              {t('patients.new')}
+            </button>
+          )}
+        </div>
       </header>
+
+      {duplicatesOpen && <DuplicatesPanel />}
 
       <Card padded={false}>
         <div className="border-b border-slate-100 p-4 dark:border-slate-800">

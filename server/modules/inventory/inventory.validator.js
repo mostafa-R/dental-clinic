@@ -51,7 +51,13 @@ export const listItemsQuerySchema = z.object({
 
 export const adjustStockSchema = z.object({
   type: z.enum(STOCK_TX_TYPES),
-  quantity: z.number().min(0.01, 'Quantity must be positive'),
+  // `adjustment` is directional: a positive value tops stock up and a negative
+  // value writes it down. The other types are normalized by the service with
+  // Math.abs, so only a non-zero magnitude is required here.
+  quantity: z.number().refine(
+    (q) => Number.isFinite(q) && Math.abs(q) >= 0.01,
+    { message: 'Quantity must be a non-zero value' },
+  ),
   // PRD §6.8 BR-INV: adjustments must always carry a documented reason.
   reason: z.string().min(1, 'Reason is required').max(200),
   reference: z.string().max(200).optional(),

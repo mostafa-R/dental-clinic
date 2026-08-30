@@ -142,7 +142,7 @@ const clinicalNoteSchema = new mongoose.Schema(
 
 clinicalNoteSchema.pre('validate', async function assignNoteNo() {
   if (!this.noteNo) {
-    const nextSeq = await Counter.next('clinical_note', this.tenant);
+    const nextSeq = await Counter.next('clinical_note', this.tenant, this.$session?.());
     this.noteNo = `CN-${String(nextSeq).padStart(5, '0')}`;
   }
 });
