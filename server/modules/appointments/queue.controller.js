@@ -2,9 +2,11 @@ import Appointment from './appointment.model.js';
 import { emitToBranch, emitToTenantQueue } from '../../socket/index.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
-import { filterByBranch, toObjectId } from '../../utils/branchScope.js';
+import { currentTenant, filterByBranch, toObjectId } from '../../utils/branchScope.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 import { stripPHI } from '../../middleware/phiRestrict.js';
+import { loadTenantTimezone } from '../../utils/timezoneUtils.js';
+import { zonedTodayRangeUtc } from '../../utils/zonedDates.js';
 
 // The waiting-room board only needs identification fields, never full PHI.
 const POPULATE = [
@@ -12,16 +14,10 @@ const POPULATE = [
   { path: 'doctor', select: 'name' },
 ];
 
-function startOfDay(d) {
-  const date = new Date(d);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
-function endOfDay(d) {
-  const date = new Date(d);
-  date.setHours(23, 59, 59, 999);
-  return date;
+/** "Today" in the clinic's stored timezone — not the server's. */
+async function todayRange(req) {
+  const tz = await loadTenantTimezone(currentTenant(req));
+  return zonedTodayRangeUtc(Date.now(), tz);
 }
 
 function serializeQueueEntry(appointment, req) {
@@ -45,10 +41,10 @@ function broadcastQueueEvent(branchId, tenantId, event, appointment) {
  */
 export const getQueue = asyncHandler(async (req, res) => {
   const branchFilter = filterByBranch(req);
-  const now = new Date();
+  const today = await todayRange(req);
   const dayFilter = {
     ...branchFilter,
-    start: { $gte: startOfDay(now), $lte: endOfDay(now) },
+    ...(today ? { start: { $gte: today.start, $lt: today.end } } : {}),
   };
 
   const [waiting, inChair, completedCount] = await Promise.all([
@@ -81,11 +77,12 @@ export const getQueue = asyncHandler(async (req, res) => {
 export const callNextPatient = asyncHandler(async (req, res) => {
   const branchFilter = filterByBranch(req);
   const { doctor } = req.validatedBody ?? {};
+  const today = await todayRange(req);
 
   const filter = {
     ...branchFilter,
     status: 'checked_in',
-    start: { $gte: startOfDay(new Date()), $lte: endOfDay(new Date()) },
+    ...(today ? { start: { $gte: today.start, $lt: today.end } } : {}),
   };
   if (doctor) {
     filter.doctor = toObjectId(doctor);

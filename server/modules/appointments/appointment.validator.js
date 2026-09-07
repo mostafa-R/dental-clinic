@@ -69,8 +69,10 @@ export const callNextSchema = z.object({
 });
 
 export const listAppointmentsQuerySchema = z.object({
-  from: optionalParam(z.coerce.date()),
-  to: optionalParam(z.coerce.date()),
+  // Date-only (`YYYY-MM-DD`) values are resolved to the tenant's local day
+  // window by the controller; full date-times are treated as exact instants.
+  from: optionalParam(z.string().min(1)),
+  to: optionalParam(z.string().min(1)),
   date: optionalParam(z.string()),
   doctor: optionalParam(objectIdSchema),
   patient: optionalParam(z.string()),

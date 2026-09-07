@@ -6,6 +6,8 @@ import asyncHandler from '../../utils/asyncHandler.js';
 import { currentTenant, filterByBranch, resolveBranchForCreate, toObjectId } from '../../utils/branchScope.js';
 import { escapeRegex } from '../../utils/escapeRegex.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
+import { buildDateRangeFilter } from '../../utils/zonedDates.js';
+import { loadTenantTimezone } from '../../utils/timezoneUtils.js';
 import { stripPHI } from '../../middleware/phiRestrict.js';
 import Patient from '../patients/patient.model.js';
 import Branch from '../users/branch.model.js';
@@ -23,18 +25,6 @@ function toObjectIdList(value) {
   if (!value) return null;
   if (Array.isArray(value)) return value.map((v) => toObjectId(v));
   return [toObjectId(value)];
-}
-
-function startOfDay(d) {
-  const date = new Date(d);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
-function endOfDay(d) {
-  const date = new Date(d);
-  date.setHours(23, 59, 59, 999);
-  return date;
 }
 
 function emitAppointment(branchId, event, appointment) {
@@ -75,21 +65,13 @@ async function loadAppointment(id, branchFilter) {
 }
 
 export const listAppointments = asyncHandler(async (req, res) => {
-  const { from, to, date, doctor, patient, status, page, limit } = req.validatedQuery;
+  const { doctor, patient, status, page, limit } = req.validatedQuery;
 
   const filter = { ...filterByBranch(req) };
-
-  if (date) {
-    const d = new Date(date);
-    if (!Number.isNaN(d.getTime())) {
-      filter.start = { $gte: startOfDay(d), $lte: endOfDay(d) };
-    }
-  } else {
-    const range = {};
-    if (from) range.$gte = new Date(from);
-    if (to) range.$lte = new Date(to);
-    if (Object.keys(range).length) filter.start = range;
-  }
+  // Date-only query params resolve against the clinic's local day (its stored
+  // IANA timezone, not the server's). Full date-times stay exact instants.
+  const tz = await loadTenantTimezone(currentTenant(req));
+  Object.assign(filter, buildDateRangeFilter(req.validatedQuery, tz));
 
   if (doctor) filter.doctor = toObjectId(doctor);
   if (patient) {

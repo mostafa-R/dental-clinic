@@ -71,6 +71,17 @@ const tenantSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // IANA timezone of the clinic's local time. All "local day" date-range
+    // handling (calendar views, live queue "today", date-only query params)
+    // resolves through this value, never the server's OS timezone. Falls back
+    // to APP_DEFAULT_TZ / UTC when unset — set this per tenant so clinics
+    // east/west of UTC get correct day windows.
+    timezone: {
+      type: String,
+      trim: true,
+      maxlength: 60,
+      default: () => process.env.APP_DEFAULT_TZ || 'UTC',
+    },
     address: {
       type: String,
       trim: true,
