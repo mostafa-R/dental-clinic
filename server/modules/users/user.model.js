@@ -101,16 +101,21 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-    // Doctor-specific working hours (only applies if isDoctor is true)
-    // If not set, falls back to clinic hours
+    // Doctor-specific working hours (only applies if isDoctor is true).
+    // A day left at the default (open/close null, notWorking false) means the
+    // doctor has NOT configured a custom schedule for that day, so availability
+    // falls back to the clinic's working hours (enforced separately via
+    // Branch.isWithinWorkingHours). A doctor is only blocked on a day when the
+    // clinic explicitly sets notWorking: true (or provides open/close times
+    // that exclude the slot). See isAvailableAt below.
     workingHours: {
-      sunday: { type: doctorWorkingHoursSchema, default: () => ({ notWorking: true }) },
-      monday: { type: doctorWorkingHoursSchema, default: () => ({ notWorking: true }) },
-      tuesday: { type: doctorWorkingHoursSchema, default: () => ({ notWorking: true }) },
-      wednesday: { type: doctorWorkingHoursSchema, default: () => ({ notWorking: true }) },
-      thursday: { type: doctorWorkingHoursSchema, default: () => ({ notWorking: true }) },
-      friday: { type: doctorWorkingHoursSchema, default: () => ({ notWorking: true }) },
-      saturday: { type: doctorWorkingHoursSchema, default: () => ({ notWorking: true }) },
+      sunday: { type: doctorWorkingHoursSchema, default: () => ({ open: null, close: null, notWorking: false }) },
+      monday: { type: doctorWorkingHoursSchema, default: () => ({ open: null, close: null, notWorking: false }) },
+      tuesday: { type: doctorWorkingHoursSchema, default: () => ({ open: null, close: null, notWorking: false }) },
+      wednesday: { type: doctorWorkingHoursSchema, default: () => ({ open: null, close: null, notWorking: false }) },
+      thursday: { type: doctorWorkingHoursSchema, default: () => ({ open: null, close: null, notWorking: false }) },
+      friday: { type: doctorWorkingHoursSchema, default: () => ({ open: null, close: null, notWorking: false }) },
+      saturday: { type: doctorWorkingHoursSchema, default: () => ({ open: null, close: null, notWorking: false }) },
     },
     // Appointment settings for doctors
     appointmentSettings: {
