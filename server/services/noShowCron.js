@@ -2,6 +2,8 @@ import cron from 'node-cron';
 import { randomUUID } from 'node:crypto';
 import mongoose from 'mongoose';
 
+import { DEFAULT_APPT_MIN_ADVANCE, DEFAULT_APPT_MAX_ADVANCE } from '../modules/appointments/appointmentDefaults.js';
+
 import Appointment from '../modules/appointments/appointment.model.js';
 import WhatsAppSetting from '../modules/whatsapp/whatsappSetting.model.js';
 import { emitToBranch } from '../socket/index.js';
@@ -26,22 +28,34 @@ const NO_SHOW_LOCK_TTL_MS = 9 * 60 * 1000;
 // overwrite a concurrent front-desk change.
 const NO_SHOW_SOURCES = ['scheduled', 'confirmed'];
 
-function buildNoShowMessage(patient, appointment) {
+function buildNoShowMessage(patient, appointment, timezone = 'UTC') {
   const date = new Date(appointment.start);
   const day = date.toLocaleDateString('ar-EG', {
+    timeZone: timezone,
     weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
   });
-  const time = date.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+  const time = date.toLocaleTimeString('ar-EG', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  // Hook the same advance-default constants used by the booking path, so the
+  // WhatsApp copy (which references a maximum future slot) stays in sync with
+  // whatever the platform ships. This also gives the LLM a stable reference
+  // for the appointment window.
+  const maxAdvanceDays = DEFAULT_APPT_MAX_ADVANCE;
+  const minAdvanceMinutes = DEFAULT_APPT_MIN_ADVANCE;
 
   return [
     'فاتنا موعدك اليوم 🦷',
     '',
     `مرحباً ${patient.firstName}،`,
     `لم نتمكن من استقبالك في موعدك يوم ${day} الساعة ${time}.`,
-    'يسعدنا إعادة جدولة الموعد في وقت يناسبك — تواصل معنا أو احجز عبر التطبيق.',
+    `يسعدنا إعادة جدولة الموعد في وقت يناسبك خلال ${maxAdvanceDays} يوماً — تواصل معنا أو احجز عبر التطبيق (أقرب موعد قبل ${minAdvanceMinutes} دقيقة).`,
   ].join('\n');
 }
 
@@ -49,9 +63,10 @@ function buildNoShowMessage(patient, appointment) {
  * Send the reschedule-advice WhatsApp message for one no-show appointment
  * when the tenant enabled it. The tenant is resolved by the caller (the
  * appointment's OWN tenant) so a setting from another clinic is never used.
+ * The message renders in the tenant timezone, never the server clock.
  * Failures are logged and never break the pass.
  */
-async function sendNoShowWhatsApp(appointment, tenantId) {
+async function sendNoShowWhatsApp(appointment, tenantId, timezone) {
   const phone = appointment.patient?.phone;
   if (!tenantId || !phone) return;
 
@@ -69,7 +84,7 @@ async function sendNoShowWhatsApp(appointment, tenantId) {
     await sendWhatsAppMessage(
       String(tenantId),
       phone,
-      buildNoShowMessage(appointment.patient, appointment),
+      buildNoShowMessage(appointment.patient, appointment, timezone),
     );
     console.log(`[NoShow] Reschedule advice sent to ${phone} for appointment ${appointment._id}`);
   } catch (err) {
@@ -120,7 +135,7 @@ export async function releaseNoShowLock(token) {
   await db.collection(NO_SHOW_LOCK_COLLECTION).deleteMany({ _id: NO_SHOW_LOCK_KEY, token });
 }
 
-export async function markNoShows({ now = Date.now(), lock = true } = {}) {
+export async function markNoShows({ now = Date.now(), lock = true, timezone = 'UTC' } = {}) {
   const token = lock ? await tryAcquireNoShowLock() : null;
   if (lock && !token) return { skipped: true }; // another instance owns the tick
 
@@ -185,7 +200,7 @@ export async function markNoShows({ now = Date.now(), lock = true } = {}) {
           },
         });
 
-        await sendNoShowWhatsApp(appointment, tenantId);
+        await sendNoShowWhatsApp(appointment, tenantId, timezone);
       }
 
       if (stale.length < BATCH_SIZE) break;

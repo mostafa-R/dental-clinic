@@ -40,9 +40,11 @@ vi.mock('../socket/index.js', () => ({
   emitToTenantQueue: vi.fn(() => {}),
 }));
 
-vi.mock('./whatsapp.js', () => ({
+vi.mock('../services/whatsapp.js', () => ({
   sendWhatsAppMessage: vi.fn().mockResolvedValue(undefined),
 }));
+
+import { sendWhatsAppMessage } from '../services/whatsapp.js';
 
 import { emitToBranch } from '../socket/index.js';
 
@@ -69,6 +71,11 @@ describe('no-show cron: atomic flip, lock, tenant guard, PHI-safe emit', () => {
   let branchAId;
   let doctor;
   let patient;
+  let tenantBId;
+  let branchBId;
+  let doctorB;
+  let patientB;
+  let WhatsAppSetting;
   let seq = 0;
 
   function nextUnique(prefix) {
@@ -84,6 +91,7 @@ describe('no-show cron: atomic flip, lock, tenant guard, PHI-safe emit', () => {
     Patient = (await import('../modules/patients/patient.model.js')).default;
     User = (await import('../modules/users/user.model.js')).default;
     Appointment = (await import('../modules/appointments/appointment.model.js')).default;
+    WhatsAppSetting = (await import('../modules/whatsapp/whatsappSetting.model.js')).default;
 
     await Promise.all([
       Tenant.deleteMany({}),
@@ -91,6 +99,7 @@ describe('no-show cron: atomic flip, lock, tenant guard, PHI-safe emit', () => {
       Patient.deleteMany({}),
       User.deleteMany({}),
       Appointment.deleteMany({}),
+      WhatsAppSetting.deleteMany({}),
       mongoose.connection.db.collection('cron_locks').deleteMany({}),
     ]);
 
@@ -131,6 +140,43 @@ describe('no-show cron: atomic flip, lock, tenant guard, PHI-safe emit', () => {
       phone: '+15555550202',
     });
 
+    const tenantB = await Tenant.create({
+      name: 'Clinic NoShow B',
+      email: 'clinic-noshow-b@test.com',
+      slug: 'clinic-noshow-b',
+      plan: 'professional',
+      status: 'active',
+      isActive: true,
+      settings: { maxBranches: 5, maxUsersPerBranch: 10, maxPatients: 1000 },
+    });
+    tenantBId = tenantB._id;
+
+    const branchB = await Branch.create({
+      tenant: tenantBId,
+      name: 'Branch NoShow B',
+      address: '7 Side St',
+      phone: '+1000000007',
+    });
+    branchBId = branchB._id;
+
+    doctorB = await User.create({
+      tenant: tenantBId,
+      branch: branchBId,
+      name: 'Doc NoShow B',
+      email: nextUnique('docb') + '@test.com',
+      password: 'hashed-not-used',
+      roleId: new mongoose.Types.ObjectId(),
+      isDoctor: true,
+    });
+
+    patientB = await Patient.create({
+      tenant: tenantBId,
+      branch: branchBId,
+      firstName: 'ثانية',
+      lastName: 'نو شو',
+      phone: '+15555550303',
+    });
+
     await Appointment.init();
   });
 
@@ -141,6 +187,7 @@ describe('no-show cron: atomic flip, lock, tenant guard, PHI-safe emit', () => {
       Patient.deleteMany({}),
       User.deleteMany({}),
       Appointment.deleteMany({}),
+      WhatsAppSetting.deleteMany({}),
       mongoose.connection.db.collection('cron_locks').deleteMany({}),
     ]);
     await mongoose.disconnect();
@@ -165,6 +212,17 @@ describe('no-show cron: atomic flip, lock, tenant guard, PHI-safe emit', () => {
       status,
     });
     return doc;
+  }
+
+  function assertNoShowMessage(opts = {}) {
+    const calls = sendWhatsAppMessage.mock.calls;
+    expect(calls.length).toBe(1);
+    const [sentTenant, phone, text] = calls[0];
+    if (opts.tenant) expect(String(sentTenant)).toBe(String(opts.tenant));
+    if (opts.phone) expect(phone).toBe(opts.phone);
+    if (opts.has) expect(text).toContain(opts.has);
+    if (opts.notHas) expect(text).not.toContain(opts.notHas);
+    return text;
   }
 
   it('flips a stale scheduled appointment to no_show and publishes the event', async () => {
@@ -256,5 +314,65 @@ describe('no-show cron: atomic flip, lock, tenant guard, PHI-safe emit', () => {
     expect(result.processed).toBe(1);
     const saved = await Appointment.findById(created._id).select('status').lean();
     expect(saved.status).toBe('no_show');
+  });
+
+  it('sends the reschedule WhatsApp only when the tenant enabled no-show reminders, using the right tenant', async () => {
+    // Tenant A enabled the reminder; Tenant B did not.
+    await WhatsAppSetting.create({
+      tenant: tenantAId,
+      enabled: true,
+      status: 'connected',
+      config: { phoneNumber: '+19990000001' },
+      settings: { noShowReminder: true },
+    });
+
+    const created = await createAppointment();
+    const result = await markNoShows({});
+    expect(result.processed).toBe(1);
+
+    assertNoShowMessage({
+      tenant: tenantAId,
+      phone: patient.phone,
+      has: patient.firstName,
+      notHas: '120 دقيقة',
+    });
+    expect(String(created._id)).toBeTruthy();
+  });
+
+  it('renders the no-show message in the tenant timezone, never the server clock', async () => {
+    // A fresh tenant that DID enable reminders, in Cairo (UTC+2 › UTC+3).
+    await WhatsAppSetting.create({
+      tenant: tenantBId,
+      enabled: true,
+      status: 'connected',
+      config: { phoneNumber: '+19990000002' },
+      settings: { noShowReminder: true },
+    });
+
+    // 2026-06-04 (a Thursday during Egyptian DST, UTC+3): 21:00Z is Thursday in
+    // the server/UTC clock but already Friday 00:00 in Cairo's local day.
+    const start = new Date('2026-06-04T21:00:00.000Z');
+    const doc = await Appointment.create({
+      tenant: tenantBId,
+      branch: branchBId,
+      patient: patientB._id,
+      doctor: doctorB._id,
+      chair: 'Cron Chair B',
+      start,
+      end: new Date(start.getTime() + 30 * MINUTE),
+      status: 'scheduled',
+    });
+
+    const result = await markNoShows({ now: start.getTime() + 30 * MINUTE + 1, timezone: 'Africa/Cairo' });
+    expect(result.processed).toBe(1);
+
+    // UTC would print Thursday; Cairo prints Friday.
+    const text = assertNoShowMessage({
+      tenant: tenantBId,
+      phone: patientB.phone,
+      notHas: 'الخميس',
+    });
+    expect(text).toContain('الجمعة');
+    expect(String(doc._id)).toBeTruthy();
   });
 });
