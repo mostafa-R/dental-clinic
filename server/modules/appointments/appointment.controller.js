@@ -157,6 +157,32 @@ function toResourceConflict(err, message) {
   return err;
 }
 
+/**
+ * Run a transaction that may collide with a concurrent one. Besides the
+ * deterministic E11000 (duplicate key → 409), MongoDB can briefly surface a
+ * transient "Write conflict during plan execution" when two same-key inserts
+ * race; without retrying that leaks as a 500 instead of a clean 409. Retrying
+ * is safe: by the next attempt the winning transaction has committed, so the
+ * loser observes the duplicate key and rejects with a 409.
+ */
+async function withTransactionConflictRetry(session, fn, message) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await session.withTransaction(fn);
+      return;
+    } catch (err) {
+      const isWriteConflict =
+        err?.codeName === 'WriteConflict' ||
+        /Write conflict during plan execution/i.test(err?.message ?? '');
+      if (!isWriteConflict) throw toResourceConflict(err, message);
+      lastError = err;
+      await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
+
 /** BR-PT-02: true only when the real overlap exceeds the buffer window. */
 function exceedsBuffer(start, end, conflictStart, conflictEnd, bufferMinutes) {
   const overlapMs =
@@ -394,25 +420,27 @@ export const createAppointment = asyncHandler(async (req, res) => {
   const session = await mongoose.startSession();
   let appointment;
   try {
-    await session.withTransaction(async () => {
-      const docs = await Appointment.create([{
-        patient: toObjectId(data.patient),
-        doctor: toObjectId(data.doctor),
-        branch,
-        tenant,
-        chair: data.chair || '',
-        chairKey: canonicalChairKey(data.chair),
-        start,
-        end,
-        status: data.status || 'scheduled',
-        reason: data.reason || '',
-        notes: data.notes || '',
-        createdBy: req.user._id,
-      }], { session });
-      appointment = docs[0];
-    });
-  } catch (err) {
-    throw toResourceConflict(err, 'The slot is already booked for this time');
+    await withTransactionConflictRetry(
+      session,
+      async () => {
+        const docs = await Appointment.create([{
+          patient: toObjectId(data.patient),
+          doctor: toObjectId(data.doctor),
+          branch,
+          tenant,
+          chair: data.chair || '',
+          chairKey: canonicalChairKey(data.chair),
+          start,
+          end,
+          status: data.status || 'scheduled',
+          reason: data.reason || '',
+          notes: data.notes || '',
+          createdBy: req.user._id,
+        }], { session });
+        appointment = docs[0];
+      },
+      'The slot is already booked for this time',
+    );
   } finally {
     session.endSession();
   }
