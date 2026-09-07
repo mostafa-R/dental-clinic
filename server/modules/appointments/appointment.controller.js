@@ -8,6 +8,7 @@ import { escapeRegex } from '../../utils/escapeRegex.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 import { buildDateRangeFilter } from '../../utils/zonedDates.js';
 import { loadTenantTimezone } from '../../utils/timezoneUtils.js';
+import { canonicalChairKey } from './chairKey.js';
 import { stripPHI } from '../../middleware/phiRestrict.js';
 import Patient from '../patients/patient.model.js';
 import Branch from '../users/branch.model.js';
@@ -142,6 +143,20 @@ async function assertReferences(payload, branchFilter) {
 const ACTIVE_STATUSES = ['scheduled', 'confirmed', 'checked_in', 'in_progress'];
 const DEFAULT_SLOT_MINUTES = 30;
 
+/**
+ * Map a MongoDB duplicate-key violation (E11000) to a 409 conflict. The
+ * partial unique indexes on {branch, doctor/patient/chairKey, start} are the
+ * deterministic backstop against concurrent double-bookings: two requests that
+ * both pass the app-level overlap checks cannot both insert, so the DB rejects
+ * the loser. Any other error is returned as-is to keep its identity intact.
+ */
+function toResourceConflict(err, message) {
+  if (err && (err.code === 11000 || err.codeName === 'DuplicateKey')) {
+    return ApiError.conflict(message, { keyPattern: err.keyPattern ?? null });
+  }
+  return err;
+}
+
 /** BR-PT-02: true only when the real overlap exceeds the buffer window. */
 function exceedsBuffer(start, end, conflictStart, conflictEnd, bufferMinutes) {
   const overlapMs =
@@ -234,19 +249,23 @@ async function assertNoPatientOverlap({ patient, branch, start, end, excludeId }
 
 /**
  * Check for chair double-booking — the same physical chair cannot host two
- * live appointments at once (PRD §6.4).
+ * live appointments at once (PRD §6.4). Matching is done on the canonical
+ * chairKey so "Chair 01", "chair-01" and "Chair_01" all clash as one chair;
+ * the raw label is matched too so pre-migration rows (no chairKey) are still
+ * caught by the range check.
  */
 async function assertNoChairOverlap({ chair, branch, start, end, excludeId }) {
   if (!start || !end) return;
-  const normalizedChair = String(chair || '').trim();
-  if (!normalizedChair) return;
+  const rawChair = String(chair || '').trim();
+  const key = canonicalChairKey(chair);
+  if (!rawChair && !key) return;
 
   const filter = {
-    chair: normalizedChair,
     branch: toObjectId(branch),
     status: { $in: ACTIVE_STATUSES },
     start: { $lt: end },
     end: { $gt: start },
+    $or: [{ chairKey: key }, { chair: rawChair }],
   };
   if (excludeId) filter._id = { $ne: toObjectId(excludeId) };
   const candidates = await Appointment.find(filter).select('_id start end').limit(20).lean();
@@ -382,6 +401,7 @@ export const createAppointment = asyncHandler(async (req, res) => {
         branch,
         tenant,
         chair: data.chair || '',
+        chairKey: canonicalChairKey(data.chair),
         start,
         end,
         status: data.status || 'scheduled',
@@ -391,6 +411,8 @@ export const createAppointment = asyncHandler(async (req, res) => {
       }], { session });
       appointment = docs[0];
     });
+  } catch (err) {
+    throw toResourceConflict(err, 'The slot is already booked for this time');
   } finally {
     session.endSession();
   }
@@ -489,14 +511,20 @@ export const updateAppointment = asyncHandler(async (req, res) => {
   if (setPayload.doctor) setPayload.doctor = toObjectId(setPayload.doctor);
   if (setPayload.start) setPayload.start = new Date(setPayload.start);
   if (setPayload.end) setPayload.end = new Date(setPayload.end);
+  if (setPayload.chair !== undefined) setPayload.chairKey = canonicalChairKey(setPayload.chair);
   delete setPayload.branch;
   delete setPayload.slots; // scheduling helper, not a persisted field
 
-  const appointment = await Appointment.findOneAndUpdate(
-    { _id: id, ...branchFilter },
-    { $set: setPayload },
-    { returnDocument: "after", runValidators: true },
-  ).populate(POPULATE);
+  let appointment;
+  try {
+    appointment = await Appointment.findOneAndUpdate(
+      { _id: id, ...branchFilter },
+      { $set: setPayload },
+      { returnDocument: "after", runValidators: true },
+    ).populate(POPULATE);
+  } catch (err) {
+    throw toResourceConflict(err, 'The slot is already booked for this time');
+  }
 
   if (!appointment) {
     throw ApiError.notFound('Appointment not found');

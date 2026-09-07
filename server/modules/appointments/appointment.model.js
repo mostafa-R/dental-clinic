@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 
+import { canonicalChairKey } from "./chairKey.js";
+
 export const APPOINTMENT_STATUS = [
   "scheduled",
   "confirmed",
@@ -59,6 +61,15 @@ const appointmentSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: "",
+    },
+    // Canonical identity of the physical chair (see utils/chairKey.js). It is
+    // what the unique double-booking indexes actually key on; kept out of API
+    // responses because it is a technical key, not display data.
+    chairKey: {
+      type: String,
+      trim: true,
+      default: "",
+      select: false,
     },
     start: {
       type: Date,
@@ -122,6 +133,14 @@ appointmentSchema.pre("validate", function validateTimes() {
   if (this.start && this.end && this.end <= this.start) {
     this.invalidate("end", "End time must be after start time");
   }
+});
+
+// Keep chairKey in sync whenever the raw `chair` label changes. Insert-by
+// controller also sets it explicitly (findOneAndUpdate does not run these
+// document hooks); this hook covers direct model writes.
+appointmentSchema.pre("validate", function syncChairKey() {
+  if (!this.isNew && !this.isModified("chair")) return;
+  this.chairKey = canonicalChairKey(this.chair);
 });
 
 // Active statuses that occupy a doctor's schedule. Cancelled/completed/no-show
@@ -204,6 +223,39 @@ appointmentSchema.index(
     partialFilterExpression: {
       start: { $type: "date" },
       status: { $in: ["scheduled", "confirmed", "checked_in", "in_progress"] },
+    },
+  },
+);
+
+// Same patient cannot hold two live appointments that start at the exact same
+// instant — the DB-level backstop for the app-level range check. Two requests
+// that both pass that check concurrently cannot both insert, the unique index
+// rejects the loser (E11000 → 409).
+appointmentSchema.index(
+  { branch: 1, patient: 1, start: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      start: { $type: "date" },
+      status: { $in: ["scheduled", "confirmed", "checked_in", "in_progress"] },
+    },
+  },
+);
+
+// Same physical chair (by canonical chairKey) cannot host two live
+// appointments at the same instant. `$gt: ""` restricts the constraint to
+// documents whose chairKey is a PRESENT non-empty string: a missing field and
+// the "no chair assigned" empty string both compare less than "", so walk-ins
+// without a chair never collide with each other. Range overlaps at different
+// start times are still caught by the app-level check.
+appointmentSchema.index(
+  { branch: 1, chairKey: 1, start: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      start: { $type: "date" },
+      status: { $in: ["scheduled", "confirmed", "checked_in", "in_progress"] },
+      chairKey: { $gt: "" },
     },
   },
 );
