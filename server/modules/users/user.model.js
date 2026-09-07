@@ -1,6 +1,12 @@
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 
+import {
+  DEFAULT_APPT_MIN_ADVANCE,
+  DEFAULT_APPT_MAX_ADVANCE,
+  DEFAULT_SLOT_DURATION_MINUTES,
+} from "../appointments/appointmentDefaults.js";
+
 /**
  * Doctor working hours schema.
  * Can be different from clinic hours (e.g., doctor works part-time).
@@ -123,7 +129,7 @@ const userSchema = new mongoose.Schema(
         type: Number,
         min: 5,
         max: 120,
-        default: 30, // Override clinic default if set
+        default: DEFAULT_SLOT_DURATION_MINUTES, // Override clinic default if set
       },
       bufferTime: {
         type: Number,
@@ -135,13 +141,13 @@ const userSchema = new mongoose.Schema(
         type: Number,
         min: 1,
         max: 365,
-        default: 90, // Max days in advance for booking
+        default: DEFAULT_APPT_MAX_ADVANCE, // Max days in advance for booking
       },
       minAdvanceMinutes: {
         type: Number,
         min: 0,
         max: 1440,
-        default: 60, // Min minutes before appointment for booking
+        default: DEFAULT_APPT_MIN_ADVANCE, // Min minutes before appointment for booking
       },
     },
     preferences: {
