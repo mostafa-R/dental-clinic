@@ -126,8 +126,36 @@ describe("resolveRole", () => {
     expect(result.permissionMap().billing).toEqual([]);
     expect(Role.findOne).toHaveBeenCalledWith({
       _id: "r1",
+      isActive: true,
       $or: [{ tenant: "t1" }, { tenant: null }],
     });
+  });
+
+  it("ignores a cached role that has been deactivated (isActive false)", async () => {
+    vi.mocked(Role.findOne).mockClear();
+    vi.mocked(getCachedRole).mockResolvedValue({
+      _id: "r1",
+      tenant: "t1",
+      isActive: false,
+      isSystemAdmin: true,
+      permissions: [],
+    });
+    vi.mocked(Role.findOne).mockReturnValue({ lean: vi.fn().mockResolvedValue(null) });
+    const result = await resolveRole({ user: { roleId: "r1", tenant: { _id: "t1", plan: "professional" } } });
+    expect(result.isSystemAdmin).toBe(false);
+    expect(Role.findOne).toHaveBeenCalledWith({
+      _id: "r1",
+      isActive: true,
+      $or: [{ tenant: "t1" }, { tenant: null }],
+    });
+  });
+
+  it("does not grant a deactivated role resolved from the DB", async () => {
+    vi.mocked(getCachedRole).mockResolvedValue(null);
+    vi.mocked(Role.findOne).mockReturnValue({ lean: vi.fn().mockResolvedValue(null) });
+    const result = await resolveRole({ user: { roleId: "r1", tenant: { _id: "t1", plan: "professional" } } });
+    expect(result.isSystemAdmin).toBe(false);
+    expect(result.permissionMap().billing).toEqual([]);
   });
 });
 
@@ -189,6 +217,20 @@ describe("checkPermission middleware", () => {
     const next = vi.fn();
     const req = makeReq({ roleId: "r1", tenant: null });
     await checkPermission("inventory", "delete")(req, res, next);
+    expect(next.mock.calls[0][0]).toBeUndefined();
+  });
+
+  it("bypasses the plan gate for system admins (e.g. clinic owner)", async () => {
+    vi.mocked(getCachedRole).mockResolvedValue({
+      _id: "r1",
+      tenant: "t1",
+      isSystemAdmin: true,
+      permissions: [],
+    });
+    const next = vi.fn();
+    // Tenant is on a plan that does NOT include 'roles'
+    const req = makeReq({ roleId: "r1", tenant: { _id: "t1", planModules: ["dashboard"] } });
+    await checkPermission("roles", "read")(req, res, next);
     expect(next.mock.calls[0][0]).toBeUndefined();
   });
 

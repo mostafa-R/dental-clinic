@@ -7,8 +7,9 @@
 
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { execSync } from 'child_process';
+import 'dotenv/config';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.join(__dirname, '..');
@@ -151,7 +152,10 @@ class SecurityScanner {
       check: () => {
         const fullPath = path.join(PROJECT_ROOT, filePath);
         if (!fs.existsSync(fullPath)) return true;
-        
+        // POSIX mode bits are meaningless on Windows (modes show 0o666 no
+        // matter the real ACLs), so the check can't apply there.
+        if (process.platform === 'win32') return true;
+
         try {
           const stats = fs.statSync(fullPath);
           // Check if file is readable by others
@@ -454,8 +458,8 @@ class SecurityScanner {
   }
 }
 
-// Run the scanner if this script is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Run the scanner if this script is executed directly (cross-platform)
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const scanner = new SecurityScanner();
   
   scanner.run().then(results => {

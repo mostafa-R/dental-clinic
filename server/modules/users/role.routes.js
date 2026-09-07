@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { protect } from '../../middleware/auth.js';
 import { checkPermission } from '../../middleware/checkPermission.js';
 import { validate } from '../../middleware/validate.js';
+import asyncHandler from '../../utils/asyncHandler.js';
 import {
   createRole,
   deleteRole,
@@ -28,6 +29,13 @@ const router = Router();
 // All routes require authentication. Only super_admin (via the 'roles' module
 // permission) can manage roles. For backwards compatibility, the built-in
 // super_admin role always passes — checkPermission resolves it as isSystemAdmin.
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Static routes MUST be registered before /:id so Express 4 does not shadow
+// them with the dynamic parameter.  Express matches in registration order and
+// uses the first match.
+// ──────────────────────────────────────────────────────────────────────────────
+
 /**
  * @swagger
  * /api/v1/roles/modules/list:
@@ -61,6 +69,69 @@ const router = Router();
  *         $ref: '#/components/responses/Forbidden'
  */
 router.get('/modules/list', protect, checkPermission('roles', 'read'), getModules);
+
+/**
+ * @swagger
+ * /api/v1/roles/matrix:
+ *   get:
+ *     tags: [Roles]
+ *     summary: Get complete permission matrix
+ *     description: Returns the full permission matrix (module × role × action) for display in permission management UI
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       '200':
+ *         description: Permission matrix
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     matrix: { type: object }
+ *                     modules: { type: array }
+ *                     actions: { type: array }
+ *                     roles: { type: array }
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ */
+router.get('/matrix', protect, checkPermission('roles', 'read'), asyncHandler(getPermissionMatrix));
+
+/**
+ * @swagger
+ * /api/v1/roles/templates:
+ *   get:
+ *     tags: [Roles]
+ *     summary: Get role templates for copying
+ *     description: Returns default and built-in roles that can be used as templates for creating new custom roles
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       '200':
+ *         description: Role templates
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     defaultRoles: { type: array }
+ *                     builtInRoles: { type: array }
+ *                     customRoles: { type: array }
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ */
+router.get('/templates', protect, checkPermission('roles', 'read'), asyncHandler(getRoleTemplates));
 
 /**
  * @swagger
@@ -137,6 +208,55 @@ router.get('/', protect, checkPermission('roles', 'read'), listRoles);
  */
 router.get('/:id', protect, checkPermission('roles', 'read'), getRole);
 
+// ──────────────────────────────────────────────────────────────────────────────
+// POST routes — static sub-paths first, then /:id-accepting endpoints last.
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /api/v1/roles/create-from-template:
+ *   post:
+ *     tags: [Roles]
+ *     summary: Create role from template
+ *     description: Create a new custom role by copying permissions from an existing role
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string, minLength: 2 }
+ *               description: { type: string }
+ *               baseRoleId: { type: string }
+ *               permissions: { type: array }
+ *     responses:
+ *       '201':
+ *         description: Role created from template
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     role: { $ref: '#/components/schemas/Role' }
+ *       '400':
+ *         $ref: '#/components/responses/ValidationError'
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ *       '409':
+ *         $ref: '#/components/responses/Conflict'
+ */
+router.post('/create-from-template', protect, checkPermission('roles', 'create'), asyncHandler(createRoleFromTemplate));
+
 /**
  * @swagger
  * /api/v1/roles:
@@ -185,6 +305,11 @@ router.get('/:id', protect, checkPermission('roles', 'read'), getRole);
  *         $ref: '#/components/responses/Conflict'
  */
 router.post('/', protect, checkPermission('roles', 'create'), validate(createRoleSchema), createRole);
+
+// ──────────────────────────────────────────────────────────────────────────────
+// PATCH / PUT / DELETE on /:id — registered last so they never shadow static
+// GET routes like /matrix or /templates.
+// ──────────────────────────────────────────────────────────────────────────────
 
 /**
  * @swagger
@@ -241,156 +366,6 @@ router.patch('/:id', protect, checkPermission('roles', 'update'), validate(updat
 
 /**
  * @swagger
- * /api/v1/roles/{id}:
- *   delete:
- *     tags: [Roles]
- *     summary: Delete a custom role
- *     description: Requires `roles:delete`. Built-in roles cannot be deleted. Users assigned to the role are detached (roleId set to null).
- *     security:
- *       - cookieAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { $ref: '#/components/schemas/ObjectId' }
- *     responses:
- *       '200':
- *         description: Role deleted
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean, example: true }
- *                 data:
- *                   type: object
- *                   properties:
- *                     message: { type: string, example: Role deleted }
- *       '401':
- *         $ref: '#/components/responses/Unauthorized'
- *       '403':
- *         $ref: '#/components/responses/Forbidden'
- *       '404':
- *         $ref: '#/components/responses/NotFound'
- *       '409':
- *         $ref: '#/components/responses/Conflict'
- */
-router.delete('/:id', protect, checkPermission('roles', 'delete'), deleteRole);
-
-/**
- * Enhanced Role Management APIs
- */
-
-/**
- * @swagger
- * /api/v1/roles/matrix:
- *   get:
- *     tags: [Roles]
- *     summary: Get complete permission matrix
- *     description: Returns the full permission matrix (module × role × action) for display in permission management UI
- *     security:
- *       - cookieAuth: []
- *     responses:
- *       '200':
- *         description: Permission matrix
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 data:
- *                   type: object
- *                   properties:
- *                     matrix: { type: object }
- *                     modules: { type: array }
- *                     actions: { type: array }
- *                     roles: { type: array }
- *       '401':
- *         $ref: '#/components/responses/Unauthorized'
- *       '403':
- *         $ref: '#/components/responses/Forbidden'
- */
-router.get('/matrix', protect, checkPermission('roles', 'read'), getPermissionMatrix);
-
-/**
- * @swagger
- * /api/v1/roles/templates:
- *   get:
- *     tags: [Roles]
- *     summary: Get role templates for copying
- *     description: Returns default and built-in roles that can be used as templates for creating new custom roles
- *     security:
- *       - cookieAuth: []
- *     responses:
- *       '200':
- *         description: Role templates
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 data:
- *                   type: object
- *                   properties:
- *                     defaultRoles: { type: array }
- *                     builtInRoles: { type: array }
- *                     customRoles: { type: array }
- *       '401':
- *         $ref: '#/components/responses/Unauthorized'
- *       '403':
- *         $ref: '#/components/responses/Forbidden'
- */
-router.get('/templates', protect, checkPermission('roles', 'read'), getRoleTemplates);
-
-/**
- * @swagger
- * /api/v1/roles/create-from-template:
- *   post:
- *     tags: [Roles]
- *     summary: Create role from template
- *     description: Create a new custom role by copying permissions from an existing role
- *     security:
- *       - cookieAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [name]
- *             properties:
- *               name: { type: string, minLength: 2 }
- *               description: { type: string }
- *               baseRoleId: { type: string }
- *               permissions: { type: array }
- *     responses:
- *       '201':
- *         description: Role created from template
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 data:
- *                   type: object
- *                   properties:
- *                     role: { $ref: '#/components/schemas/Role' }
- *       '400':
- *         $ref: '#/components/responses/ValidationError'
- *       '401':
- *         $ref: '#/components/responses/Unauthorized'
- *       '403':
- *         $ref: '#/components/responses/Forbidden'
- *       '409':
- *         $ref: '#/components/responses/Conflict'
- */
-router.post('/create-from-template', protect, checkPermission('roles', 'create'), createRoleFromTemplate);
-
-/**
- * @swagger
  * /api/v1/roles/{id}/permissions:
  *   put:
  *     tags: [Roles]
@@ -436,7 +411,7 @@ router.post('/create-from-template', protect, checkPermission('roles', 'create')
  *       '404':
  *         $ref: '#/components/responses/NotFound'
  */
-router.put('/:id/permissions', protect, checkPermission('roles', 'update'), updateRolePermissions);
+router.put('/:id/permissions', protect, checkPermission('roles', 'update'), asyncHandler(updateRolePermissions));
 
 /**
  * @swagger
@@ -484,6 +459,44 @@ router.put('/:id/permissions', protect, checkPermission('roles', 'update'), upda
  *       '404':
  *         $ref: '#/components/responses/NotFound'
  */
-router.patch('/:id/toggle-status', protect, checkPermission('roles', 'update'), toggleRoleStatus);
+router.patch('/:id/toggle-status', protect, checkPermission('roles', 'update'), asyncHandler(toggleRoleStatus));
+
+/**
+ * @swagger
+ * /api/v1/roles/{id}:
+ *   delete:
+ *     tags: [Roles]
+ *     summary: Delete a custom role
+ *     description: Requires `roles:delete`. Built-in roles cannot be deleted. Users assigned to the role are detached (roleId set to null).
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { $ref: '#/components/schemas/ObjectId' }
+ *     responses:
+ *       '200':
+ *         description: Role deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     message: { type: string, example: Role deleted }
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ *       '404':
+ *         $ref: '#/components/responses/NotFound'
+ *       '409':
+ *         $ref: '#/components/responses/Conflict'
+ */
+router.delete('/:id', protect, checkPermission('roles', 'delete'), deleteRole);
 
 export default router;

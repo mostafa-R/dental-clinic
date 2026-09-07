@@ -57,15 +57,18 @@ export async function resolveRole(req) {
   let roleDoc = null;
   if (roleId) {
     roleDoc = await getCachedRole(roleId);
-    if (roleDoc && !roleBelongsToTenant(roleDoc, tenantId)) {
+    // A cached role that is inactive (deactivated) or that belongs to another
+    // tenant is ignored so the authoritative DB lookup below can decide.
+    if (roleDoc && (roleDoc.isActive === false || !roleBelongsToTenant(roleDoc, tenantId))) {
       roleDoc = null;
     }
   }
 
   // 2. Cache miss → query MongoDB, scoped to the caller's tenant plus
-  //    platform-level roles so a cross-tenant roleId is rejected.
+  //    platform-level roles so a cross-tenant roleId is rejected. Inactive
+  //    (deactivated) roles grant nothing.
   if (!roleDoc && roleId) {
-    const query = { _id: roleId };
+    const query = { _id: roleId, isActive: true };
     if (tenantId) {
       query.$or = [{ tenant: tenantId }, { tenant: null }];
     }
@@ -114,6 +117,19 @@ export function checkPermission(module, action) {
         return next(ApiError.unauthorized('Not authenticated'));
       }
 
+      // Cache the resolved role on the request so multiple checks in one
+      // request don't re-query the database or Redis.
+      if (!req._roleResolved) {
+        req._roleResolved = await resolveRole(req);
+      }
+
+      const { isSystemAdmin, permissionMap } = req._roleResolved;
+
+      // System admins bypass both the plan gate and the permission matrix
+      // (e.g. a clinic owner must never be locked out of role management by a
+      // missing 'roles' plan module).
+      if (isSystemAdmin) return next();
+
       // Plan gate: even if the role grants access, the tenant's plan must
       // include the module. Platform admin (no tenant) always passes.
       if (!planIncludesModule(req.user.tenant, module)) {
@@ -123,16 +139,6 @@ export function checkPermission(module, action) {
           ),
         );
       }
-
-      // Cache the resolved role on the request so multiple checks in one
-      // request don't re-query the database or Redis.
-      if (!req._roleResolved) {
-        req._roleResolved = await resolveRole(req);
-      }
-
-      const { isSystemAdmin, permissionMap } = req._roleResolved;
-
-      if (isSystemAdmin) return next();
 
       const perms = permissionMap();
       const actions = perms[module] || [];
@@ -165,6 +171,14 @@ export function checkAnyPermission(pairs) {
         return next(ApiError.unauthorized('Not authenticated'));
       }
 
+      if (!req._roleResolved) {
+        req._roleResolved = await resolveRole(req);
+      }
+
+      const { isSystemAdmin, permissionMap } = req._roleResolved;
+      // System admins bypass the plan gate and the permission matrix.
+      if (isSystemAdmin) return next();
+
       const planAllowed = pairs.some(([mod]) =>
         planIncludesModule(req.user.tenant, mod),
       );
@@ -176,13 +190,6 @@ export function checkAnyPermission(pairs) {
           ),
         );
       }
-
-      if (!req._roleResolved) {
-        req._roleResolved = await resolveRole(req);
-      }
-
-      const { isSystemAdmin, permissionMap } = req._roleResolved;
-      if (isSystemAdmin) return next();
 
       const perms = permissionMap();
       const allowed = pairs.some(

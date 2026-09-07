@@ -1,4 +1,7 @@
 import crypto from 'crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { unlink } from 'node:fs/promises';
 import ApiError from '../../../utils/ApiError.js';
 import { cacheDel, cacheDelPattern, invalidateTenant, invalidateTenantRoles } from '../../../utils/cache.js';
 import { withTransaction } from '../../../core/transaction.js';
@@ -6,13 +9,17 @@ import Counter from '../../../core/counters.js';
 import { getPlanPrice } from '../subscription/subscription.service.js';
 import OwnerDrawing from '../../accounting/ownerDrawing.model.js';
 import Expense from '../../accounting/expense.model.js';
+import DayClose from '../../accounting/dayClose.model.js';
+import JournalEntry from '../../accounting/journalEntry.model.js';
 import Appointment from '../../appointments/appointment.model.js';
 import Invoice from '../../billing/invoice.model.js';
 import Commission from '../../billing/commission.model.js';
 import Message from '../../chat/message.model.js';
 import ChannelRead from '../../chat/channelRead.model.js';
 import ClinicalNote from '../../emr/clinicalNote.model.js';
+import Consent from '../../emr/consent.model.js';
 import DentalChart from '../../emr/dentalChart.model.js';
+import MedicalAttachment from '../../emr/attachment.model.js';
 import Prescription from '../../emr/prescription.model.js';
 import TreatmentPlan from '../../emr/treatmentPlan.model.js';
 import Inventory from '../../inventory/inventory.model.js';
@@ -28,6 +35,13 @@ import User from '../../users/user.model.js';
 import WhatsappSetting from '../../whatsapp/whatsappSetting.model.js';
 import Subscription from './subscription.model.js';
 import Tenant from './tenant.model.js';
+import { DEFAULT_ROLES } from '../../../constants/roles.js';
+
+// Mirrors middleware/upload.js: attachments live under server/uploads/medical.
+// Recomputed here instead of importing upload.js to avoid its mkdirSync
+// side-effect for a service that only ever deletes files.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const UPLOADS_ROOT = path.join(__dirname, '..', '..', '..', '..', 'uploads', 'medical');
 
 function generatePassword() {
   const chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -110,6 +124,16 @@ export async function createTenant({ name, email, phone, plan, status, address, 
   const platformSettings = await PlatformSetting.findOne().lean();
   const trialDays = platformSettings?.trialDays ?? 14;
 
+  // maxTenants is held in PlatformSetting: enforce it here so the platform
+  // cannot silently over-provision (previously the field was never checked).
+  const maxTenants = Number(platformSettings?.maxTenants ?? 1000);
+  if (maxTenants > 0) {
+    const tenantCount = await Tenant.countDocuments({});
+    if (tenantCount >= maxTenants) {
+      throw ApiError.conflict(`Maximum number of tenants (${maxTenants}) reached`);
+    }
+  }
+
   const tenantStatus = status || 'trial';
   const now = new Date();
   const trialEndsAt = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
@@ -139,7 +163,7 @@ export async function createTenant({ name, email, phone, plan, status, address, 
   // created inside ONE transaction so a mid-way failure can never orphan a
   // half-created clinic (e.g. a tenant with no admin user). withTransaction
   // retries transient failures; each retry attempt creates fresh documents.
-  const { tenant, clinicAdmin } = await withTransaction(async (session) => {
+  const { tenant } = await withTransaction(async (session) => {
     const tenant = new Tenant({
       name,
       email,
@@ -172,38 +196,35 @@ export async function createTenant({ name, email, phone, plan, status, address, 
       isActive: true,
     }], { session });
 
-    // Create or find the clinic_admin role for this tenant. A duplicate-key
+    // Seed the per-tenant branch slot counter with the default branch so the
+    // atomic maxBranches enforcement in createBranch counts it. New tenants
+    // start with exactly one branch; without this seed the counter would
+    // begin at 0 and silently allow one extra branch over the cap.
+    await Counter.updateOne(
+      { _id: `branch_slots:${String(tenant._id)}` },
+      { $setOnInsert: { seq: 1 } },
+      { upsert: true, session },
+    );
+
+    // Create or find the clinic_manager role for this tenant. A duplicate-key
     // error means a concurrent request just created it — fall back to reading
     // it instead of failing the whole tenant creation.
-    let clinicAdminRole = await Role.findOne({ key: 'clinic_admin', tenant: tenant._id }).session(session).lean();
+    const clinicManagerDef = DEFAULT_ROLES.CLINIC_MANAGER;
+    let clinicAdminRole = await Role.findOne({ key: clinicManagerDef.key, tenant: tenant._id }).session(session).lean();
     if (!clinicAdminRole) {
       try {
         const [created] = await Role.create([{
           tenant: tenant._id,
-          name: 'Clinic Admin',
-          key: 'clinic_admin',
-          isSystemAdmin: false,
+          name: clinicManagerDef.name,
+          key: clinicManagerDef.key,
+          isSystemAdmin: clinicManagerDef.isSystemAdmin,
           isBuiltIn: true,
-          permissions: [
-            { module: 'dashboard', actions: ['create', 'read', 'update', 'delete'] },
-            { module: 'patients', actions: ['create', 'read', 'update', 'delete'] },
-            { module: 'appointments', actions: ['create', 'read', 'update', 'delete'] },
-            { module: 'billing', actions: ['create', 'read', 'update', 'delete'] },
-            { module: 'accounting', actions: ['create', 'read', 'update', 'delete'] },
-            { module: 'inventory', actions: ['create', 'read', 'update', 'delete'] },
-            { module: 'emr', actions: ['create', 'read', 'update', 'delete'] },
-            { module: 'prescriptions', actions: ['create', 'read', 'update', 'delete'] },
-            { module: 'users', actions: ['create', 'read', 'update', 'delete'] },
-            { module: 'branches', actions: ['create', 'read', 'update', 'delete'] },
-            { module: 'settings', actions: ['create', 'read', 'update', 'delete'] },
-            { module: 'roles', actions: ['create', 'read', 'update', 'delete'] },
-            { module: 'chat', actions: ['create', 'read', 'update', 'delete'] },
-          ],
+          permissions: Object.entries(clinicManagerDef.permissions).map(([module, actions]) => ({ module, actions })),
         }], { session });
         clinicAdminRole = created.toObject();
       } catch (err) {
         if (err.code !== 11000) throw err;
-        clinicAdminRole = await Role.findOne({ key: 'clinic_admin', tenant: tenant._id }).session(session).lean();
+        clinicAdminRole = await Role.findOne({ key: clinicManagerDef.key, tenant: tenant._id }).session(session).lean();
       }
     }
 
@@ -231,15 +252,14 @@ export async function createTenant({ name, email, phone, plan, status, address, 
   });
 
   const tenantObj = tenant.toObject();
+  // NOTE: the admin login credentials are intentionally NOT returned. The
+  // caller supplies `adminPassword` themselves (required at the validator
+  // level), so echoing the password back here would only land it in response
+  // bodies and access logs in plaintext.
   return {
     ...tenantObj,
     branchesCount: 1,
     usersCount: 1,
-    adminCredentials: {
-      email: clinicAdmin.email,
-      password,
-      loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/login`,
-    },
   };
 }
 
@@ -314,9 +334,31 @@ export async function archiveTenant(id) {
   return tenant;
 }
 
+/**
+ * Best-effort removal of encrypted attachment files for a tenant. Mongo is
+ * deleted transactionally; files on disk cannot join a transaction, so they
+ * are removed after the commit (a failed unlink is logged, never fatal).
+ */
+async function removeAttachmentFiles(attachments) {
+  for (const att of attachments || []) {
+    // Basename guards against any path-traversal-flavored filename.
+    const safe = path.basename(String(att?.filename || ''));
+    if (!safe) continue;
+    await Promise.all([
+      unlink(path.join(UPLOADS_ROOT, safe)).catch(() => {}),
+      unlink(path.join(UPLOADS_ROOT, `${safe}.enc`)).catch(() => {}),
+    ]);
+  }
+}
+
 export async function deleteTenant(id) {
   const tenant = await Tenant.findById(id);
   if (!tenant) throw ApiError.notFound('Tenant not found');
+
+  // Collect attachment filenames BEFORE the transaction wipes the records.
+  const attachments = await MedicalAttachment.find({ tenant: id })
+    .select('filename')
+    .lean();
 
   // All tenant-scoped collections are wiped in a single MongoDB transaction so a
   // mid-delete failure rolls back everything and never leaves orphaned PHI.
@@ -330,9 +372,11 @@ export async function deleteTenant(id) {
       Invoice.deleteMany({ tenant: id }, { session }),
       Subscription.deleteMany({ tenant: id }, { session }),
       ClinicalNote.deleteMany({ tenant: id }, { session }),
+      Consent.deleteMany({ tenant: id }, { session }),
       DentalChart.deleteMany({ tenant: id }, { session }),
       TreatmentPlan.deleteMany({ tenant: id }, { session }),
       Prescription.deleteMany({ tenant: id }, { session }),
+      MedicalAttachment.deleteMany({ tenant: id }, { session }),
       Wallet.deleteMany({ tenant: id }, { session }),
       Installment.deleteMany({ tenant: id }, { session }),
       Message.deleteMany({ tenant: id }, { session }),
@@ -341,6 +385,8 @@ export async function deleteTenant(id) {
       Commission.deleteMany({ tenant: id }, { session }),
       OwnerDrawing.deleteMany({ tenant: id }, { session }),
       Expense.deleteMany({ tenant: id }, { session }),
+      DayClose.deleteMany({ tenant: id }, { session }),
+      JournalEntry.deleteMany({ tenant: id }, { session }),
       ErrorLog.deleteMany({ tenant: id }, { session }),
       WhatsappSetting.deleteMany({ tenant: id }, { session }),
       Counter.deleteMany({ _id: new RegExp(`:${String(id)}$`) }, { session }),
@@ -352,6 +398,10 @@ export async function deleteTenant(id) {
   await invalidateTenant(String(id));
   await invalidateTenantRoles(String(id));
   await cacheDelPattern(`permission:*${id}*`);
+
+  // Wipe the encrypted (and any legacy plain) files from disk AFTER the
+  // transaction committed so a rollback never loses recoverable files.
+  await removeAttachmentFiles(attachments);
 }
 
 export async function suspendTenant(id) {
@@ -378,11 +428,28 @@ export async function getTenantStats(id) {
   const tenant = await Tenant.findById(id);
   if (!tenant) throw ApiError.notFound('Tenant not found');
 
-  const [branchesCount, usersCount, doctorsCount, patientsCount, appointmentsCount, revenue] =
+  // Count doctors the same way enforcePlanLimits('doctors') does — by role
+  // key (doctor/assistant), never by the legacy `isDoctor` bool.
+  const doctorRoleIds = await Role.find({ tenant: id, key: { $in: ['doctor', 'assistant'] } })
+    .select('_id')
+    .lean();
+
+  const [
+    branchesCount,
+    usersCount,
+    doctorsCount,
+    patientsCount,
+    appointmentsCount,
+    revenue,
+  ] =
     await Promise.all([
       Branch.countDocuments({ tenant: id }),
       User.countDocuments({ tenant: id }),
-      User.countDocuments({ tenant: id, isDoctor: true }),
+      User.countDocuments({
+        tenant: id,
+        isActive: true,
+        roleId: { $in: doctorRoleIds.map((r) => r._id) },
+      }),
       Patient.countDocuments({ tenant: id }),
       Appointment.countDocuments({ tenant: id }),
       Invoice.aggregate([

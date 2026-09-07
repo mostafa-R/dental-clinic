@@ -2,8 +2,11 @@ import ApiError from "../../../utils/ApiError.js";
 import asyncHandler from "../../../utils/asyncHandler.js";
 import { escapeRegex } from "../../../utils/escapeRegex.js";
 import { sendSuccess } from "../../../utils/sendSuccess.js";
+import Counter from "../../../core/counters.js";
+import { withTransaction } from "../../../core/transaction.js";
 import Branch from "../../users/branch.model.js";
 import User from "../../users/user.model.js";
+import Tenant from "./tenant.model.js";
 
 // Get all branches with pagination and filtering
 export const getBranches = asyncHandler(async (req, res) => {
@@ -80,19 +83,36 @@ export const getBranch = asyncHandler(async (req, res) => {
 export const createBranch = asyncHandler(async (req, res) => {
   const { tenant: tenantId, name, address, phone } = req.validatedBody;
 
-  // Tenant is already validated by requireTenantAccess middleware
+  // Tenant is already validated by requireTenantAccess middleware.
   const tenant = req.targetTenant;
 
-  // Check branch limit
-  const branchCount = await Branch.countDocuments({ tenant: tenantId });
-  if (branchCount >= tenant.settings?.maxBranches || branchCount >= 10) {
-    const maxBranches = tenant.settings?.maxBranches || 10;
-    throw ApiError.badRequest(
-      `Branch limit reached (${maxBranches}). Upgrade the plan to add more branches.`,
-    );
-  }
+  // requireTenantAccess selects only _id/name/status/isActive, so settings
+  // must be loaded explicitly — otherwise every tenant here would read a
+  // default of 1. A cap of 0 (or unset) means unlimited.
+  const settingsDoc = await Tenant.findById(tenantId).select('settings').lean();
+  const maxBranches = Number(settingsDoc?.settings?.maxBranches ?? 1);
 
-  const branch = await Branch.create({ tenant: tenantId, name, address, phone });
+  const branch = await withTransaction(async (session) => {
+    // Enforce maxBranches atomically: claim the per-tenant slot and insert in
+    // ONE transaction so concurrent creates contend on the counter instead of
+    // both passing a stale countDocuments.
+    if (maxBranches > 0) {
+      const slotDoc = await Counter.findOneAndUpdate(
+        { _id: `branch_slots:${String(tenantId)}` },
+        { $inc: { seq: 1 } },
+        { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true, session },
+      );
+      const used = slotDoc?.seq ?? 1;
+      if (used > maxBranches) {
+        throw ApiError.badRequest(
+          `Branch limit reached (${maxBranches}). Upgrade the plan to add more branches.`,
+        );
+      }
+    }
+
+    const [created] = await Branch.create([{ tenant: tenantId, name, address, phone }], { session });
+    return created;
+  });
 
   const populated = await Branch.findById(branch._id)
     .populate("tenant", "name email slug")
@@ -135,7 +155,15 @@ export const deleteBranch = asyncHandler(async (req, res) => {
     );
   }
 
-  await Branch.findByIdAndDelete(branch._id);
+  await withTransaction(async (session) => {
+    await Branch.findByIdAndDelete(branch._id, { session });
+    // Deleting a branch frees its plan slot (mirrors the patient-slot release).
+    await Counter.findOneAndUpdate(
+      { _id: `branch_slots:${String(branch.tenant)}` },
+      { $inc: { seq: -1 } },
+      { session },
+    );
+  });
 
   return sendSuccess(res, { message: "Branch deleted" });
 });

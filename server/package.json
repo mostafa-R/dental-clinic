@@ -19,7 +19,7 @@
     "test:security": "vitest run __tests__/security",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "load-test": "node scripts/load-test.js",
-    "load-test:heavy": "CONCURRENT_USERS=50 REQUESTS_PER_USER=200 node scripts/load-test.js",
+    "load-test:heavy": "cross-env CONCURRENT_USERS=50 REQUESTS_PER_USER=200 node scripts/load-test.js",
     "security-scan": "node scripts/security-scan.js",
     "monitor:health": "curl -s http://localhost:7000/api/health | jq .",
     "monitor:metrics": "curl -s http://localhost:7000/api/metrics | jq ."
@@ -28,7 +28,10 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.10",
+    "cross-env": "^7.0.3",
     "nodemon": "^3.1.4",
+    "socket.io-client": "^4.8.3",
     "supertest": "^7.2.2",
     "vitest": "^4.1.10"
   },

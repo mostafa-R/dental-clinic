@@ -3,6 +3,7 @@ import InstallmentPlan from '../modules/patients/installment.model.js';
 import Patient from '../modules/patients/patient.model.js';
 import WhatsAppSetting from '../modules/whatsapp/whatsappSetting.model.js';
 import { emitToBranch } from '../socket/index.js';
+import { publishEvent } from '../services/eventBus.js';
 import { withTransaction } from '../core/transaction.js';
 import { round2 } from '../constants/accounting.js';
 import { sendWhatsAppMessage } from './whatsapp.js';
@@ -125,6 +126,23 @@ async function notifyOverdue(affectedPlans) {
       title: info.title,
       overdueCount: info.overdueCount,
       overdueAmount: info.overdueAmount,
+    });
+
+    // Event Bus (PRD §12.3): overdue installments drive reminder automations.
+    const eventPatient = await Patient.findById(info.patientId).select('firstName phone').lean();
+    void publishEvent({
+      type: 'installment.overdue',
+      tenant: info.tenant,
+      branch: info.branch,
+      data: {
+        id: String(info.planId),
+        planTitle: info.title,
+        overdueAmount: info.overdueAmount,
+        overdueCount: info.overdueCount,
+        patient: eventPatient
+          ? { id: String(info.patientId), firstName: eventPatient.firstName, phone: eventPatient.phone }
+          : { id: String(info.patientId) },
+      },
     });
   }
 

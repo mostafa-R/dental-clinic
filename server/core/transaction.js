@@ -1,8 +1,9 @@
 import mongoose from 'mongoose';
 import { logger } from '../utils/logger.js';
 
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 6;
 const RETRY_DELAY_MS = 500;
+const MAX_RETRY_DELAY_MS = 2000;
 
 const TRANSIENT_CODES = new Set([
   'TransientTransactionError',
@@ -43,7 +44,8 @@ export async function withTransaction(fn) {
         err.errorLabels.some((label) => TRANSIENT_CODES.has(label));
       if (isTransient && attempt < MAX_RETRIES) {
         logger.warn({ attempt, err: err.message }, 'Transient transaction error, retrying');
-        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * Math.pow(2, attempt - 1)));
+        const cappedDelay = Math.min(RETRY_DELAY_MS * Math.pow(2, attempt - 1), MAX_RETRY_DELAY_MS);
+        await new Promise((r) => setTimeout(r, cappedDelay));
         continue;
       }
       throw err;

@@ -507,6 +507,10 @@ router.delete('/:planId/items/:itemId', protect, checkPermission('emr', 'delete'
  *       '409':
  *         description: A selected item has already been invoiced
  */
-router.post('/:planId/invoice', protect, checkPermission('emr', 'update'), phiRestrict, validate(generateInvoiceSchema), generateInvoice);
+// Invoice generation mints a real billing record, so it must require BOTH
+// EMR edit rights AND billing:create. Chaining two checkPermission middlewares
+// enforces an AND — a doctor with emr:update but no billing:create can no
+// longer create invoices (H1).
+router.post('/:planId/invoice', protect, checkPermission('emr', 'update'), checkPermission('billing', 'create'), phiRestrict, validate(generateInvoiceSchema), generateInvoice);
 
 export default router;

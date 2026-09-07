@@ -2,6 +2,8 @@ import mongoose from 'mongoose';
 
 import Branch from './branch.model.js';
 import Tenant from '../site/tenant/tenant.model.js';
+import Counter from '../../core/counters.js';
+import { withTransaction } from '../../core/transaction.js';
 import { currentTenant } from '../../utils/branchScope.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
@@ -27,14 +29,30 @@ export const createBranch = asyncHandler(async (req, res) => {
     throw ApiError.forbidden('You must belong to a tenant to create branches');
   }
 
-  // Enforce maxBranches limit
-  const tenantDoc = await Tenant.findById(tenant).lean();
-  const branchCount = await Branch.countDocuments({ tenant });
-  if (branchCount >= (tenantDoc?.settings?.maxBranches || 1)) {
-    throw ApiError.badRequest(`Maximum branch limit (${tenantDoc?.settings?.maxBranches || 1}) reached`);
-  }
+  // Enforce maxBranches atomically: the slot claim ($inc on the per-tenant
+  // counter) and the insert run inside ONE transaction, so concurrent creates
+  // contend on the counter instead of both passing a stale countDocuments.
+  const tenantDoc = await Tenant.findById(tenant).select('settings').lean();
+  const maxBranches = tenantDoc?.settings?.maxBranches || 1;
 
-  const branch = await Branch.create({ tenant, name, address, phone, isActive: isActive ?? true });
+  const branch = await withTransaction(async (session) => {
+    const slotDoc = await Counter.findOneAndUpdate(
+      { _id: `branch_slots:${String(tenant)}` },
+      { $inc: { seq: 1 } },
+      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true, session },
+    );
+    const used = slotDoc?.seq ?? 1;
+    if (used > maxBranches) {
+      // Aborting the transaction rolls back the $inc, releasing the slot.
+      throw ApiError.badRequest(`Maximum branch limit (${maxBranches}) reached`);
+    }
+
+    const [created] = await Branch.create(
+      [{ tenant, name, address, phone, isActive: isActive ?? true }],
+      { session },
+    );
+    return created;
+  });
 
   // Emit to the creating user's branch room, not the new branch's (empty)
   // room — nobody is subscribed to a branch that didn't exist a second ago.
@@ -93,7 +111,16 @@ export const deleteBranch = asyncHandler(async (req, res) => {
     );
   }
 
-  await Branch.deleteOne({ _id: id });
+  // Delete + release the branch plan slot in ONE transaction so a deletion
+  // frees quota for a future create (mirrors releasePatientSlot).
+  await withTransaction(async (session) => {
+    await Branch.deleteOne({ _id: id }, { session });
+    await Counter.findOneAndUpdate(
+      { _id: `branch_slots:${String(branch.tenant)}` },
+      { $inc: { seq: -1 } },
+      { session },
+    );
+  });
 
   emitToBranch(String(id), 'branch:deleted', { _id: id });
   return sendSuccess(res, { message: 'Branch deleted' });

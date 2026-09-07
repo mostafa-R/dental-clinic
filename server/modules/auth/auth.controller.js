@@ -7,6 +7,7 @@ import {
   clearAuthCookies,
   cookieOptions,
   setAuthCookies,
+  setCsrfCookie,
   verifyAccessToken,
   verifyRefreshToken,
 } from '../../utils/jwt.js';
@@ -131,6 +132,7 @@ export const verifyImpersonation = asyncHandler(async (req, res) => {
   // which marks the request `_impersonating` so `phiRestrict` can mask patient PHI.
   const maxAge = Math.max(0, (decoded.exp ?? 0) * 1000 - Date.now());
   res.cookie(ACCESS_COOKIE, token, { ...cookieOptions, maxAge });
+  setCsrfCookie(res);
 
   const safe = user.toSafeObject();
   return sendSuccess(res, {

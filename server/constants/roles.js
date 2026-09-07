@@ -9,7 +9,7 @@
  * كل دور له صلاحيات محددة على كل موديول
  */
 
-import { MODULE_KEYS } from './permissions.js';
+import { MODULE_KEYS, CRUD_ACTIONS } from './permissions.js';
 
 /**
  * الأدوار الافتراضية مع تعريفاتها
@@ -28,6 +28,7 @@ export const DEFAULT_ROLES = {
       billing: ['create', 'read'],
       queue: ['create', 'read', 'update'],
       installments: ['create', 'read'],
+      consents: ['create', 'read'],
       chat: ['create', 'read'],
       whatsapp: ['read'], // للقراءة فقط للإشعارات
     }
@@ -49,6 +50,7 @@ export const DEFAULT_ROLES = {
       clinical_notes: ['create', 'read', 'update'],
       prescriptions: ['create', 'read', 'update'],
       queue: ['read', 'update'],
+      consents: ['create', 'read', 'update'],
       chat: ['create', 'read'],
     }
   },
@@ -69,6 +71,7 @@ export const DEFAULT_ROLES = {
       clinical_notes: ['create', 'read'],
       prescriptions: ['read'],
       queue: ['read'],
+      consents: ['create', 'read'],
       chat: ['create', 'read'],
     }
   },
@@ -128,6 +131,8 @@ export const DEFAULT_ROLES = {
       settings: ['create', 'read', 'update', 'delete'],
       roles: ['create', 'read', 'update', 'delete'],
       chat: ['create', 'read', 'update', 'delete'],
+      consents: ['create', 'read', 'update', 'delete'],
+      automations: ['create', 'read', 'update', 'delete'],
     }
   },
 
@@ -160,9 +165,32 @@ export const DEFAULT_ROLES = {
  * مصفوفة الصلاحيات الكاملة حسب PRD 4.3
  * مفيدة للعرض في الواجهة والتحقق
  */
-export const PERMISSION_MATRIX = {
-  // يمكن تنفيذها لاحقاً للعرض في واجهة إدارة الصلاحيات
-};
+/**
+ * مصفوفة الصلاحيات الكاملة حسب PRD 4.3
+ * مفيدة للعرض في واجهة إدارة الصلاحيات
+ *
+ * لكل موديول → مصفوفة الأدوار → الصلاحيات المسموحة
+ * الأدوار التي تملك isSystemAdmin: true تتلقى CRUD تلقائياً
+ * لكننا نسردها هنا بشكل صريح لتسهيل العرض في الواجهة
+ */
+export const PERMISSION_MATRIX = (() => {
+  const roleKeys = Object.keys(DEFAULT_ROLES);
+  const matrix = {};
+
+  for (const moduleKey of MODULE_KEYS) {
+    matrix[moduleKey] = {};
+    for (const roleKey of roleKeys) {
+      const role = DEFAULT_ROLES[roleKey];
+      if (role.isSystemAdmin) {
+        matrix[moduleKey][role.key] = [...CRUD_ACTIONS];
+      } else {
+        matrix[moduleKey][role.key] = role.permissions[moduleKey] || [];
+      }
+    }
+  }
+
+  return matrix;
+})();
 
 /**
  * التحقق من أن دوراً معيناً له صلاحية معينة

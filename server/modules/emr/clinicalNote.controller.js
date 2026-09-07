@@ -6,7 +6,7 @@ import { emitToBranch } from '../../socket/index.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { loadScopedPatient, toObjectId } from '../../utils/branchScope.js';
-import { ensureNextAppointment } from '../../utils/emrHelpers.js';
+import { ensureNextAppointment, assertAppointmentsForPatient } from '../../utils/emrHelpers.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 import { stripPHI } from '../../middleware/phiRestrict.js';
 
@@ -77,6 +77,11 @@ export const createClinicalNote = asyncHandler(async (req, res) => {
   const data = req.validatedBody;
 
   await assertDoctor(data.doctor, patient.branch);
+  // M3: the optional appointment link must belong to this exact patient.
+  await assertAppointmentsForPatient(data.appointment, {
+    patient: patient._id,
+    branch: patient.branch,
+  });
 
   const nextApptId = await ensureNextAppointment({
     nextAppointment: data.nextAppointment,
@@ -131,12 +136,28 @@ export const updateClinicalNote = asyncHandler(async (req, res) => {
   if (data.diagnosis !== undefined) note.diagnosis = data.diagnosis;
   if (data.plan !== undefined) note.plan = data.plan;
   if (Array.isArray(data.attachments)) {
-    note.attachments = data.attachments.map((a) => ({
-      type: a.type || 'xray',
-      url: a.url,
-      caption: a.caption || '',
-      uploadedBy: req.user._id,
-    }));
+    // L3: patch existing attachments by their subdoc _id instead of rebuilding
+    // the whole array — rebuilding wiped uploadedBy/uploadedAt audit metadata.
+    for (const a of data.attachments) {
+      if (a._id) {
+        const existing = note.attachments.id(a._id);
+        if (!existing) {
+          throw ApiError.badRequest('Attachment not found on this note', {
+            attachment: 'not found',
+          });
+        }
+        if (a.type !== undefined) existing.type = a.type;
+        if (a.url !== undefined) existing.url = a.url;
+        if (a.caption !== undefined) existing.caption = a.caption;
+      } else {
+        note.attachments.push({
+          type: a.type || 'xray',
+          url: a.url,
+          caption: a.caption || '',
+          uploadedBy: req.user._id,
+        });
+      }
+    }
   }
   if (data.nextAppointment !== undefined) {
     note.nextAppointment = data.nextAppointment ? new Date(data.nextAppointment) : null;

@@ -8,6 +8,7 @@ import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 import { invalidateRole, invalidateTenantRoles, invalidatePermission } from '../../utils/cache.js';
+import { assertCanGrantPermissions } from '../../utils/permissionPolicy.js';
 import { emitToBranch } from '../../socket/index.js';
 
 /**
@@ -75,6 +76,13 @@ export const createRole = asyncHandler(async (req, res) => {
     throw ApiError.conflict('A role with this name already exists');
   }
 
+  // منع تصعيد الصلاحيات: لا يجوز إنشاء دور بصلاحيات لا يملكها المستخدم نفسه
+  assertCanGrantPermissions(
+    req._roleResolved?.permissionMap?.() || {},
+    permissions || [],
+    { isSystemAdmin: !!req._roleResolved?.isSystemAdmin },
+  );
+
   const role = await Role.create({
     tenant,
     branch: branchId,
@@ -116,7 +124,19 @@ export const updateRole = asyncHandler(async (req, res) => {
 
   if (data.name !== undefined && !role.isBuiltIn) role.name = data.name;
   if (data.description !== undefined) role.description = data.description;
-  if (data.permissions !== undefined) role.permissions = data.permissions;
+  if (data.permissions !== undefined) {
+    // منع تصعيد الصلاحيات: لا يجوز تحديث دور بصلاحيات لا يملكها المستخدم نفسه
+    assertCanGrantPermissions(
+      req._roleResolved?.permissionMap?.() || {},
+      data.permissions,
+      { isSystemAdmin: !!req._roleResolved?.isSystemAdmin },
+    );
+    role.permissions = data.permissions;
+  }
+  // الأدوار الافتراضية لا يمكن تعطيلها (نفس الحماية في toggleRoleStatus)
+  if (data.isActive === false && role.isBuiltIn) {
+    throw ApiError.conflict('Built-in roles cannot be deactivated');
+  }
   if (data.isActive !== undefined) role.isActive = data.isActive;
 
   await role.save();

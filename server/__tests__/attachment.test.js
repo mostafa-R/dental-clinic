@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   decryptFile: vi.fn(),
   decryptFileWithKeys: vi.fn(),
   isEncrypted: vi.fn(),
+  assertFileSignature: vi.fn(),
   tenantFindById: vi.fn(),
 }));
 
@@ -60,6 +61,7 @@ vi.mock("../middleware/upload.js", () => ({
       next();
     },
   },
+  assertFileSignature: (...args) => mocks.assertFileSignature(...args),
   UPLOADS_ROOT: "C:\\uploads\\medical",
 }));
 
@@ -138,6 +140,7 @@ beforeEach(() => {
   mocks.decryptFile.mockReset().mockResolvedValue();
   mocks.decryptFileWithKeys.mockReset().mockResolvedValue();
   mocks.isEncrypted.mockReset().mockReturnValue(true);
+  mocks.assertFileSignature.mockReset().mockResolvedValue();
   mocks.tenantFindById.mockReset().mockReturnValue({
     select: vi.fn().mockReturnValue({
       lean: vi.fn().mockResolvedValue({ encryption: { key: "t1-key" } }),
@@ -203,6 +206,26 @@ describe("POST /emr/attachments/upload", () => {
 
     expect(res.status).toBe(400);
     expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  // L4: the on-disk bytes must match the declared mimetype. A file renamed
+  // to .pdf (or a polyglot) is rejected before it is encrypted/stored.
+  it("rejects a file whose bytes do not match the declared mimetype", async () => {
+    mocks.loadScopedPatient.mockResolvedValue({ _id: "p1", branch: "b1", tenant: "t1" });
+    mocks.assertFileSignature.mockRejectedValue({
+      statusCode: 400,
+      message: "File content does not match type application/pdf",
+    });
+
+    const res = await request(makeApp())
+      .post("/api/v1/emr/attachments/upload")
+      .attach("file", Buffer.from("x"), "report.pdf")
+      .field("patient", "p1");
+
+    expect(res.status).toBe(400);
+    expect(mocks.encryptFile).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.unlink).toHaveBeenCalledWith("C:\\tmp\\abc.pdf");
   });
 });
 

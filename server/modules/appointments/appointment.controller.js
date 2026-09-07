@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 
 import { emitToBranch, emitToTenantQueue } from '../../socket/index.js';
+import { publishEvent } from '../../services/eventBus.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { currentTenant, filterByBranch, resolveBranchForCreate, toObjectId } from '../../utils/branchScope.js';
@@ -37,6 +38,28 @@ function emitAppointment(branchId, event, appointment) {
   };
   const resolved = branchId?._id ?? branchId;
   emitToBranch(String(resolved), event, payload);
+}
+
+/**
+ * Publish a business event on the Event Bus so automation rules can react
+ * (PRD §12.3). Fire-and-forget — `publishEvent` never throws to callers.
+ */
+function publishAppointmentEvent(appointment, type) {
+  const json = appointment.toJSON ? appointment.toJSON() : appointment;
+  void publishEvent({
+    type,
+    tenant: appointment.tenant,
+    branch: appointment.branch,
+    data: {
+      id: String(appointment._id),
+      status: appointment.status,
+      start: appointment.start?.toISOString?.() || appointment.start,
+      end: appointment.end?.toISOString?.() || appointment.end,
+      chair: appointment.chair || '',
+      patient: json.patient || null,
+      appointment: json,
+    },
+  });
 }
 
 /**
@@ -208,7 +231,8 @@ async function getBufferMinutes(branch) {
 
 /**
  * PRD §6.4: when `end` is omitted the duration defaults to the branch
- * slotDuration extended by `slots` (×1/×2/×3).
+ * slotDuration extended by `slots` (×1/×2/×3). A missing `slots` means a
+ * single slot (×1), so the returned end is never null for a real start.
  */
 async function resolveDefaultEnd(branch, start, slots) {
   if (!start) return null;
@@ -470,6 +494,7 @@ export const createAppointment = asyncHandler(async (req, res) => {
 
   await appointment.populate(POPULATE);
   emitAppointment(branch, 'appointment:created', appointment);
+  publishAppointmentEvent(appointment, 'appointment.created');
 
   return sendSuccess(res, { appointment: serializeAppointment(appointment, req) }, 201);
 });
@@ -656,6 +681,15 @@ export const transitionAppointment = asyncHandler(async (req, res) => {
   }
   emitQueueStatusChange(appointment);
 
+  const EVENT_BY_STATUS = {
+    confirmed: 'appointment.confirmed',
+    completed: 'appointment.completed',
+    cancelled: 'appointment.cancelled',
+    no_show: 'appointment.no_show',
+  };
+  const eventType = EVENT_BY_STATUS[nextStatus];
+  if (eventType) publishAppointmentEvent(appointment, eventType);
+
   return sendSuccess(res, { appointment: serializeAppointment(appointment, req) });
 });
 
@@ -686,6 +720,7 @@ export const cancelAppointment = asyncHandler(async (req, res) => {
 
   emitAppointment(appointment.branch, 'appointment:statusChanged', appointment);
   emitQueueStatusChange(appointment);
+  publishAppointmentEvent(appointment, 'appointment.cancelled');
 
   return sendSuccess(res, { appointment: serializeAppointment(appointment, req) });
 });

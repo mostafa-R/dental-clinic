@@ -131,9 +131,14 @@ const tenantSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-// Generate slug from name before saving
+// Generate slug only when one has never been assigned. The slug is the
+// tenant's subdomain endpoint, so it is IMMUTABLE once created: renaming the
+// clinic must never silently change clinic-a.dentalos.app to clinic-b.... At
+// creation the service pre-computes a unique slug (with -1/-2 suffixes to
+// avoid collisions), so this hook only fills a missing slug for brand-new or
+// legacy documents.
 tenantSchema.pre("save", function generateSlug() {
-  if (this.isModified("name")) {
+  if (!this.slug) {
     this.slug = this.name
       .toLowerCase()
       .replace(/[^\p{L}\p{N}]+/gu, "-")

@@ -34,7 +34,7 @@ export async function protect(req, _res, next) {
     // tenant-scoped). Populating it here would double-query on every request.
     const user = await User.findById(decoded.sub)
       .populate('branch', 'name address phone isActive')
-      .populate('tenant', 'plan planModules planId status name isActive subscriptionEndsAt');
+      .populate('tenant', 'plan planModules planId status name isActive subscriptionEndsAt trialEndsAt');
     if (!user) {
       throw ApiError.unauthorized('User no longer exists');
     }
@@ -74,6 +74,7 @@ export async function protect(req, _res, next) {
           name: user.tenant.name,
           isActive: user.tenant.isActive,
           subscriptionEndsAt: user.tenant.subscriptionEndsAt,
+          trialEndsAt: user.tenant.trialEndsAt,
         };
         await cacheTenant(tenantId, tenantConfig);
       }
@@ -83,6 +84,23 @@ export async function protect(req, _res, next) {
       // permanently read-only for its users.
       if (!tenantConfig.isActive || ['suspended', 'cancelled', 'archived'].includes(tenantConfig.status)) {
         throw ApiError.forbidden('Your clinic subscription is suspended. Contact your platform administrator.');
+      }
+
+      // Enforce trial / subscription expiry at request time, not just via the
+      // nightly suspension cron. Without this an expired trial keeps working
+      // until the next cron run (or forever if the cron is misconfigured).
+      const nowMs = Date.now();
+      const trialEndsAt = tenantConfig.trialEndsAt ? new Date(tenantConfig.trialEndsAt).getTime() : null;
+      const subscriptionEndsAt = tenantConfig.subscriptionEndsAt
+        ? new Date(tenantConfig.subscriptionEndsAt).getTime()
+        : null;
+      if (
+        (tenantConfig.status === 'trial' && trialEndsAt !== null && nowMs > trialEndsAt) ||
+        (tenantConfig.status === 'active' && subscriptionEndsAt !== null && nowMs > subscriptionEndsAt)
+      ) {
+        throw ApiError.forbidden(
+          'Your clinic subscription has expired. Contact your platform administrator to renew.',
+        );
       }
 
       // Replace the populated tenant with the cached config for downstream use
@@ -121,8 +139,13 @@ export async function protect(req, _res, next) {
     // user from exhausting the quota shared by every device behind one NAT.
     await enforceUserRateLimit(req.user._id || String(user._id));
 
-    // Propagate impersonation context so downstream middleware can restrict PHI.
+    // Always surface the impersonation context on the request. Centralizing
+    // this here (rather than relying on every route remembering to add the
+    // `phiRestrict` middleware) means a future patient-bearing route that
+    // forgets phiRestrict still cannot leak PHI to an impersonator: it can
+    // simply read req.isImpersonation like every other serializer does.
     if (decoded.type === 'impersonation') {
+      req.isImpersonation = true;
       req.user._impersonating = true;
       req.user._impersonator = decoded.impersonator;
     }

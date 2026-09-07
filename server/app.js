@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { abuseMonitor } from "./middleware/abuseMonitor.js";
 import { csrfProtection } from "./middleware/csrf.js";
 import { errorHandler, notFound } from "./middleware/error.js";
+import { hostPolicy } from "./middleware/hostPolicy.js";
 import { httpLogger } from "./middleware/httpLogger.js";
 import { ipAllowlist } from "./middleware/ipAllowlist.js";
 import { logError } from "./middleware/logError.js";
@@ -166,7 +167,7 @@ const generalLimiter = rateLimit({
   message: { success: false, message: "Too many requests, please slow down" },
 });
 
-app.use("/api", requestId, generalLimiter, perfMiddleware, abuseMonitor, userRateLimit({ windowMs: 60000, max: 200 }), maintenance, ipAllowlist, tenantRouter, apiRouter);
+app.use("/api", requestId, generalLimiter, perfMiddleware, abuseMonitor, userRateLimit({ windowMs: 60000, max: 200 }), maintenance, ipAllowlist, hostPolicy, tenantRouter, apiRouter);
 
 app.use(logError);
 app.use(notFound);

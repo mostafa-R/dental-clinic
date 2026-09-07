@@ -49,6 +49,14 @@ vi.mock('../modules/users/branch.model.js', () => ({
   }
 }));
 
+vi.mock('../modules/users/role.model.js', () => ({
+  default: {
+    find: vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({ lean: vi.fn() }),
+    }),
+  }
+}));
+
 vi.mock('../modules/users/user.model.js', () => ({
   default: {
     countDocuments: vi.fn()
@@ -63,10 +71,7 @@ vi.mock('../modules/patients/patient.model.js', () => ({
 
 vi.mock('../modules/emr/attachment.model.js', () => ({
   default: {
-    find: vi.fn().mockResolvedValue([
-      { size: 1024 * 1024 * 100 }, // 100MB
-      { size: 1024 * 1024 * 200 }  // 200MB
-    ])
+    aggregate: vi.fn().mockResolvedValue([{ total: 1024 * 1024 * 300 }])
   }
 }));
 
@@ -159,6 +164,63 @@ describe('Tenant Router Middleware', () => {
       expect(error.message).toContain('subscription is suspended');
     });
 
+    it('should set isPlatformRoute for the apex domain', async () => {
+      mockReq.hostname = 'dentalos.app';
+
+      await tenantRouter(mockReq, mockRes, mockNext);
+
+      expect(mockReq.isPlatformRoute).toBe(true);
+      expect(mockNext).toHaveBeenCalled();
+    });
+
+    it('should set isPlatformRoute for IPv6 loopback', async () => {
+      mockReq.hostname = '[::1]';
+
+      await tenantRouter(mockReq, mockRes, mockNext);
+
+      expect(mockReq.isPlatformRoute).toBe(true);
+      expect(mockNext).toHaveBeenCalled();
+    });
+
+    it('should reject an expired trial tenant', async () => {
+      const mockTenant = {
+        _id: 'tenant123',
+        name: 'Test Clinic',
+        slug: 'test-clinic',
+        status: 'trial',
+        isActive: true,
+        settings: {},
+        trialEndsAt: new Date(Date.now() - 60 * 60 * 1000).toISOString()
+      };
+
+      getCachedTenant.mockResolvedValue(mockTenant);
+
+      await tenantRouter(mockReq, mockRes, mockNext);
+
+      const error = mockNext.mock.calls[0][0];
+      expect(error.statusCode).toBe(403);
+      expect(error.message).toContain('trial has expired');
+    });
+
+    it('should reject a cancelled tenant with its own message', async () => {
+      const mockTenant = {
+        _id: 'tenant123',
+        name: 'Test Clinic',
+        slug: 'test-clinic',
+        status: 'cancelled',
+        isActive: false,
+        settings: {}
+      };
+
+      getCachedTenant.mockResolvedValue(mockTenant);
+
+      await tenantRouter(mockReq, mockRes, mockNext);
+
+      const error = mockNext.mock.calls[0][0];
+      expect(error.statusCode).toBe(403);
+      expect(error.message).toContain('cancelled');
+    });
+
     it('should fetch from DB if not in cache', async () => {
       const mockTenant = {
         _id: 'tenant123',
@@ -174,14 +236,15 @@ describe('Tenant Router Middleware', () => {
       };
 
       getCachedTenant.mockResolvedValue(null);
-      Tenant.findOne.mockResolvedValue(mockTenant);
+      Tenant.findOne.mockResolvedValue({
+        ...mockTenant,
+        toObject: () => ({ ...mockTenant }),
+      });
 
       await tenantRouter(mockReq, mockRes, mockNext);
 
       expect(Tenant.findOne).toHaveBeenCalledWith({
-        slug: 'test-clinic',
-        isActive: true,
-        status: { $in: ['active', 'trial'] }
+        slug: 'test-clinic'
       });
       expect(mockReq.tenant).toBeDefined();
       expect(mockNext).toHaveBeenCalled();
@@ -201,6 +264,20 @@ describe('Tenant Router Middleware', () => {
   });
 
   describe('enforcePlanLimits', () => {
+    it('should pass through when there is no tenant context (platform/dev routes)', async () => {
+      const middleware = enforcePlanLimits('storage');
+
+      mockReq.tenant = null;
+
+      await middleware(mockReq, mockRes, mockNext);
+
+      // Must NOT 401 — non-tenant traffic (platform routes, localhost dev,
+      // supertest) is skipped so the mounted storage-limit middleware never
+      // trips it.
+      expect(mockNext).toHaveBeenCalledTimes(1);
+      expect(mockNext.mock.calls[0].length).toBe(0);
+    });
+
     it('should allow creation when under limit', async () => {
       const middleware = enforcePlanLimits('branches');
 
@@ -264,13 +341,12 @@ describe('Tenant Router Middleware', () => {
       mockReq.tenant = {
         _id: 'tenant123',
         settings: {
-          maxStorage: 5120 // 5GB in MB
+          storageLimit: 5120 // 5GB in MB
         }
       };
 
-      Attachment.find.mockResolvedValue([
-        { size: 1024 * 1024 * 100 }, // 100MB
-        { size: 1024 * 1024 * 200 }  // 200MB
+      Attachment.aggregate.mockResolvedValue([
+        { total: 1024 * 1024 * 300 } // 300MB total
       ]);
 
       await middleware(mockReq, mockRes, mockNext);
@@ -292,6 +368,37 @@ describe('Tenant Router Middleware', () => {
       expect(mockNext).toHaveBeenCalledWith(expect.any(ApiError));
       const error = mockNext.mock.calls[0][0];
       expect(error.statusCode).toBe(400);
+    });
+
+    it('should count doctors via role keys (doctor/assistant)', async () => {
+      const middleware = enforcePlanLimits('doctors');
+
+      mockReq.tenant = {
+        _id: 'tenant123',
+        settings: {
+          maxDoctors: 5
+        }
+      };
+
+      const Role = (await import('../modules/users/role.model.js')).default;
+      Role.find.mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          lean: vi.fn().mockResolvedValue([{ _id: 'r1' }, { _id: 'r2' }]),
+        }),
+      });
+
+      const UserModel = (await import('../modules/users/user.model.js')).default;
+      UserModel.countDocuments.mockResolvedValue(3);
+
+      await middleware(mockReq, mockRes, mockNext);
+
+      expect(UserModel.countDocuments).toHaveBeenCalledWith({
+        tenant: 'tenant123',
+        isActive: true,
+        roleId: { $in: ['r1', 'r2'] },
+      });
+      expect(mockReq.tenantUsage.doctors).toEqual({ current: 3, limit: 5 });
+      expect(mockNext).toHaveBeenCalled();
     });
   });
 });

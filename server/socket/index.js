@@ -106,17 +106,26 @@ export function initSocket(httpServer) {
 
         // Enforce tenant subscription status (mirrors middleware/auth.js
         // protect): clinic users from suspended/cancelled/inactive tenants
-        // cannot hold a live socket.
+        // cannot hold a live socket. Expired trials/subscriptions are treated
+        // the same as suspended so a live session ends the moment the trial
+        // lapses (not only after the nightly suspension cron runs).
         if (user.tenant && !isSystemAdmin) {
           const tenant = await Tenant.findById(user.tenant)
-            .select('status isActive plan planModules')
+            .select('status isActive plan planModules trialEndsAt subscriptionEndsAt')
             .lean();
+          const nowMs = Date.now();
+          const trialEnd = tenant?.trialEndsAt ? new Date(tenant.trialEndsAt).getTime() : null;
+          const subEnd = tenant?.subscriptionEndsAt
+            ? new Date(tenant.subscriptionEndsAt).getTime()
+            : null;
           if (
             !tenant ||
             !tenant.isActive ||
             tenant.status === 'suspended' ||
             tenant.status === 'cancelled' ||
-            tenant.status === 'archived'
+            tenant.status === 'archived' ||
+            (tenant.status === 'trial' && trialEnd !== null && nowMs > trialEnd) ||
+            (tenant.status === 'active' && subEnd !== null && nowMs > subEnd)
           ) {
             return next(new Error('Your clinic subscription is inactive'));
           }

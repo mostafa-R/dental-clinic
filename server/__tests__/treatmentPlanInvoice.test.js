@@ -4,6 +4,10 @@ vi.mock("../modules/emr/dentalChart.model.js", () => ({
   default: { findOne: vi.fn() },
 }));
 
+vi.mock("../modules/emr/treatmentPlan.model.js", () => ({
+  default: { findById: vi.fn() },
+}));
+
 vi.mock("../modules/billing/invoice.model.js", () => ({
   default: { create: vi.fn() },
 }));
@@ -22,6 +26,7 @@ vi.mock("../modules/inventory/inventory.service.js", () => ({
 import mongoose from "mongoose";
 import { generateInvoiceFromPlan } from "../modules/emr/treatmentPlan.service.js";
 import DentalChart from "../modules/emr/dentalChart.model.js";
+import TreatmentPlan from "../modules/emr/treatmentPlan.model.js";
 import Invoice from "../modules/billing/invoice.model.js";
 import { withTransaction } from "../core/transaction.js";
 import { deductForProcedure } from "../modules/inventory/inventory.service.js";
@@ -40,6 +45,15 @@ function makePlan() {
   };
 }
 
+// H2: `generateInvoiceFromPlan` re-reads the plan from the DB inside the
+// transaction. Mock findById so `.session(session)` yields the given document.
+function mockPlanRefresh(plan) {
+  vi.mocked(TreatmentPlan.findById).mockReturnValue({
+    session: vi.fn(async () => plan),
+  });
+  return plan;
+}
+
 function makePatient() {
   return { _id: OID(), tenant: OID(), branch: OID() };
 }
@@ -50,7 +64,7 @@ describe("generateInvoiceFromPlan — transactional invoice + item linking (ISSU
   });
 
   it("creates the invoice and links items inside a single transaction", async () => {
-    const plan = makePlan();
+    const plan = mockPlanRefresh(makePlan());
     const patient = makePatient();
     const [cleanItem, fillingItem] = plan.items;
     const invoice = { _id: OID(), populate: vi.fn().mockResolvedValue({}) };
@@ -66,6 +80,8 @@ describe("generateInvoiceFromPlan — transactional invoice + item linking (ISSU
     });
 
     expect(withTransaction).toHaveBeenCalledTimes(1);
+    // H2: the plan is re-read under the transaction session (snapshot isolation).
+    expect(TreatmentPlan.findById).toHaveBeenCalledWith(plan._id);
     expect(Invoice.create).toHaveBeenCalledWith(
       [expect.objectContaining({
         items: expect.arrayContaining([
@@ -93,7 +109,7 @@ describe("generateInvoiceFromPlan — transactional invoice + item linking (ISSU
   });
 
   it("rejects items that are already invoiced instead of orphaning the previous invoice", async () => {
-    const plan = makePlan();
+    const plan = mockPlanRefresh(makePlan());
     const patient = makePatient();
     const [cleanItem, , oldItem] = plan.items;
 
@@ -104,14 +120,49 @@ describe("generateInvoiceFromPlan — transactional invoice + item linking (ISSU
       }),
     ).rejects.toMatchObject({ statusCode: 409 });
 
-    expect(withTransaction).not.toHaveBeenCalled();
+    // The guard runs against the transactional snapshot, so the attempt still
+    // enters the transaction and must abort before touching billing.
+    expect(withTransaction).toHaveBeenCalledTimes(1);
     expect(Invoice.create).not.toHaveBeenCalled();
+    expect(plan.save).not.toHaveBeenCalled();
     // The not-yet-invoiced item is left untouched.
     expect(cleanItem.invoice).toBeNull();
   });
 
+  it("catches an invoice committed concurrently after the caller loaded its snapshot", async () => {
+    // The caller holds a stale plan where the item looks billable...
+    const stalePlan = makePlan();
+    const patient = makePatient();
+    const [cleanItem] = stalePlan.items;
+
+    // ...but by the time the transaction runs, the DB snapshot already
+    // contains an invoice link (committed by another request). Same item ids
+    // as the caller's snapshot — only the invoice link differs.
+    const freshPlan = {
+      ...stalePlan,
+      items: stalePlan.items.map((item, i) =>
+        i === 0 ? { ...item, invoice: OID() } : item,
+      ),
+      save: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const refreshed = mockPlanRefresh(freshPlan);
+
+    await expect(
+      generateInvoiceFromPlan(stalePlan, patient, {
+        itemIds: [cleanItem._id.toString()],
+        userId: "u1",
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(withTransaction).toHaveBeenCalledTimes(1);
+    expect(Invoice.create).not.toHaveBeenCalled();
+    expect(stalePlan.save).not.toHaveBeenCalled();
+    expect(refreshed.items[0].invoice).toBe(freshPlan.items[0].invoice);
+  });
+
   it("defaults to pending un-invoiced items when itemIds is omitted", async () => {
-    const plan = makePlan();
+    const plan = mockPlanRefresh(makePlan());
     const patient = makePatient();
     const [cleanItem, fillingItem, oldItem] = plan.items;
     const invoice = { _id: OID(), populate: vi.fn().mockResolvedValue({}) };

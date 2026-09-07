@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 
 export const ACCESS_COOKIE = "access_token";
@@ -88,6 +89,25 @@ export function setAuthCookies(res, user, type = "clinic", extra = {}) {
       maxAge: msFromExpiry(refreshExpiry()),
     });
   }
+
+  setCsrfCookie(res);
+}
+
+export function setCsrfCookie(res) {
+  // Double-submit CSRF token, issued alongside the session cookies so it is
+  // always available before the first state-changing request. Deliberately
+  // NOT httpOnly (the client must read it and echo it back) but host-only +
+  // SameSite, so a cross-origin site cannot read it either.
+  if (!res._csrfIssued) {
+    res._csrfIssued = true;
+    const token = crypto.randomBytes(24).toString("hex");
+    res.cookie("_csrf", token, {
+      httpOnly: false,
+      sameSite: "strict",
+      secure: res.req?.secure ?? process.env.NODE_ENV === "production",
+      path: "/",
+    });
+  }
 }
 
 export function clearAuthCookies(res, type = "clinic") {
@@ -98,6 +118,12 @@ export function clearAuthCookies(res, type = "clinic") {
     res.clearCookie(ACCESS_COOKIE, cookieOptions);
     res.clearCookie(REFRESH_COOKIE, cookieOptions);
   }
+  res.clearCookie("_csrf", {
+    httpOnly: false,
+    sameSite: "strict",
+    secure: res.req?.secure ?? process.env.NODE_ENV === "production",
+    path: "/",
+  });
 }
 
 function msFromExpiry(expiry) {

@@ -38,36 +38,55 @@ export async function loadPlan(patientId, planId, branchFilter) {
 
 export async function generateInvoiceFromPlan(plan, patient, { itemIds, discount, tax, notes, userId }) {
   // Filter to the requested items, or default to all pending, un-invoiced items.
-  const selectedItems = itemIds?.length
+  // This is the *user intent* — the authoritative check happens again inside the
+  // transaction where the plan is re-read with the session (H2).
+  const rawSelected = itemIds?.length
     ? plan.items.filter((item) => itemIds.includes(item._id.toString()))
     : plan.items.filter((item) => item.status === 'pending' && !item.invoice);
 
-  if (selectedItems.length === 0) {
+  if (rawSelected.length === 0) {
     throw ApiError.badRequest('No valid items selected');
   }
-
-  // An item can only be billed once. Re-invoicing an item would overwrite its
-  // invoice link and orphan the previous invoice — leaving that invoice without
-  // its linked items (ISSUE-021).
-  const alreadyInvoiced = selectedItems.find((item) => item.invoice);
-  if (alreadyInvoiced) {
-    throw ApiError.conflict(
-      `"${alreadyInvoiced.procedureName}" has already been invoiced`,
-    );
-  }
-
-  const invoiceItems = selectedItems.map((item) => ({
-    description: item.tooth
-      ? `${item.procedureName} (#${item.tooth})`
-      : item.procedureName,
-    quantity: 1,
-    unitPrice: item.estimatedCost || 0,
-  }));
 
   // Fetch dental chart once (avoid N+1 per-item queries).
   const dentalChart = await DentalChart.findOne({ patient: patient._id, branch: patient.branch }).lean();
 
   const result = await withTransaction(async (session) => {
+    // Re-read the plan INSIDE the transaction. Snapshot isolation means two
+    // concurrent invoicing requests contend here: whichever commits first wins,
+    // and the loser sees item.invoice already set and throws 409 — closing the
+    // double-invoice race (H2).
+    const freshPlan = await TreatmentPlan.findById(plan._id).session(session);
+    if (!freshPlan) {
+      throw ApiError.notFound('Treatment plan not found');
+    }
+
+    const selectedIds = new Set(rawSelected.map((item) => item._id.toString()));
+    const selectedItems = freshPlan.items.filter((item) => selectedIds.has(item._id.toString()));
+
+    if (selectedItems.length === 0) {
+      throw ApiError.badRequest('No valid items selected');
+    }
+
+    // An item can only be billed once. Re-invoicing an item would overwrite its
+    // invoice link and orphan the previous invoice — leaving that invoice without
+    // its linked items (ISSUE-021). This guard now runs against the transactional
+    // snapshot, so a stale in-memory plan can never bypass it.
+    const alreadyInvoiced = selectedItems.find((item) => item.invoice);
+    if (alreadyInvoiced) {
+      throw ApiError.conflict(
+        `"${alreadyInvoiced.procedureName}" has already been invoiced`,
+      );
+    }
+
+    const invoiceItems = selectedItems.map((item) => ({
+      description: item.tooth
+        ? `${item.procedureName} (#${item.tooth})`
+        : item.procedureName,
+      quantity: 1,
+      unitPrice: item.estimatedCost || 0,
+    }));
+
     const invoice = await Invoice.create([{
       tenant: patient.tenant,
       branch: patient.branch,
@@ -110,10 +129,10 @@ export async function generateInvoiceFromPlan(plan, patient, { itemIds, discount
       }
     }
 
-    plan.updatedBy = userId;
-    await plan.save({ session });
+    freshPlan.updatedBy = userId;
+    await freshPlan.save({ session });
 
-    return { invoice, deductions: deductionLog };
+    return { invoice, plan: freshPlan, deductions: deductionLog };
   });
 
   await result.invoice.populate([
@@ -122,5 +141,5 @@ export async function generateInvoiceFromPlan(plan, patient, { itemIds, discount
     { path: 'createdBy', select: 'name' },
   ]);
 
-  return { invoice: result.invoice, plan, deductions: result.deductions };
+  return { invoice: result.invoice, plan: result.plan, deductions: result.deductions };
 }

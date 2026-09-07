@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 import { round2 } from '../../constants/accounting.js';
 import { withTransaction } from '../../core/transaction.js';
+import { publishEvent } from '../../services/eventBus.js';
 import ApiError from '../../utils/ApiError.js';
 import { toObjectId } from '../../utils/branchScope.js';
 import { escapeRegex } from '../../utils/escapeRegex.js';
@@ -597,6 +598,27 @@ export async function addPayment(id, branchFilter, { amount, method, reference, 
   }
 
   await result.populate(POPULATE);
+
+  // Publish the fully-paid event AFTER the transaction commits so automation
+  // rules never read half-applied state (PRD §12.3). Fire-and-forget.
+  if (result.status === 'paid') {
+    void publishEvent({
+      type: 'invoice.paid',
+      tenant: result.tenant,
+      branch: result.branch,
+      data: {
+        id: String(result._id),
+        invoiceNo: result.invoiceNo,
+        status: result.status,
+        total: result.total,
+        paidAmount: result.paidAmount,
+        patient: result.patient ? (result.patient?.toJSON ? result.patient.toJSON() : result.patient) : null,
+        payment: result.payments?.[result.payments.length - 1] || null,
+        invoice: result.toJSON ? result.toJSON() : result,
+      },
+    });
+  }
+
   return result;
 }
 
@@ -825,15 +847,18 @@ export async function refundPayment(id, branchFilter, { amount, method, referenc
     );
 
     // Adjust commissions (BR-BL-02: one record per invoice line item).
-    const totalPaidBeforeRefund = round2(
-      (invoice.payments || [])
-        .filter((p) => !p.isRefund)
-        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
-    );
-    if (totalPaidBeforeRefund > 0) {
+    // The outstanding paid amount BEFORE this refund. `invoice.paidAmount`
+    // already reflects this refund (the negative payment was pushed and saved
+    // above), so we add `refundAmount` back to recover the pre-refund balance.
+    // Scaling by the pre-refund balance — rather than the cumulative collected
+    // total (which ignores prior refunds) — ensures a refund that clears the
+    // invoice entirely reaches a ~1.0 ratio and VOIDS the commission, instead
+    // of leaving a residual 'pending' balance on a fully-refunded invoice.
+    const paidBeforeRefund = round2(invoice.paidAmount + refundAmount);
+    if (paidBeforeRefund > 0) {
       const commissions = await Commission.find({ invoice: invoice._id }).session(session);
       for (const commission of commissions) {
-        const refundRatio = refundAmount / totalPaidBeforeRefund;
+        const refundRatio = refundAmount / paidBeforeRefund;
         if (refundRatio >= 0.999) {
           commission.status = 'void';
           await commission.save({ session });

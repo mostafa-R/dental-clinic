@@ -1,9 +1,12 @@
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 import Branch from './branch.model.js';
 import Role from './role.model.js';
 import Tenant from '../site/tenant/tenant.model.js';
 import User from './user.model.js';
+import Counter from '../../core/counters.js';
+import { withTransaction } from '../../core/transaction.js';
 import { currentTenant, filterByBranch, toObjectId } from '../../utils/branchScope.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
@@ -95,23 +98,49 @@ export const createUser = asyncHandler(async (req, res) => {
     }
   }
 
-  // Plan limit: enforce maxDoctors when creating a doctor.
+  let user;
   if (data.isDoctor && tenant) {
     const tenantDoc = await Tenant.findById(tenant).select('settings');
-    const doctorCount = await User.countDocuments({ tenant, isDoctor: true });
     const maxDoctors = tenantDoc?.settings?.maxDoctors ?? 999;
-    if (doctorCount >= maxDoctors) {
-      throw ApiError.conflict(
-        `Your plan allows a maximum of ${maxDoctors} doctors. Upgrade your plan to add more.`,
-      );
-    }
-  }
 
-  const user = await User.create({
-    ...data,
-    branch: branchId,
-    tenant,
-  });
+    // Hash OUTSIDE the transaction — bcrypt (cost 12) is ~100ms of CPU that
+    // must not hold the counter write-lock: slow work inside a transaction
+    // makes every concurrent contender exhaust its retry budget and turn a
+    // clean 409 into a raw 500.
+
+    const { password, ...rest } = data;
+    const hashedPassword = password ? await bcrypt.hash(password, 12) : undefined;
+
+    // Plan limit: enforce maxDoctors atomically. The slot claim ($inc on the
+    // per-tenant counter) and the insert run inside ONE transaction, so
+    // concurrent creates contend on the counter instead of both passing a
+    // stale countDocuments (mirrors the patient_slots fix).
+    user = await withTransaction(async (session) => {
+      const slotDoc = await Counter.findOneAndUpdate(
+        { _id: `doctor_slots:${String(tenant)}` },
+        { $inc: { seq: 1 } },
+        { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true, session },
+      );
+      const used = slotDoc?.seq ?? 1;
+      if (used > maxDoctors) {
+        // Aborting the transaction rolls back the $inc, releasing the slot.
+        throw ApiError.conflict(
+          `Your plan allows a maximum of ${maxDoctors} doctors. Upgrade your plan to add more.`,
+        );
+      }
+
+      // Build via init() so the password path is NOT marked modified — the
+      // userSchema pre-save hook would otherwise re-hash the already-hashed
+      // value. Validation still runs on save; only the hash is skipped.
+      const doc = new User(rest);
+      doc.init({ ...rest, tenant, branch: branchId, password: hashedPassword });
+      doc.isNew = true;
+      await doc.save({ session });
+      return doc;
+    });
+  } else {
+    user = await User.create({ ...data, branch: branchId, tenant });
+  }
   await user.populate(POPULATE);
 
   emitToBranch(String(branchId), 'user:created', { user: user.toSafeObject() });

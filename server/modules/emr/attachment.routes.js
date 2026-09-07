@@ -2,7 +2,7 @@ import path from 'node:path';
 import { Router } from 'express';
 import { protect } from '../../middleware/auth.js';
 import { checkPermission } from '../../middleware/checkPermission.js';
-import { uploadMedicalFile, UPLOADS_ROOT } from '../../middleware/upload.js';
+import { uploadMedicalFile, assertFileSignature, UPLOADS_ROOT } from '../../middleware/upload.js';
 import { encryptFile, decryptFile, decryptFileWithKeys, isEncrypted } from '../../utils/encryption.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
@@ -15,6 +15,7 @@ import Tenant from '../site/tenant/tenant.model.js';
 import { ATTACHMENT_TYPES } from '../../constants/dental.js';
 import { loadScopedPatient, toObjectId } from '../../utils/branchScope.js';
 import { phiRestrict } from '../../middleware/phiRestrict.js';
+import { enforcePlanLimits } from '../../middleware/tenantRouter.js';
 
 const ENCRYPTED_SUFFIX = '.enc';
 
@@ -106,6 +107,10 @@ router.post(
   protect,
   checkPermission('emr', 'create'),
   phiRestrict,
+  // Storage plan cap: enforces tenant settings.storageLimit (MB) before the
+  // file is written. Counts existing attachments' size sums; uploads that
+  // would push the tenant over the cap are rejected with 403.
+  enforcePlanLimits('storage'),
   uploadMedicalFile.single('file'),
   asyncHandler(async (req, res) => {
     if (!req.file) {
@@ -118,6 +123,15 @@ router.post(
     const { type, caption } = req.body;
     if (type && !ATTACHMENT_TYPES.includes(type)) {
       throw ApiError.badRequest('Invalid attachment type');
+    }
+
+    // L4: verify the on-disk bytes match the declared mimetype — the request's
+    // `file.mimetype` is client-controlled and cannot be trusted.
+    try {
+      await assertFileSignature(req.file.path, req.file.mimetype, ApiError);
+    } catch (err) {
+      await unlink(req.file.path).catch(() => {});
+      throw err;
     }
 
     const originalPath = req.file.path;

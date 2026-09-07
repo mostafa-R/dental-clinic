@@ -48,7 +48,12 @@ export const siteRefresh = asyncHandler(async (req, res) => {
     throw ApiError.unauthorized('Token has been rotated, please log in again');
   }
 
-  await siteAuthService.rotateSiteAdminToken(admin);
+  const updated = await siteAuthService.rotateSiteAdminToken(admin, decoded);
+  if (!updated) {
+    clearAuthCookies(res, 'site');
+    throw ApiError.unauthorized('Token has been rotated, please log in again');
+  }
+  admin.tokenVersion = updated.tokenVersion;
   // Carry the original 2FA challenge timestamp forward across refreshes so the
   // freshness gate in require2fa still applies to long-lived sessions.
   const verified = decoded.twoFactorVerified === true && typeof decoded.twoFactorVerifiedAt === 'number';

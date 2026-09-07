@@ -38,19 +38,14 @@ function isPhoneLike(q) {
 }
 
 /**
- * Remove medical PHI (clinical note bodies, diagnoses, medication lists) from
- * a search result set. Applied to the payload BEFORE it is written to the
- * Redis/in-memory cache so no protected health information ever rests in a
- * cache tier. The result remains fully navigable (record ids + identifying
- * metadata are preserved); the user opens the record to read its contents.
+ * Remove all protected health fields from a search result set. Applied to the
+ * payload BEFORE it is written to the Redis/in-memory cache so no protected
+ * health information ever rests in a cache tier. The result remains fully
+ * navigable (record ids + identifying metadata are preserved); the user opens
+ * the record to read its contents.
  */
 function sanitizeForCache(result) {
-  return {
-    ...result,
-    clinicalNotes: stripPHI(result.clinicalNotes),
-    prescriptions: stripPHI(result.prescriptions),
-    treatmentPlans: stripPHI(result.treatmentPlans),
-  };
+  return stripPHI(result);
 }
 
 /**
@@ -285,11 +280,16 @@ export async function globalSearch(branchFilter, query, can = () => true, option
     installments: filteredInstallments,
   };
 
-  // Cache the sanitized payload so PHI never persists in the cache tier, and
-  // return the same sanitized payload so live and cached responses are
-  // identical. The controller additionally strips PHI when impersonating.
-  const cacheSafe = sanitizeForCache(result);
-  await cacheSet('search', cacheKey, cacheSafe, 60);
+  // Impersonating sessions read the PHI-stripped payload — the sanitized copy
+  // is what gets stored in the cache tier, so no protected health information
+  // ever rests in Redis AND an impersonator never receives it on a cache hit.
+  // Regular clinic users search against the live FULL result: their own search
+  // results must not be silently stripped of diagnoses/notes/medications.
+  if (options.impersonating) {
+    const cacheSafe = sanitizeForCache(result);
+    await cacheSet('search', cacheKey, cacheSafe, 60);
+    return cacheSafe;
+  }
 
-  return cacheSafe;
+  return result;
 }

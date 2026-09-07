@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { unlink } from 'node:fs/promises';
+import { mkdtemp, rm, unlink } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
@@ -21,46 +23,52 @@ function getPassword(provided) {
 }
 
 /**
- * Encrypt a file using AES-256-GCM with streaming.
- * Output format: [salt(16)][iv(16)][authTag(16)][encrypted data]
- * @param {string} password - Optional explicit key. Defaults to the shared
- *   BACKUP_ENCRYPTION_KEY (used for backup archives and as the legacy key for
- *   attachments created before per-tenant keys existed).
+ * Encrypt a file using AES-256-GCM.
+ * Output format: [ENC1][salt(16)][iv(16)][authTag(16)][encrypted data]
+ *
+ * True streaming: the plaintext is piped through the cipher into a temp file
+ * (constant memory — a 50MB upload never sits in RAM). GCM's auth tag is only
+ * known after the last byte, so the ciphertext is staged in a temp dir and the
+ * final file is assembled header-first ([ENC1][salt][iv][authTag][data]) to
+ * stay byte-compatible with the pre-existing format and decryptFile.
  */
 export async function encryptFile(inputPath, outputPath, password) {
   const secret = getPassword(password);
   const salt = crypto.randomBytes(SALT_LENGTH);
   const iv = crypto.randomBytes(IV_LENGTH);
   const key = deriveKey(secret, salt);
-
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
 
-  const inputStream = createReadStream(inputPath);
-  const outputStream = createWriteStream(outputPath);
+  const tempDir = await mkdtemp(join(tmpdir(), 'encaes-'));
+  const cipherPath = join(tempDir, 'payload.bin');
 
-  return new Promise((resolve, reject) => {
-    inputStream.on('error', reject);
+  try {
+    await new Promise((resolve, reject) => {
+      const inputStream = createReadStream(inputPath);
+      const cipherStream = createWriteStream(cipherPath);
+      inputStream.on('error', reject);
+      cipherStream.on('error', reject);
+      cipherStream.on('finish', resolve);
+      inputStream.pipe(cipher).pipe(cipherStream);
+    });
 
-    const chunks = [];
-    inputStream.on('data', (chunk) => chunks.push(chunk));
-    inputStream.on('end', () => {
-      const plaintext = Buffer.concat(chunks);
-      const encrypted = cipher.update(plaintext);
-      cipher.final();
-      const authTag = cipher.getAuthTag();
+    const authTag = cipher.getAuthTag();
 
+    await new Promise((resolve, reject) => {
+      const payloadStream = createReadStream(cipherPath);
+      const outputStream = createWriteStream(outputPath);
       outputStream.write(Buffer.from('ENC1', 'ascii'));
       outputStream.write(salt);
       outputStream.write(iv);
       outputStream.write(authTag);
-      outputStream.write(encrypted);
-      outputStream.end();
+      payloadStream.on('error', reject);
+      outputStream.on('error', reject);
+      outputStream.on('finish', resolve);
+      payloadStream.pipe(outputStream, { end: true });
     });
-
-    outputStream.on('finish', resolve);
-    outputStream.on('error', reject);
-    cipher.on('error', reject);
-  });
+  } finally {
+    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 /**

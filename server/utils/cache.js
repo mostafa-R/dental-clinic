@@ -123,12 +123,22 @@ export const invalidateRoleCache = invalidateRole;
 
 /**
  * Invalidate all cached roles for a tenant.
- * NOTE: Roles are cached with tenant-scoped keys (namespace 'role', id = roleId),
- * but since we cannot enumerate all roleIds for a tenant from the cache alone,
- * we invalidate all role cache entries. This is safe because role changes are infrequent.
+ * Roles are cached under `dental:role:{roleId}` keys. The tenant's role ids
+ * are resolved from the DB (invalidation is infrequent, and permission checks
+ * re-cache on the next hit) so a role change in one clinic no longer evicts
+ * every other tenant's cached roles.
  */
-export async function invalidateTenantRoles(_tenantId) {
-  await cacheDelPattern(`role:*`);
+export async function invalidateTenantRoles(tenantId) {
+  let roleIds = [];
+  try {
+    const { default: Role } = await import('../modules/users/role.model.js');
+    const roles = await Role.find({ tenant: tenantId }).select('_id').lean();
+    roleIds = roles.map((r) => r._id);
+  } catch {
+    // DB/Redis unavailable — cache is best-effort.
+    return;
+  }
+  await Promise.all(roleIds.map((id) => cacheDel('role', id)));
 }
 
 /**

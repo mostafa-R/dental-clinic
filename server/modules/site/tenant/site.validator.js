@@ -13,10 +13,11 @@ const baseFields = {
 
 export const tenantSchema = z.object({
   ...baseFields,
-  adminPassword: z
-    .string()
-    .min(8, "Admin password must be at least 8 characters")
-    .optional(),
+  // Required: the platform admin sets the clinic admin's initial password
+  // at provisioning time. The API never returns a generated plaintext
+  // password, so we must not allow creating an account with an
+  // auto-generated one that would have no secure delivery channel.
+  adminPassword: z.string().min(8, "Admin password must be at least 8 characters"),
 });
 
 export const tenantUpdateSchema = z.object({

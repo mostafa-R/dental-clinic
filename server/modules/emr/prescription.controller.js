@@ -8,6 +8,7 @@ import { emitToBranch } from '../../socket/index.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { loadScopedPatient, toObjectId } from '../../utils/branchScope.js';
+import { assertAppointmentsForPatient } from '../../utils/emrHelpers.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 import { stripPHI } from '../../middleware/phiRestrict.js';
 
@@ -77,6 +78,11 @@ export const createPrescription = asyncHandler(async (req, res) => {
   const data = req.validatedBody;
 
   await assertDoctor(data.doctor, patient.branch);
+  // M3: the optional appointment link must belong to this exact patient.
+  await assertAppointmentsForPatient(data.appointment, {
+    patient: patient._id,
+    branch: patient.branch,
+  });
 
   const rx = await Prescription.create({
     branch: patient.branch,

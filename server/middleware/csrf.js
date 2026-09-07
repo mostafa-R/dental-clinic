@@ -3,6 +3,20 @@ import ApiError from '../utils/ApiError.js';
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+export const CSRF_COOKIE_CONFIG = {
+  httpOnly: false,
+  sameSite: 'strict',
+  secure: false, // resolved at runtime via req.secure
+  path: '/',
+};
+
+function csrfCookieOptions(req) {
+  return {
+    ...CSRF_COOKIE_CONFIG,
+    secure: req.secure,
+  };
+}
+
 /**
  * CSRF protection for cookie-authenticated requests.
  *
@@ -19,8 +33,11 @@ const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
  *    matching the `_csrf` cookie) is accepted as a fallback ONLY when no
  *    Origin/Referer could be supplied at all (native/privacy clients). The
  *    cookie is host-only + SameSite, so a cross-origin site cannot read it.
- * 3. The `_csrf` cookie is issued lazily on any session-bearing response so
- *    existing clients keep working without a breaking cookie change.
+ * 3. The `_csrf` cookie is issued whenever session cookies are set
+ *    (setAuthCookies in utils/jwt.js) so it is available before the first
+ *    state-changing request. This lazy issuance here covers requests that
+ *    arrive with an existing session but no `_csrf` cookie yet (e.g. sessions
+ *    established before this middleware shipped).
  *
  * Requests without a session cookie (Bearer-only, login, public) are
  * unaffected, and safe methods (GET/HEAD/OPTIONS) always pass.
@@ -32,14 +49,11 @@ export function csrfProtection(allowedOrigins) {
     const hasSessionCookie = !!(req.cookies?.access_token || req.cookies?.site_access);
 
     // Issue the double-submit cookie on first session-bearing response.
-    if (hasSessionCookie && !req.cookies?._csrf) {
+    // Respect a cookie already issued this response via setAuthCookies.
+    if (hasSessionCookie && !req.cookies?._csrf && !res._csrfIssued) {
       const token = crypto.randomBytes(24).toString('hex');
-      res.cookie('_csrf', token, {
-        httpOnly: false,
-        sameSite: 'strict',
-        secure: req.secure,
-        path: '/',
-      });
+      res._csrfIssued = true;
+      res.cookie('_csrf', token, csrfCookieOptions(req));
     }
 
     if (!UNSAFE_METHODS.has(req.method)) return next();

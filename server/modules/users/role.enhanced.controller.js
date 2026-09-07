@@ -11,6 +11,7 @@ import ApiError from '../../utils/ApiError.js';
 import { MODULES, CRUD_ACTIONS } from '../../constants/permissions.js';
 import { DEFAULT_ROLES, getDefaultRoles } from '../../constants/roles.js';
 import { getCachedRole, cacheRole, invalidateRoleCache } from '../../utils/cache.js';
+import { assertCanGrantPermissions, scopedRoleQuery } from '../../utils/permissionPolicy.js';
 
 /**
  * جلب مصفوفة الصلاحيات الكاملة للعرض في الواجهة
@@ -40,7 +41,7 @@ export async function getPermissionMatrix(req, res) {
       
       for (const role of roles) {
         const permissions = role.permissionMap();
-        matrix[module.key][role.key || role._id] = {
+        matrix[module.key][role.key || String(role._id)] = {
           actions: permissions[module.key] || [],
           roleName: role.name,
           isBuiltIn: role.isBuiltIn,
@@ -104,13 +105,9 @@ export async function createRoleFromTemplate(req, res) {
     
     // إذا كان هناك baseRoleId، نسخ الصلاحيات منه
     if (baseRoleId) {
-      const baseRole = await Role.findOne({
-        _id: baseRoleId,
-        $or: [
-          { tenant: tenantId },
-          { tenant: null } // يمكن نسخ من أدوار المنصة
-        ]
-      });
+      // Tenant users may only copy from their own tenant's roles — never from
+      // platform-level roles (tenant: null) or another clinic's roles.
+      const baseRole = await Role.findOne(scopedRoleQuery(req, baseRoleId));
       
       if (baseRole) {
         finalPermissions = baseRole.permissions || [];
@@ -121,6 +118,13 @@ export async function createRoleFromTemplate(req, res) {
     
     // التحقق من صحة الصلاحيات
     validatePermissions(finalPermissions);
+    
+    // منع تصعيد الصلاحيات: لا يجوز منح صلاحيات لا يملكها المستخدم نفسه
+    assertCanGrantPermissions(
+      req._roleResolved?.permissionMap?.() || {},
+      finalPermissions,
+      { isSystemAdmin: !!req._roleResolved?.isSystemAdmin }
+    );
     
     // إنشاء الدور الجديد
     const role = await Role.create({
@@ -214,28 +218,25 @@ export async function updateRolePermissions(req, res) {
     // التحقق من صحة الصلاحيات
     validatePermissions(permissions);
     
-    const role = await Role.findById(id);
+    // Tenant-scoped lookup: a clinic user can never target another tenant's
+    // role or a platform-level role.
+    const role = await Role.findOne(scopedRoleQuery(req, id));
     if (!role) {
       throw ApiError.notFound('Role not found');
     }
     
     // التحقق من الصلاحيات: لا يمكن تعديل أدوار builtIn إلا إذا كان المستخدم لديه صلاحيات كافية
-    if (role.isBuiltIn && !req.user._roleResolved?.isSystemAdmin) {
+    if (role.isBuiltIn && !req._roleResolved?.isSystemAdmin) {
       throw ApiError.forbidden('Cannot modify built-in role permissions');
     }
     
     // التحقق من حدود المستخدم: لا يمكنه منح صلاحيات لا يملكها هو
-    const userPermissions = req.user._roleResolved?.permissionMap() || {};
-    for (const perm of permissions) {
-      const modulePerms = userPermissions[perm.module] || [];
-      for (const action of perm.actions || []) {
-        if (!modulePerms.includes(action)) {
-          throw ApiError.forbidden(
-            `You cannot grant ${action} permission on ${perm.module} module`
-          );
-        }
-      }
-    }
+    // (system admin يستثنى من هذا القيد لأنه يتجاوز كل فحوصات الصلاحيات)
+    assertCanGrantPermissions(
+      req._roleResolved?.permissionMap?.() || {},
+      permissions,
+      { isSystemAdmin: !!req._roleResolved?.isSystemAdmin }
+    );
     
     // تحديث الصلاحيات
     role.permissions = permissions;
@@ -271,7 +272,9 @@ export async function toggleRoleStatus(req, res) {
       throw ApiError.badRequest('isActive must be a boolean');
     }
     
-    const role = await Role.findById(id);
+    // Tenant-scoped lookup: a clinic user can never toggle another tenant's
+    // role or a platform-level role.
+    const role = await Role.findOne(scopedRoleQuery(req, id));
     if (!role) {
       throw ApiError.notFound('Role not found');
     }
@@ -288,10 +291,10 @@ export async function toggleRoleStatus(req, res) {
     await invalidateRoleCache(role._id);
     
     if (!isActive) {
-      // عند التعطيل، فصل جميع المستخدمين من هذا الدور
+      // عند التعطيل، فصل جميع المستخدمين من هذا الدور (الحقل الصحيح هو roleId)
       await User.updateMany(
-        { role: role._id },
-        { $set: { role: null } }
+        { roleId: role._id },
+        { $set: { roleId: null } }
       );
       
       await invalidateUsersWithRole(role._id);
@@ -356,7 +359,7 @@ async function invalidateUsersWithRole(roleId) {
   try {
     // projection passed as argument (no chained .select()) so the call works
     // with both real Mongoose cursors and promise-returning mocks
-    const users = await User.find({ role: roleId }, '_id');
+    const users = await User.find({ roleId }, '_id');
     for (const user of users || []) {
       // إبطال cache جلسات المستخدمين
       // (يمكن إضافة Redis cache للمستخدمين لاحقاً)

@@ -1,0 +1,128 @@
+Based on the PRD document, here are all the features organized by status:
+
+## ✅ Completed Features (In Code)
+
+| # | Feature | Module |
+|---|---------|--------|
+| 1 | JWT Auth (Access/Refresh) + bcrypt + CSRF + Rate Limit | Auth |
+| 2 | 2FA (TOTP) mandatory for platform | Auth |
+| 3 | RBAC: 20 modules × CRUD, 8 built-in roles, dynamic roles | Auth/RBAC |
+| 4 | Tenant Router + PHI Restrict middleware | Multi-Tenancy |
+| 5 | Patient unified file + Patient ID serial + PHI | Patients |
+| 6 | Branch/tenant isolation with Patient Limit per plan | Patients |
+| 7 | Interactive dental chart (two-jaw) | EMR |
+| 8 | Clinical notes + treatment plans + prescriptions | EMR |
+| 9 | Attachments + Timeline + Before/After photos | EMR |
+| 10 | Calendar (day/week/month) + chair booking | Appointments |
+| 11 | Live queue via Socket.io | Appointments |
+| 12 | Time-based statuses + doctor availability | Appointments |
+| 13 | Invoice (atomic sequence) + discounts/taxes | Billing |
+| 14 | Multiple payment methods + partial payments + refunds | Billing |
+| 15 | Doctor commissions + Aging | Billing |     -------------------------------------------
+| 16 | Installments + wallet (credit/debit) + transfers | Installments |
+| 17 | Cron alerts for installment deadlines | Installments |
+| 18 | Chart of accounts + Double-entry Journal | Accounting |
+| 19 | Daily close + expenses + owner drawings | Accounting |
+| 20 | Inventory (items + Reorder Point + supply/consumption/depreciation) | Inventory |
+| 21 | Auto-discount linked to procedures | Inventory |
+| 22 | DM + channels + Read Receipts + audio notifications | Chat |
+| 23 | WhatsApp (whatsapp-web.js) with switching architecture | WhatsApp |
+| 24 | Tenant management + Plans/Subscriptions | SaaS |
+| 25 | Suspension Cron + Analytics | SaaS |
+| 26 | Immutable Audit Logs | SaaS |
+| 27 | Encrypted Backups + Health/Perf monitoring | SaaS |
+| 28 | Feature Flags + Error Logs + Quarantine | SaaS |
+| 29 | Impersonation + 2FA for platform | SaaS |
+| 30 | Event Bus (in-memory) + Automation Engine | Automation |
+| 31 | Automation templates (No-show, Survey, Reorder, Recall) | Automation |
+| 32 | Vitest (unit/contract/security) + Tenant Isolation CI tests | Testing |
+
+---
+
+## 🟡 Improvements on Existing Code
+
+| # | Feature | Effort | Section |
+|---|---------|--------|---------|
+| 33 | FDI/ISO tooth encoding + unified dental terminology | 🟠 Week+ | §9.1 |
+| 34 | Tax reports exportable (PDF/Excel) | 🟠 Week+ | §10 |
+| 35 | Time-boxed permissions (expiresAt on role membership) | 🟠 | §7 |
+| 36 | Delegation (temporary deputy with spatial/temporal scope) | 🟠 | §7 |
+| 37 | Extended MFA + SSO/SAML OIDC (H3 for large clinics) | 🟡 | §17 |
+| 38 | Reduce RPO to ≤15 min (H2) | 🟡 | §17 |
+| 39 | HIPAA/GDPR readiness + SOC2 documentation (H3) | 🟡 | §17 |
+| 40 | BI Suite (H1) — counters: chair utilization, doctor productivity, revenue by branch | 🟠 | §16 |
+| 41 | Aging RCM advanced screens (H2) | 🟠 | §10 |
+| 42 | WhatsApp Cloud API + Twilio completion (H1) | 🟠 | §14.3 |
+| 43 | FHIR Export mapping layer (Patient/Encounter/Observation/CarePlan/Invoice) | 🟠 Week+ | §14.2 |
+| 44 | Treatment Estimator — suggest procedure from tooth diagnosis | 🟠 | §9.1 |
+| 45 | Recall 360° engine + work list | 🟠 | §12.2 |
+| 46 | No-code visual editor over automation engine (H2) | 🔴 Month+ | §12.3 |
+| 47 | External webhook/event provider (H2) | 🟠 | §12.1 |
+
+---
+
+## ❌ New Features (Not Built Yet)
+
+### H1 (0–3 months)
+| # | Feature | Effort |
+|---|---------|--------|
+| 48 | **Patient Portal Web/PWA** (self-booking + e-consent + paylink + post-op + NPS) | 🔴 Month+ |
+| 49 | **Stripe Billing** (Trial 14d → subscription → auto-billing → Dunning) | 🔴 Month+ |
+| 50 | **Onboarding Wizard** (self-registration → clinic data → branch → invite staff → first patient) | 🔴 Month+ |
+| 51 | **Arabic Payment Gateways** (Moyasar/Stripe via PaymentGateway Interface) | 🔴 Month+ |
+| 52 | **Paylink via WhatsApp** (bot generates payment link in invoice/message) | 🟠 Week+ |
+| 53 | **No-show Prediction v1** (light model: past behavior + history) | 🟠 Week+ |
+| 54 | **Basic automation engine + templates** (reminders, post-visit survey, reorder) | 🟠 Week+ |
+| 55 | **Report Builder v1** (CSV export) | 🟠 Week+ |
+| 56 | **FHIR Export Endpoint** (/api/fhir/export — Patient, Encounter, Observation, CarePlan, Invoice) | 🟠 Week+ |
+| 57 | **Friendly treatment plan view for patient** (themed, visual, e-signature) | 🟠 Week+ |
+| 58 | **Electronic signature service** (local E-sign for H1 consents) | 🟠 Week+ |
+
+### H2 (3–6 months)
+| # | Feature | Effort |
+|---|---------|--------|
+| 59 | **Claims Workbench** (FHIR Claim/ClaimResponse + tracking + Rebill) | 🔴 Month+ |
+| 60 | **Bank reconciliation auto** (CSV/Bank import + auto-matching) | 🔴 Month+ |
+| 61 | **BNPL** (Tamara/Tabby/valU/eFinance with financing contract) | 🔴 Month+ |
+| 62 | **Campaign Manager** (send/measure A/B across channels) | 🟠 Week+ |
+| 63 | **Loyalty & Referral** (points/credit + annual subscription + "friend" reward) | 🟠 Week+ |
+| 64 | **Revenue Forecast & Cash Flow** | 🟠 Week+ |
+| 65 | **P&L per branch/group** (from Encounter/ChargeItem) | 🔴 Month+ |
+| 66 | **Report Builder complete** (Filters/Grouping → CSV/PDF/Excel + scheduled email) | 🔴 Month+ |
+| 67 | **No-code editor** (visual builder over event-based automation) | 🔴 Month+ |
+| 68 | **Zapier/Make Webhooks** (via shared event system) | 🟠 Week+ |
+| 69 | **Google/Microsoft Calendar sync** for doctors | 🟠 Week+ |
+| 70 | **External accounting integration** (QuickBooks/Xero/Zoho) | 🟠 Week+ |
+| 71 | **Supplier portal** for inventory | 🟠 Week+ |
+| 72 | **FHIR Import** (from government platforms/partners) | 🟠 Week+ |
+| 73 | **Copilot RAG** (text-based, API with Retriever, tenant-scoped) | 🔴 Month+ |
+| 74 | **Enhanced RPO** (repeated backups, 15 min target) | 🟡 |
+| 75 | **Treatment plan → Invoice/Installments/Insurance claim** (one-click conversion) | 🟠 Week+ |
+
+### H3 (6–12 months)
+| # | Feature | Effort |
+|---|---------|--------|
+| 76 | **Voice-to-Note (Arabic)** (STT external) | 🔴 Month+ |
+| 77 | **X-Ray Assistant (Beta)** (Human-in-the-loop mandatory) | 🔴 Month+ |
+| 78 | **Telehealth** (video via provider + hybrid appointments) | 🔴 Month+ |
+| 79 | **White-label + Custom domain** (brand kit + custom domain) | 🔴 Month+ |
+| 80 | **Partner/Reseller Console** (with commissions + quotes) | 🔴 Month+ |
+| 81 | **Marketplace + Benchmarks** (anonymous cross-clinic) | 🔴 Month+ |
+| 82 | **DICOM/PACS + Lab integration** (Orthanc/external DICOM) | 🔴 Month+ |
+| 83 | **Local insurance networks** (electronic, partner-dependent) | 🔴 Month+ |
+| 84 | **SOC2 + Data Residency (MENA)** | 🔴 Month+ |
+| 85 | **Native Mobile Apps** (patient/doctor) | 🔴 Month+ |
+| 86 | **Multi-region** | 🔴 Month+ |
+| 87 | **Face recognition** (optional, after H3) | 🔴 Month+ |
+| 88 | **Data Lake + Anonymous Benchmarks** | 🔴 Month+ |
+| 89 | **SSO/SAML OIDC for enterprise clinics** | 🔴 Month+ |
+
+---
+
+### Summary Counts
+- **✅ Completed:** 32 features
+- **🟡 Improvements:** 15 features
+- **❌ New (H1):** 11 features
+- **❌ New (H2):** 17 features
+- **❌ New (H3):** 14 features
+- **Total:** 89 features across the entire PRD

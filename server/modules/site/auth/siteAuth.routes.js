@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { authorizeSite, protectSite } from '../../../middleware/siteAuth.js';
+import { passwordSchema } from '../../../utils/passwordSchema.js';
 import { validate } from '../../../middleware/validate.js';
 import { createSiteAdmin, getSiteMe, initiateRecovery, siteLogin, siteLogout, siteRefresh, verifyRecoveryOtp } from './siteAuth.controller.js';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: passwordSchema,
 });
 
 const recoveryInitSchema = z.object({
@@ -23,7 +24,7 @@ const recoveryVerifySchema = z.object({
 const createAdminSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Invalid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: passwordSchema,
   role: z.enum(['super_admin', 'admin', 'support']).optional(),
 });
 

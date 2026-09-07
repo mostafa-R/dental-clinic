@@ -5,6 +5,7 @@ const { modelFactory } = vi.hoisted(() => ({
     class MockModel {}
     MockModel.deleteMany = vi.fn();
     MockModel.findByIdAndDelete = vi.fn();
+    MockModel.find = vi.fn();
     return { default: MockModel };
   },
 }));
@@ -20,6 +21,8 @@ vi.mock("../utils/cache.js", () => ({
   invalidateTenant: vi.fn(),
   invalidateTenantRoles: vi.fn(),
 }));
+
+vi.mock("node:fs/promises", () => ({ unlink: vi.fn() }));
 
 vi.mock("../modules/site/tenant/tenant.model.js", () => {
   class MockTenant {}
@@ -37,9 +40,11 @@ vi.mock("../modules/billing/invoice.model.js", () => modelFactory());
 vi.mock("../modules/billing/commission.model.js", () => modelFactory());
 vi.mock("../modules/site/tenant/subscription.model.js", () => modelFactory());
 vi.mock("../modules/emr/clinicalNote.model.js", () => modelFactory());
+vi.mock("../modules/emr/consent.model.js", () => modelFactory());
 vi.mock("../modules/emr/dentalChart.model.js", () => modelFactory());
 vi.mock("../modules/emr/treatmentPlan.model.js", () => modelFactory());
 vi.mock("../modules/emr/prescription.model.js", () => modelFactory());
+vi.mock("../modules/emr/attachment.model.js", () => modelFactory());
 vi.mock("../modules/patients/wallet.model.js", () => modelFactory());
 vi.mock("../modules/patients/installment.model.js", () => modelFactory());
 vi.mock("../modules/chat/message.model.js", () => modelFactory());
@@ -47,12 +52,15 @@ vi.mock("../modules/chat/channelRead.model.js", () => modelFactory());
 vi.mock("../modules/inventory/inventory.model.js", () => modelFactory());
 vi.mock("../modules/accounting/ownerDrawing.model.js", () => modelFactory());
 vi.mock("../modules/accounting/expense.model.js", () => modelFactory());
+vi.mock("../modules/accounting/dayClose.model.js", () => modelFactory());
+vi.mock("../modules/accounting/journalEntry.model.js", () => modelFactory());
 vi.mock("../modules/site/errorLog/errorLog.model.js", () => modelFactory());
 vi.mock("../modules/whatsapp/whatsappSetting.model.js", () => modelFactory());
 
 import { withTransaction } from "../core/transaction.js";
 import Counter from "../core/counters.js";
 import { cacheDelPattern, invalidateTenant, invalidateTenantRoles } from "../utils/cache.js";
+import { unlink } from "node:fs/promises";
 import { deleteTenant } from "../modules/site/tenant/tenant.service.js";
 import Tenant from "../modules/site/tenant/tenant.model.js";
 import User from "../modules/users/user.model.js";
@@ -64,7 +72,9 @@ import Invoice from "../modules/billing/invoice.model.js";
 import Commission from "../modules/billing/commission.model.js";
 import Subscription from "../modules/site/tenant/subscription.model.js";
 import ClinicalNote from "../modules/emr/clinicalNote.model.js";
+import Consent from "../modules/emr/consent.model.js";
 import DentalChart from "../modules/emr/dentalChart.model.js";
+import MedicalAttachment from "../modules/emr/attachment.model.js";
 import TreatmentPlan from "../modules/emr/treatmentPlan.model.js";
 import Prescription from "../modules/emr/prescription.model.js";
 import Wallet from "../modules/patients/wallet.model.js";
@@ -74,14 +84,17 @@ import ChannelRead from "../modules/chat/channelRead.model.js";
 import Inventory from "../modules/inventory/inventory.model.js";
 import OwnerDrawing from "../modules/accounting/ownerDrawing.model.js";
 import Expense from "../modules/accounting/expense.model.js";
+import DayClose from "../modules/accounting/dayClose.model.js";
+import JournalEntry from "../modules/accounting/journalEntry.model.js";
 import ErrorLog from "../modules/site/errorLog/errorLog.model.js";
 import WhatsappSetting from "../modules/whatsapp/whatsappSetting.model.js";
 
 const scopedModels = [
   User, Branch, Role, Patient, Appointment, Invoice, Subscription,
-  ClinicalNote, DentalChart, TreatmentPlan, Prescription, Wallet, Installment,
-  Message, ChannelRead, Inventory, Commission, OwnerDrawing, Expense,
-  ErrorLog, WhatsappSetting,
+  ClinicalNote, Consent, DentalChart, TreatmentPlan, Prescription,
+  MedicalAttachment, Wallet, Installment, Message, ChannelRead, Inventory,
+  Commission, OwnerDrawing, Expense, DayClose, JournalEntry, ErrorLog,
+  WhatsappSetting,
 ];
 
 describe("deleteTenant", () => {
@@ -96,6 +109,10 @@ describe("deleteTenant", () => {
       await fn(session);
     });
     vi.mocked(Tenant.findByIdAndDelete).mockResolvedValue({});
+    // The service reads attachment filenames before wiping them from disk.
+    MedicalAttachment.find.mockReturnValue({
+      select: () => ({ lean: vi.fn().mockResolvedValue([]) }),
+    });
   });
 
   it("runs the exhaustive delete inside a single MongoDB transaction", async () => {
@@ -131,6 +148,28 @@ describe("deleteTenant", () => {
       tenantId,
       { session: expect.anything() },
     );
+    expect(MedicalAttachment.find).toHaveBeenCalledWith({ tenant: tenantId });
+  });
+
+  it("unlinks encrypted attachment files after the records are wiped", async () => {
+    vi.mocked(unlink).mockResolvedValue();
+    MedicalAttachment.find.mockReturnValue({
+      select: () => ({
+        lean: vi.fn().mockResolvedValue([
+          { filename: "x-ray-1.pdf" },
+          { filename: "../escape.pdf" },
+        ]),
+      }),
+    });
+
+    await deleteTenant(tenantId);
+
+    // The filename is basename-guarded, so "../escape.pdf" collides with a
+    // literal "escape.pdf" rather than climbing out of the uploads root.
+    expect(unlink).toHaveBeenCalledWith(expect.stringContaining("x-ray-1.pdf"));
+    expect(unlink).toHaveBeenCalledWith(expect.stringContaining("x-ray-1.pdf.enc"));
+    expect(unlink).toHaveBeenCalledWith(expect.stringContaining("escape.pdf"));
+    expect(unlink).toHaveBeenCalledWith(expect.stringContaining("escape.pdf.enc"));
   });
 
   it("invalidates tenant cache, role cache and permission keys after the transaction", async () => {
@@ -150,6 +189,7 @@ describe("deleteTenant", () => {
     for (const Model of scopedModels) {
       expect(Model.deleteMany).not.toHaveBeenCalled();
     }
+    expect(MedicalAttachment.find).not.toHaveBeenCalled();
     expect(Tenant.findByIdAndDelete).not.toHaveBeenCalled();
   });
 });

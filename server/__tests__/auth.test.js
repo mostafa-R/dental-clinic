@@ -50,6 +50,10 @@ function setSessionUser(user = { _id: "u1", name: "Dr Test" }) {
 }
 
 describe("POST /api/auth/login", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("returns the user and sets session cookies on success", async () => {
     vi.mocked(authService.authenticateUser).mockResolvedValue({
       _id: "u1",
@@ -58,7 +62,7 @@ describe("POST /api/auth/login", () => {
     });
     const res = await request(makeApp())
       .post("/api/auth/login")
-      .send({ email: "doctor@clinic.test", password: "password123" });
+      .send({ email: "doctor@clinic.test", password: "Password123!" });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data.user.name).toBe("Dr Test");
@@ -71,7 +75,7 @@ describe("POST /api/auth/login", () => {
     );
     const res = await request(makeApp())
       .post("/api/auth/login")
-      .send({ email: "doctor@clinic.test", password: "wrongpassword" });
+      .send({ email: "doctor@clinic.test", password: "Wrongpass123!" });
     expect(res.status).toBe(401);
     expect(res.body.message).toBe("Invalid email or password");
   });
@@ -82,7 +86,7 @@ describe("POST /api/auth/login", () => {
     );
     const res = await request(makeApp())
       .post("/api/auth/login")
-      .send({ email: "doctor@clinic.test", password: "password123" });
+      .send({ email: "doctor@clinic.test", password: "Password123!" });
     expect(res.status).toBe(403);
   });
 
@@ -92,7 +96,7 @@ describe("POST /api/auth/login", () => {
     );
     const res = await request(makeApp())
       .post("/api/auth/login")
-      .send({ email: "doctor@clinic.test", password: "password123" });
+      .send({ email: "doctor@clinic.test", password: "Password123!" });
     expect(res.status).toBe(403);
     expect(res.body.message).toContain("suspended");
   });
@@ -103,6 +107,14 @@ describe("POST /api/auth/login", () => {
       .send({ email: "not-an-email", password: "short" });
     expect(res.status).toBe(400);
     expect(res.body.message).toBe("Validation failed");
+  });
+
+  it("rejects a password that fails complexity requirements with 400", async () => {
+    const res = await request(makeApp())
+      .post("/api/auth/login")
+      .send({ email: "doctor@clinic.test", password: "password123" });
+    expect(res.status).toBe(400);
+    expect(vi.mocked(authService.authenticateUser)).not.toHaveBeenCalled();
   });
 });
 

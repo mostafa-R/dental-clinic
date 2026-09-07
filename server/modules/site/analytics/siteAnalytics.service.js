@@ -123,7 +123,9 @@ export async function getTenantUsage(tenantId) {
     Branch.countDocuments({ tenant: tenantId }),
     User.countDocuments({ tenant: tenantId }),
     User.countDocuments({ tenant: tenantId, isDoctor: true }),
-    Patient.countDocuments({ tenant: tenantId }),
+    // Count ACTIVE patients only to match the plan-limit enforcement
+    // (createPatient tracks a tenant's active slots, not lifetime-created).
+    Patient.countDocuments({ tenant: tenantId, isActive: true }),
     DentalChart.countDocuments({ tenant: tenantId }),
     ClinicalNote.countDocuments({ tenant: tenantId }),
   ]);

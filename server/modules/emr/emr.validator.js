@@ -65,16 +65,17 @@ const treatmentItemSchema = z.object({
 
 export const createTreatmentPlanSchema = z.object({
   title: z.string().min(1, 'Title is required').max(120),
+  doctor: objectId,
   diagnosis: z.string().max(1000).optional(),
-  status: z.enum(PLAN_STATUSES).optional(),
   items: z.array(treatmentItemSchema).min(1, 'At least one item is required').max(100),
   nextAppointment: dateOrEmpty,
   nextAppointmentNotes: z.string().max(500).optional(),
-});
+}).strip();
 
 export const updateTreatmentPlanSchema = z
   .object({
     title: z.string().min(1).max(120).optional(),
+    doctor: objectId.optional(),
     diagnosis: z.string().max(1000).optional(),
     status: z.enum(PLAN_STATUSES).optional(),
     nextAppointment: dateOrEmpty,
@@ -135,8 +136,18 @@ export const updatePrescriptionSchema = z
 /* --------------------------------------------------------------- Clinical note */
 
 const attachmentSchema = z.object({
+  _id: objectId.optional(),
   type: z.enum(ATTACHMENT_TYPES).optional(),
-  url: z.string().min(1, 'Attachment URL is required').max(1024),
+  // L6: URLs are service paths (/api/...) or https — arbitrary/javascript:/
+  // data: schemes are rejected to stop script-injection attachment links.
+  url: z
+    .string()
+    .min(1, 'Attachment URL is required')
+    .max(1024)
+    .refine(
+      (u) => u.startsWith('/api/') || /^https:\/\//i.test(u),
+      { message: 'Attachment URL must be a local /api/ path or an https:// link' },
+    ),
   caption: z.string().max(200).optional(),
 });
 

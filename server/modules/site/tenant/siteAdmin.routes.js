@@ -3,6 +3,7 @@ import { z } from "zod";
 import { audit } from "../../../middleware/audit.js";
 import { require2faSuperAdmin } from "../../../middleware/require2fa.js";
 import { authorizeSite, protectSite } from "../../../middleware/siteAuth.js";
+import { optionalPasswordSchema } from "../../../utils/passwordSchema.js";
 import { validate } from "../../../middleware/validate.js";
 import {
   createAdmin,
@@ -20,7 +21,7 @@ router.use(protectSite);
 const adminSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters").optional(),
+  password: optionalPasswordSchema,
   role: z.enum(["super_admin", "admin", "support"]).optional(),
   permissions: z.array(z.string()).optional(),
 });

@@ -23,6 +23,7 @@ import { escapeRegex } from '../../utils/escapeRegex.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 import { stripPHI } from '../../middleware/phiRestrict.js';
 import { emitToBranch } from '../../socket/index.js';
+import { publishEvent } from '../../services/eventBus.js';
 
 function buildSearchFilter(search) {
   if (!search?.trim()) return null;
@@ -75,6 +76,21 @@ async function resolveBranchForReassign(branchId, patientTenant) {
   }
 
   return toObjectId(targetBranch._id);
+}
+
+/**
+ * Release a tenant's patient plan slot when a record is retired (archived or
+ * merged away). Mirrors the atomic slot claim in createPatient so the plan cap
+ * tracks ACTIVE records: archiving a patient frees quota instead of permanently
+ * burning it. Runs inside the caller's transaction when `session` is supplied.
+ */
+async function releasePatientSlot(tenantId, session) {
+  if (!tenantId) return;
+  await Counter.findOneAndUpdate(
+    { _id: `patient_slots:${String(tenantId)}` },
+    { $inc: { seq: -1 } },
+    { session, returnDocument: 'after' },
+  );
 }
 
 export const listPatients = asyncHandler(async (req, res) => {
@@ -175,6 +191,29 @@ export const createPatient = asyncHandler(async (req, res) => {
   });
 
   emitToBranch(String(branch), 'patient:created', { patient });
+
+  // Event Bus (PRD §12.3): new registrations can power welcome automations.
+  // Publish only the minimal demographic fields the automation engine reads
+  // (`{{patient.phone}}`, name, id). Deliberately do NOT attach the full
+  // `patientDoc` clone — it would persist the patient's entire clinical PHI
+  // to the events/automationruns collections, expanding PHI-at-rest beyond
+  // the clinical record for no consumer benefit.
+  void publishEvent({
+    type: 'patient.created',
+    tenant,
+    branch,
+    data: {
+      id: String(patient._id),
+      patient: {
+        id: String(patient._id),
+        patientId: patient.patientId,
+        firstName: patient.firstName,
+        lastName: patient.lastName,
+        phone: patient.phone,
+      },
+    },
+  });
+
   return sendSuccess(
     res,
     { patient: req.isImpersonation ? stripPHI(patient.toJSON()) : patient },
@@ -243,17 +282,25 @@ export const archivePatient = asyncHandler(async (req, res) => {
   }
 
   const branchFilter = filterByBranch(req);
-  const patient = await Patient.findOneAndUpdate(
-    { _id: id, ...branchFilter },
-    { isActive: false },
-    { returnDocument: "after" },
-  );
 
-  if (!patient) {
+  // Archive + plan-slot release are atomic: a crash between them would leave a
+  // leaked slot and permanently lock the tenant out of its plan quota.
+  const result = await withTransaction(async (session) => {
+    const patient = await Patient.findOneAndUpdate(
+      { _id: id, ...branchFilter },
+      { isActive: false },
+      { returnDocument: 'after', session },
+    );
+    if (!patient) return null;
+    await releasePatientSlot(patient.tenant, session);
+    return patient;
+  });
+
+  if (!result) {
     throw ApiError.notFound('Patient not found');
   }
 
-  emitToBranch(String(patient.branch), 'patient:archived', { _id: patient._id });
+  emitToBranch(String(result.branch), 'patient:archived', { _id: result._id });
   return sendSuccess(res, { message: 'Patient archived' });
 });
 
@@ -337,6 +384,20 @@ export const findDuplicatePatients = asyncHandler(async (req, res) => {
   ]);
 
   const groups = [...phoneGroups, ...nameDobGroups].sort((a, b) => b.count - a.count);
+
+  if (req.isImpersonation) {
+    // PHI: an impersonation session must not see patient phone numbers or
+    // dates of birth, even inside the duplicate-group projection. stripPHI
+    // removes phone/email/dob from each `patients` entry, but the group `key`
+    // also embeds PHI (the phone, or name+dob). Redact it so no PHI survives
+    // in the group metadata either.
+    const payload = stripPHI(groups).map((g) => ({
+      ...g,
+      key: g.matchedOn === 'phone' ? '[redacted phone]' : '[redacted name + dob]',
+    }));
+    return sendSuccess(res, { groups: payload, total: payload.length });
+  }
+
   return sendSuccess(res, { groups, total: groups.length });
 });
 
@@ -438,10 +499,13 @@ export const mergePatients = asyncHandler(async (req, res) => {
       }
     }
 
-    // 4. Archive the duplicate with an audit pointer to the survivor.
+    // 4. Archive the duplicate with an audit pointer to the survivor, and
+    //    release its plan slot (the record is retired, so it must no longer
+    //    count toward the tenant's patient quota).
     source.isActive = false;
     source.mergedInto = target._id;
     await source.save({ session });
+    await releasePatientSlot(source.tenant, session);
   });
 
   emitToBranch(String(target.branch), 'patient:merged', {

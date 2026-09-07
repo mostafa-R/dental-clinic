@@ -84,11 +84,11 @@ describe('Enhanced Role Controller', () => {
     mockReq = {
       user: {
         tenant: { _id: 'tenant123' },
-        branch: { _id: 'branch123' },
-        _roleResolved: {
-          permissionMap: vi.fn(),
-          isSystemAdmin: false
-        }
+        branch: { _id: 'branch123' }
+      },
+      _roleResolved: {
+        permissionMap: vi.fn(),
+        isSystemAdmin: false
       },
       params: {},
       body: {}
@@ -107,7 +107,7 @@ describe('Enhanced Role Controller', () => {
       { key: 'doctor', name: 'طبيب', isBuiltIn: true }
     ]);
     
-    mockReq.user._roleResolved.permissionMap.mockReturnValue({
+    mockReq._roleResolved.permissionMap.mockReturnValue({
       dashboard: ['read', 'update'],
       patients: ['read'],
       appointments: ['read']
@@ -235,10 +235,7 @@ describe('Enhanced Role Controller', () => {
 
       expect(Role.findOne).toHaveBeenCalledWith({
         _id: 'baseRole123',
-        $or: [
-          { tenant: 'tenant123' },
-          { tenant: null }
-        ]
+        tenant: 'tenant123'
       });
 
       expect(Role.create).toHaveBeenCalledWith({
@@ -306,11 +303,11 @@ describe('Enhanced Role Controller', () => {
         { module: 'patients', actions: ['read'] }
       ];
 
-      Role.findById.mockResolvedValue(role);
+      Role.findOne.mockResolvedValue(role);
 
       await updateRolePermissions(mockReq, mockRes);
 
-      expect(Role.findById).toHaveBeenCalledWith('role123');
+      expect(Role.findOne).toHaveBeenCalledWith({ _id: 'role123', tenant: 'tenant123' });
       expect(role.permissions).toEqual(mockReq.body.permissions);
       expect(role.save).toHaveBeenCalled();
       expect(invalidateRoleCache).toHaveBeenCalledWith('role123');
@@ -333,13 +330,44 @@ describe('Enhanced Role Controller', () => {
         { module: 'dashboard', actions: ['create'] } // User only has read,update
       ];
 
-      Role.findById.mockResolvedValue(role);
+      Role.findOne.mockResolvedValue(role);
 
       await expect(updateRolePermissions(mockReq, mockRes)).rejects.toThrow(ApiError);
       
       const error = await updateRolePermissions(mockReq, mockRes).catch(e => e);
       expect(error.statusCode).toBe(403);
       expect(error.message).toContain('cannot grant');
+    });
+
+    it('should allow system admin to grant any permissions', async () => {
+      const role = {
+        _id: 'role123',
+        name: 'Test Role',
+        isBuiltIn: false,
+        permissions: [],
+        save: vi.fn().mockResolvedValue(true)
+      };
+
+      mockReq._roleResolved.isSystemAdmin = true;
+      mockReq.params.id = 'role123';
+      mockReq.body.permissions = [
+        { module: 'dashboard', actions: ['delete'] } // Not held, but admin bypasses
+      ];
+
+      Role.findOne.mockResolvedValue(role);
+
+      await updateRolePermissions(mockReq, mockRes);
+      expect(role.permissions).toEqual(mockReq.body.permissions);
+    });
+
+    it('should reject updating a role from another tenant (cross-tenant IDOR)', async () => {
+      mockReq.params.id = 'role123';
+      mockReq.body.permissions = [{ module: 'dashboard', actions: ['read'] }];
+
+      Role.findOne.mockResolvedValue(null); // not in caller's tenant
+
+      await expect(updateRolePermissions(mockReq, mockRes)).rejects.toMatchObject({ statusCode: 404 });
+      expect(Role.findOne).toHaveBeenCalledWith({ _id: 'role123', tenant: 'tenant123' });
     });
   });
 
@@ -356,7 +384,7 @@ describe('Enhanced Role Controller', () => {
       mockReq.params.id = 'role123';
       mockReq.body.isActive = true;
 
-      Role.findById.mockResolvedValue(role);
+      Role.findOne.mockResolvedValue(role);
 
       await toggleRoleStatus(mockReq, mockRes);
 
@@ -378,7 +406,7 @@ describe('Enhanced Role Controller', () => {
       mockReq.params.id = 'role123';
       mockReq.body.isActive = false;
 
-      Role.findById.mockResolvedValue(role);
+      Role.findOne.mockResolvedValue(role);
       User.find.mockResolvedValue([{ _id: 'user1' }, { _id: 'user2' }]);
 
       await toggleRoleStatus(mockReq, mockRes);
@@ -387,8 +415,8 @@ describe('Enhanced Role Controller', () => {
       expect(role.save).toHaveBeenCalled();
       expect(invalidateRoleCache).toHaveBeenCalledWith('role123');
       expect(User.updateMany).toHaveBeenCalledWith(
-        { role: 'role123' },
-        { $set: { role: null } }
+        { roleId: 'role123' },
+        { $set: { roleId: null } }
       );
     });
 
@@ -403,13 +431,23 @@ describe('Enhanced Role Controller', () => {
       mockReq.params.id = 'role123';
       mockReq.body.isActive = false;
 
-      Role.findById.mockResolvedValue(role);
+      Role.findOne.mockResolvedValue(role);
 
       await expect(toggleRoleStatus(mockReq, mockRes)).rejects.toThrow(ApiError);
       
       const error = await toggleRoleStatus(mockReq, mockRes).catch(e => e);
       expect(error.statusCode).toBe(403);
       expect(error.message).toContain('Cannot deactivate built-in roles');
+    });
+
+    it('should reject toggling a role from another tenant (cross-tenant IDOR)', async () => {
+      mockReq.params.id = 'role123';
+      mockReq.body.isActive = false;
+
+      Role.findOne.mockResolvedValue(null); // not in caller's tenant
+
+      await expect(toggleRoleStatus(mockReq, mockRes)).rejects.toMatchObject({ statusCode: 404 });
+      expect(Role.findOne).toHaveBeenCalledWith({ _id: 'role123', tenant: 'tenant123' });
     });
   });
 });

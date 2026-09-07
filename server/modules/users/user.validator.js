@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { optionalPasswordSchema, passwordSchema } from '../../utils/passwordSchema.js';
 
 export const objectIdStr = z.string().length(24, 'Invalid id');
 
@@ -13,7 +14,7 @@ export const createUserSchema = z.object({
   email: z.string().email('Invalid email address'),
   // PRD §6.1: optional username usable for login instead of the email.
   username: usernameSchema.optional(),
-  password: z.string().min(8, 'Password must be at least 8 characters').max(128),
+  password: passwordSchema,
   roleId: objectIdStr,
   phone: z.string().max(30).optional(),
   branch: objectIdStr.optional(),
@@ -32,7 +33,7 @@ export const updateUserSchema = z
     isActive: z.boolean().optional(),
     isDoctor: z.boolean().optional(),
     commissionRate: z.number().min(0).max(100).optional(),
-    password: z.string().min(8).max(128).optional(),
+    password: optionalPasswordSchema,
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: 'No fields provided to update',

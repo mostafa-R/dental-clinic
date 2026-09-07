@@ -27,6 +27,23 @@ function archiveToothState(chart, tooth, userId) {
 }
 
 /**
+ * L5: true only when the incoming patch actually alters the tooth. No-op
+ * clicks (e.g. re-selecting the current state) must not spam the history
+ * with identical snapshots.
+ */
+function toothChangedBy(tooth, incoming) {
+  if (incoming.state && incoming.state !== tooth.state) return true;
+  if (incoming.surfaces) {
+    const current = tooth.surfaces;
+    for (const [k, v] of Object.entries(incoming.surfaces)) {
+      if (current[k] !== v) return true;
+    }
+  }
+  if (incoming.notes !== undefined && incoming.notes !== tooth.notes) return true;
+  return false;
+}
+
+/**
  * GET /patients/:patientId/dental-chart
  * Returns the patient's chart, creating a fresh sound chart on first access
  * so the doctor never sees an empty/broken chart.
@@ -78,6 +95,7 @@ export const updateDentalChart = asyncHandler(async (req, res) => {
       }
       const existing = byNumber.get(incoming.number);
       if (!existing) continue;
+      if (!toothChangedBy(existing, incoming)) continue;
       archiveToothState(chart, existing, req.user._id);
       if (incoming.state) existing.state = incoming.state;
       if (incoming.surfaces) Object.assign(existing.surfaces, incoming.surfaces);
@@ -116,6 +134,12 @@ export const updateTooth = asyncHandler(async (req, res) => {
   const tooth = chart.teeth.find((t) => t.number === number);
   if (!tooth) {
     throw ApiError.notFound('Tooth not found in chart');
+  }
+
+  // L5: a no-op edit (same state/surfaces/notes) changes nothing — do not
+  // rewrite history or bump the chart's updatedAt.
+  if (!toothChangedBy(tooth, data)) {
+    return sendSuccess(res, { chart: req.isImpersonation ? stripPHI(chart.toJSON()) : chart });
   }
 
   archiveToothState(chart, tooth, req.user._id);

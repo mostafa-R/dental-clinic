@@ -36,6 +36,8 @@ export const MODULES = [
   { key: 'settings', label: 'Clinic Settings' },
   { key: 'roles', label: 'Roles & Permissions' },
   { key: 'chat', label: 'Clinic Chat' },
+  { key: 'consents', label: 'Consents & E-Signature' },
+  { key: 'automations', label: 'Automation Rules' },
 ];
 
 export const MODULE_KEYS = MODULES.map((m) => m.key);

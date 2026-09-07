@@ -40,6 +40,25 @@ const PHI_FIELDS = new Set([
   'emergencyContact',
   'insurance',
   'nextAppointmentNotes',
+  // Contact / demographic PHI fields present on Patient (and nested records).
+  'mobile',
+  'secondaryPhone',
+  'emergencyPhone',
+  'guardian',
+  'guardianName',
+  'guardianPhone',
+  'occupation',
+  'bloodGroup',
+  'nationality',
+  'maritalStatus',
+  'religion',
+  'socialStatus',
+  'insuranceNumber',
+  // Clinical-consent / attachment content is PHI too.
+  'termsText',
+  'declineReason',
+  'withdrawReason',
+  'caption',
 ]);
 
 function isPlainObject(value) {
@@ -49,13 +68,28 @@ function isPlainObject(value) {
 }
 
 /**
- * Strips PHI fields from a patient/EMR object, recursing into nested plain
- * objects and arrays so fields like `teeth[].notes`, `items[].notes`,
+ * Strips PHI fields from a patient/EMR object, recursing into nested objects
+ * and arrays so fields like `teeth[].notes`, `items[].notes`,
  * `medicalHistory`, `medications`, `emergencyContact` and `insurance` are
- * masked too. Dates, ObjectIds and Mongoose documents are preserved as-is.
+ * masked too.
+ *
+ * Mongoose documents (and populated sub-documents) are NOT plain objects, so
+ * they are converted with `.toJSON()` first — otherwise the recursion would
+ * miss every field inside a raw document (this is what leaked PHI to
+ * impersonated sockets). Dates and other non-plain values are preserved.
  * Call this before sending the response when req.isImpersonation is true.
  */
 export function stripPHI(value) {
+  if (
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    !isPlainObject(value) &&
+    typeof value.toJSON === 'function' &&
+    !(value instanceof Date)
+  ) {
+    return stripPHI(value.toJSON());
+  }
   if (Array.isArray(value)) {
     return value.map((item) => stripPHI(item));
   }
@@ -66,7 +100,7 @@ export function stripPHI(value) {
   for (const key of Object.keys(clone)) {
     if (PHI_FIELDS.has(key)) {
       delete clone[key];
-    } else if (isPlainObject(clone[key]) || Array.isArray(clone[key])) {
+    } else if (clone[key] && typeof clone[key] === 'object') {
       clone[key] = stripPHI(clone[key]);
     }
   }

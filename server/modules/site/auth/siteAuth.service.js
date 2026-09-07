@@ -59,10 +59,24 @@ export async function refreshSiteAdmin(decoded, currentVersion) {
   return true;
 }
 
-export async function rotateSiteAdminToken(admin) {
-  admin.tokenVersion = (admin.tokenVersion || 0) + 1;
-  await admin.save();
-  return admin;
+/**
+ * Atomically rotates a site admin's token version, replaying the provided
+ * decoded token. Uses a compare-and-swap on `tokenVersion` so two concurrent
+ * refresh requests cannot both succeed with the same refresh token.
+ * Returns the updated admin doc, or null when the token has already been
+ * rotated (replay/race detected).
+ */
+export async function rotateSiteAdminToken(admin, decoded) {
+  const expectedVersion =
+    decoded?.tokenVersion !== undefined ? decoded.tokenVersion : admin.tokenVersion;
+
+  const updated = await SiteAdmin.findOneAndUpdate(
+    { _id: admin._id, tokenVersion: expectedVersion },
+    { $inc: { tokenVersion: 1 } },
+    { returnDocument: "after" },
+  );
+
+  return updated;
 }
 
 export async function createSiteAdmin({ name, email, password, role }) {
@@ -160,7 +174,14 @@ export async function verifyRecoveryOtp(email, otp, recoveryToken, { ip, userAge
     throw ApiError.unauthorized('OTP has expired. Please initiate recovery again.');
   }
 
-  if (storedOtp !== otp) {
+  // Compare in constant time; both are 6-digit strings so buffers match in length.
+  const providedOtp = String(otp);
+  const expectedOtp = String(storedOtp);
+  const match =
+    providedOtp.length === expectedOtp.length &&
+    crypto.timingSafeEqual(Buffer.from(providedOtp, 'utf8'), Buffer.from(expectedOtp, 'utf8'));
+
+  if (!match) {
     // Increment failed attempts
     const failKey = `recovery:otp:fail:${email.toLowerCase()}`;
     const fails = await redis.incr(failKey);

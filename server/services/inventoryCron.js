@@ -2,6 +2,7 @@ import cron from 'node-cron';
 
 import InventoryItem from '../modules/inventory/inventory.model.js';
 import { emitToBranch } from '../socket/index.js';
+import { publishEvent } from './eventBus.js';
 
 // PRD §6.8: expiry alerts at 30 days / 7 days / on the expiry date, and a
 // daily conversion of expired stock into an "expired" ledger entry.
@@ -37,6 +38,23 @@ export function emitItemAlerts(item) {
       quantity: item.quantity,
       reorderPoint: item.reorderPoint,
       unit: item.unit,
+    });
+
+    // Event Bus (PRD §12.3): low stock can power smart-reorder automations.
+    void publishEvent({
+      type: 'inventory.low_stock',
+      tenant: item.tenant,
+      branch: item.branch,
+      data: {
+        id: String(item._id),
+        item: {
+          id: String(item._id),
+          name: item.name,
+          quantity: item.quantity,
+          reorderPoint: item.reorderPoint,
+          unit: item.unit,
+        },
+      },
     });
   }
 
@@ -76,20 +94,48 @@ export async function runInventoryMaintenance() {
       if (items.length === 0) break;
 
       for (const item of items) {
-        const amount = item.quantity;
-        item.quantity = 0;
-        item.transactions.push({
-          type: 'expired',
-          quantity: -amount,
-          reason: 'Expired — automatic stock-out',
-          reference: `expiry:${startOfDay(item.expiryDate).toISOString().slice(0, 10)}`,
-          date: now,
-        });
-        await item.save();
+        // Atomic zero-out guarded by `quantity > 0` so a concurrent
+        // deductForProcedure/adjustStock between `find` and here is never
+        // clobbered by a stale read (the old code did read-then-save). The
+        // pipeline update reads the PRE-update quantity for the single
+        // immutable ledger entry; a null result means a concurrent write
+        // already converted this item — skip it instead of double-recording.
+        const expiryRef = `expiry:${startOfDay(item.expiryDate).toISOString().slice(0, 10)}`;
+        const converted = await InventoryItem.findOneAndUpdate(
+          {
+            _id: item._id,
+            isActive: true,
+            expiryDate: { $lt: now },
+            quantity: { $gt: 0 },
+          },
+          [
+            {
+              $set: {
+                quantity: 0,
+                transactions: {
+                  $concatArrays: [
+                    { $ifNull: ['$transactions', []] },
+                    [{
+                      type: 'expired',
+                      quantity: { $multiply: ['$quantity', -1] },
+                      reason: 'Expired — automatic stock-out',
+                      reference: expiryRef,
+                      date: { $toDate: '$$NOW' },
+                    }],
+                  ],
+                },
+              },
+            },
+          ],
+          { returnDocument: 'before', updatePipeline: true },
+        );
+
+        if (!converted || converted.quantity == null) continue;
+
         emitToBranch(item.branch, 'stock.expired', {
           itemId: String(item._id),
           name: item.name,
-          quantityRemoved: amount,
+          quantityRemoved: converted.quantity,
           expiryDate: item.expiryDate,
         });
         expiredCount++;
