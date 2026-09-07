@@ -204,7 +204,7 @@ async function getBufferMinutes(branch) {
  * slotDuration extended by `slots` (×1/×2/×3).
  */
 async function resolveDefaultEnd(branch, start, slots) {
-  if (!start || !slots) return null;
+  if (!start) return null;
   let slotMinutes = DEFAULT_SLOT_MINUTES;
   if (branch?.slotDuration != null) {
     slotMinutes = branch.slotDuration;
@@ -212,7 +212,7 @@ async function resolveDefaultEnd(branch, start, slots) {
     const doc = await Branch.findById(branch?._id || branch).select('slotDuration').lean();
     if (doc?.slotDuration != null) slotMinutes = doc.slotDuration;
   }
-  return new Date(start.getTime() + slotMinutes * slots * 60000);
+  return new Date(start.getTime() + slotMinutes * (slots ?? 1) * 60000);
 }
 
 /**
@@ -220,7 +220,9 @@ async function resolveDefaultEnd(branch, start, slots) {
  * bufferTime are tolerated (BR-PT-02); anything longer conflicts.
  */
 async function assertNoDoctorOverlap({ doctor, branch, start, end, excludeId }) {
-  if (!start || !end) return;
+  if (!start || !end) {
+    throw ApiError.badRequest('Appointment requires both a start and an end time', { start: 'required', end: 'required' });
+  }
   const filter = {
     doctor: toObjectId(doctor),
     branch: toObjectId(branch),
@@ -246,7 +248,9 @@ async function assertNoDoctorOverlap({ doctor, branch, start, end, excludeId }) 
  * Check for patient appointment overlaps (same patient can't have overlapping appointments)
  */
 async function assertNoPatientOverlap({ patient, branch, start, end, excludeId }) {
-  if (!start || !end) return;
+  if (!start || !end) {
+    throw ApiError.badRequest('Appointment requires both a start and an end time', { start: 'required', end: 'required' });
+  }
   const filter = {
     patient: toObjectId(patient),
     branch: toObjectId(branch),
@@ -281,7 +285,9 @@ async function assertNoPatientOverlap({ patient, branch, start, end, excludeId }
  * caught by the range check.
  */
 async function assertNoChairOverlap({ chair, branch, start, end, excludeId }) {
-  if (!start || !end) return;
+  if (!start || !end) {
+    throw ApiError.badRequest('Appointment requires both a start and an end time', { start: 'required', end: 'required' });
+  }
   const rawChair = String(chair || '').trim();
   const key = canonicalChairKey(chair);
   if (!rawChair && !key) return;
@@ -311,7 +317,9 @@ async function assertNoChairOverlap({ chair, branch, start, end, excludeId }) {
  * Check if appointment falls within clinic working hours
  */
 async function assertClinicHours(branch, start, end) {
-  if (!start || !end) return;
+  if (!start || !end) {
+    throw ApiError.badRequest('Appointment requires both a start and an end time', { start: 'required', end: 'required' });
+  }
 
   // Reload branch with working hours if not populated. NOT lean — the
   // isWithinWorkingHours schema method must survive on the document.
@@ -331,7 +339,9 @@ async function assertClinicHours(branch, start, end) {
  * Check if doctor is available (working hours and availability exceptions)
  */
 async function assertDoctorAvailability(doctor, branch, start, end) {
-  if (!start || !end) return;
+  if (!start || !end) {
+    throw ApiError.badRequest('Appointment requires both a start and an end time', { start: 'required', end: 'required' });
+  }
 
   // Check doctor's working hours. NOT lean — isAvailableAt is a schema
   // method and must survive on the document.
@@ -382,8 +392,14 @@ export const createAppointment = asyncHandler(async (req, res) => {
 
   const start = data.start ? new Date(data.start) : null;
   let end = data.end ? new Date(data.end) : null;
-  // PRD §6.4: default duration = branch slotDuration × slots (×1/×2/×3).
-  if (!end && start) {
+  if (!start) {
+    // Every guard (clinic hours, availability, doctor/patient/chair overlap)
+    // needs a concrete start; a start-less booking is meaningless.
+    throw ApiError.badRequest('Appointment start time is required', { start: 'required' });
+  }
+  // PRD §6.4: default duration = branch slotDuration × (slots ?? 1). Resolving
+  // here guarantees start+end are always present, so no guard can be skipped.
+  if (!end) {
     end = await resolveDefaultEnd(branch, start, data.slots);
   }
 
@@ -468,11 +484,20 @@ export const updateAppointment = asyncHandler(async (req, res) => {
   // Determine new values
   const newStart = data.start ? new Date(data.start) : existing.start;
   let newEnd = data.end ? new Date(data.end) : existing.end;
-  // PRD §6.4: slots extends the duration from slotDuration when only the
-  // start is being moved.
-  if (!data.end && data.start && data.slots) {
-    const computed = await resolveDefaultEnd(existing.branch, newStart, data.slots);
-    if (computed) newEnd = computed;
+  if (!newStart) {
+    throw ApiError.badRequest('Appointment start time is required', { start: 'required' });
+  }
+  // PRD §6.4: when `end` is omitted, default it so the overlap/availability
+  // guards below always receive a concrete range. Moving just the start keeps
+  // the appointment's existing length; otherwise slotDuration × (slots ?? 1).
+  if (data.start && !data.end && existing.start && existing.end) {
+    newEnd = new Date(newStart.getTime() + (existing.end.getTime() - existing.start.getTime()));
+  }
+  if (!newEnd) {
+    newEnd = await resolveDefaultEnd(existing.branch, newStart, data.slots ?? 1);
+  }
+  if (newEnd <= newStart) {
+    throw ApiError.badRequest('End time must be after start time', { end: 'after start' });
   }
   const newDoctor = data.doctor ? toObjectId(data.doctor) : existing.doctor;
   const newPatient = data.patient ? toObjectId(data.patient) : existing.patient;
@@ -539,6 +564,11 @@ export const updateAppointment = asyncHandler(async (req, res) => {
   if (setPayload.doctor) setPayload.doctor = toObjectId(setPayload.doctor);
   if (setPayload.start) setPayload.start = new Date(setPayload.start);
   if (setPayload.end) setPayload.end = new Date(setPayload.end);
+  if (data.start) setPayload.start = newStart;
+  if (data.end) setPayload.end = new Date(data.end);
+  // Persist the resolved default end too — moving the start, or updating a
+  // legacy end-less row, must leave a whole, guardable time range in store.
+  if (!data.end && (data.start || !existing.end)) setPayload.end = newEnd;
   if (setPayload.chair !== undefined) setPayload.chairKey = canonicalChairKey(setPayload.chair);
   delete setPayload.branch;
   delete setPayload.slots; // scheduling helper, not a persisted field
