@@ -29,8 +29,11 @@ function toObjectIdList(value) {
 }
 
 function emitAppointment(branchId, event, appointment) {
+  // Branch rooms are broadcast channels for every workstation and the waiting
+  // board, so the populated patient (phone/email/…) must never ride along.
+  const json = appointment.toJSON ? appointment.toJSON() : appointment;
   const payload = {
-    appointment: appointment.toJSON ? appointment.toJSON() : appointment,
+    appointment: stripPHI(json),
   };
   const resolved = branchId?._id ?? branchId;
   emitToBranch(String(resolved), event, payload);
@@ -44,8 +47,12 @@ const QUEUE_RELEVANT_STATUSES = new Set(['checked_in', 'in_progress', 'completed
 
 function emitQueueStatusChange(appointment) {
   if (!QUEUE_RELEVANT_STATUSES.has(appointment.status)) return;
+  // The populated patient carries phone and other identifiable data, and the
+  // branch / tenant queue rooms are broadcast rooms read by any logged-in
+  // workstation (and the waiting-room board). Strip PHI before it leaves.
+  const json = appointment.toJSON ? appointment.toJSON() : appointment;
   const payload = {
-    appointment: appointment.toJSON ? appointment.toJSON() : appointment,
+    appointment: stripPHI(json),
   };
   emitToBranch(String(appointment.branch), 'queue.status.changed', payload);
   emitToTenantQueue(appointment.tenant ? String(appointment.tenant) : null, 'queue.status.changed', payload);
