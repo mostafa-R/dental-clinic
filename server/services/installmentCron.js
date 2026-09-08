@@ -16,14 +16,15 @@ async function markOverdue() {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - THIRTY_DAYS_MS);
     let changed = 0;
-    let skip = 0;
+    let lastId = null;
     const affectedPlans = [];
 
-    // Paginate so a large number of active plans never all get loaded into
-    // memory in a single pass.
+    // Cursor-based pagination: pages forward by _id so large collections
+    // never cause O(n) skips or repeated result-set loading (M4).
     for (;;) {
-      const plans = await InstallmentPlan.find({ status: 'active' })
-        .skip(skip)
+      const filter = { status: 'active', ...(lastId ? { _id: { $gt: lastId } } : {}) };
+      const plans = await InstallmentPlan.find(filter)
+        .sort({ _id: 1 })
         .limit(BATCH_SIZE)
         .lean();
 
@@ -101,7 +102,7 @@ async function markOverdue() {
         }
       }
 
-      skip += BATCH_SIZE;
+      lastId = plans[plans.length - 1]._id;
     }
 
     if (changed > 0) {

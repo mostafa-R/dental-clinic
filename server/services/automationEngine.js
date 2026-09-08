@@ -1,5 +1,6 @@
 import Automation from '../modules/automation/automation.model.js';
 import AutomationRun from '../modules/automation/automationRun.model.js';
+import { stripPHI } from '../middleware/phiRestrict.js';
 import { emitToBranch } from '../socket/index.js';
 import { sendWhatsAppMessage } from './whatsapp.js';
 import { subscribeToAll } from './eventBus.js';
@@ -192,6 +193,8 @@ export async function applyRule(rule, event, { dryRun = false } = {}) {
  */
 async function persistRun(tenantId, outcome, event) {
   try {
+    // M5: strip PHI from the persisted copy of event data; in-memory
+    // handlers still receive the full data for template rendering.
     await AutomationRun.create({
       automation: outcome.rule._id,
       tenant: tenantId,
@@ -200,7 +203,7 @@ async function persistRun(tenantId, outcome, event) {
       event: {
         type: event?.type,
         occurredAt: event?.occurredAt,
-        data: event?.data || {},
+        data: stripPHI(event?.data || {}),
       },
       status: outcome.status,
       reason: outcome.reason || '',

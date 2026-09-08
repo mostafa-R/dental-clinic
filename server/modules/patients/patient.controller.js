@@ -20,6 +20,7 @@ import asyncHandler from '../../utils/asyncHandler.js';
 import { withTransaction } from '../../core/transaction.js';
 import { currentTenant, filterByBranch, resolveBranchForCreate, toObjectId } from '../../utils/branchScope.js';
 import { escapeRegex } from '../../utils/escapeRegex.js';
+import { round2 } from '../../constants/accounting.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 import { stripPHI } from '../../middleware/phiRestrict.js';
 import { emitToBranch } from '../../socket/index.js';
@@ -493,7 +494,11 @@ export const mergePatients = asyncHandler(async (req, res) => {
             description: `[merged] ${tx.description || ''}`.trim(),
           });
         }
-        targetWallet.balance += sourceWallet.balance;
+        // L4: keep the ledger bounded (mirror the wallet's own -1000 slice)
+        // and round the combined balance to cents so it never drifts by a
+        // floating-point residue.
+        targetWallet.transactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        targetWallet.balance = round2(targetWallet.balance + sourceWallet.balance);
         await targetWallet.save({ session });
         await sourceWallet.deleteOne({ session });
       }

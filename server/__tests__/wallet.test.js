@@ -8,6 +8,21 @@ vi.mock("../modules/patients/wallet.service.js", () => ({
   addTransaction: vi.fn(),
 }));
 
+// The manual-transaction controller now journals the ledger inside a
+// transaction, so mock the transaction runner and journal post for the unit
+// tests (they don't open a real Mongo session).
+vi.mock("../core/transaction.js", () => ({
+  withTransaction: (fn) => fn({ _id: "session" }),
+}));
+
+vi.mock("../modules/accounting/journal.service.js", () => ({
+  postJournalEntry: vi.fn(),
+}));
+
+vi.mock("../modules/billing/invoice.service.js", () => ({
+  accountForMethod: vi.fn(() => "cash"),
+}));
+
 vi.mock("../middleware/auth.js", () => ({ protect: vi.fn() }));
 
 vi.mock("../utils/branchScope.js", () => ({

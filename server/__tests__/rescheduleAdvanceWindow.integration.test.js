@@ -166,6 +166,22 @@ describe('advance-booking window on reschedules', () => {
 
   beforeEach(async () => {
     await Appointment.deleteMany({});
+    // Freeze the JS clock mid-working-day (10:30 UTC) so the *advance-window*
+    // guard is the one that rejects — not the clinic-hours guard. Without this
+    // the test was clock-dependent: running before 09:00 or after 16:30 made
+    // `now ± offset` land outside working hours and the wrong error fired
+    // first. Only Date is faked; async/timers stay real.
+    const anchor = new Date();
+    do {
+      anchor.setTime(anchor.getTime() + DAY);
+    } while (anchor.getUTCDay() === 0 || anchor.getUTCDay() === 6);
+    anchor.setUTCHours(10, 30, 0, 0);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(anchor);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   function makeRes() {

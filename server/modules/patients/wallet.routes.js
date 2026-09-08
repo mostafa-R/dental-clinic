@@ -2,7 +2,7 @@ import { Router } from 'express';
 
 import * as walletController from './wallet.controller.js';
 import { protect } from '../../middleware/auth.js';
-import { checkPermission } from '../../middleware/checkPermission.js';
+import { checkPermission, checkAnyPermission } from '../../middleware/checkPermission.js';
 import { phiRestrict } from '../../middleware/phiRestrict.js';
 import { validate } from '../../middleware/validate.js';
 import { addWalletTransactionSchema } from './wallet.validator.js';
@@ -68,7 +68,7 @@ router.get('/', protect, checkPermission('billing', 'read'), phiRestrict, wallet
  *   post:
  *     tags: [Wallets]
  *     summary: Add a manual wallet transaction
- *     description: Requires `billing:update`. A wallet debit must reference an invoice, installment, or carry an explicit reference.
+ *     description: Requires `accounting:update` or `billing:delete` (PRD §6.6 — reception alone cannot create wallet credits). A wallet debit must reference an invoice, installment, or carry an explicit reference.
  *     security:
  *       - cookieAuth: []
  *     parameters:
@@ -113,6 +113,6 @@ router.get('/', protect, checkPermission('billing', 'read'), phiRestrict, wallet
  *       '404':
  *         $ref: '#/components/responses/NotFound'
  */
-router.post('/transactions', protect, checkPermission('billing', 'update'), phiRestrict, validate(addWalletTransactionSchema), walletController.addWalletTransaction);
+router.post('/transactions', protect, checkAnyPermission([['accounting', 'update'], ['billing', 'delete']]), phiRestrict, validate(addWalletTransactionSchema), walletController.addWalletTransaction);
 
 export default router;

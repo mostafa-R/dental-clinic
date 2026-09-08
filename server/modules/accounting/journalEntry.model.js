@@ -37,9 +37,9 @@ export const JOURNAL_SOURCE_TYPES = [
   'drawing',
   'commission',
   'invoice',
-  'adjustment',
   'wallet',
   'installment_payment',
+  'adjustment',
 ];
 
 export const JOURNAL_SOURCE_MODELS = ['Invoice', 'Expense', 'OwnerDrawing', 'Commission', 'Wallet', 'InstallmentPlan'];

@@ -75,6 +75,9 @@ describe('Appointment double-booking guards (real concurrency)', () => {
     return `${prefix}-${Date.now()}-${seq}`;
   }
 
+  // Generous hook timeout: a cold Mongo connection in a fresh worker can take
+  // several seconds longer than vitest's 10s default, which made this suite
+  // flaky/fail on CI despite a healthy replica set.
   beforeAll(async () => {
     await mongoose.connect(DB);
 
@@ -150,7 +153,7 @@ describe('Appointment double-booking guards (real concurrency)', () => {
     }
 
     await Appointment.init(); // ensure partial unique indexes exist first
-  });
+  }, 120000);
 
   afterAll(async () => {
     await Promise.all([

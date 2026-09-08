@@ -242,6 +242,6 @@ router.patch('/:planId', protect, checkAnyPermission([['billing', 'update'], ['i
  *       '409':
  *         $ref: '#/components/responses/Conflict'
  */
-router.post('/:planId/pay', protect, checkPermission('billing', 'update'), phiRestrict, validate(payInstallmentSchema), payInstallment);
+router.post('/:planId/pay', protect, checkAnyPermission([['billing', 'update'], ['installments', 'update']]), phiRestrict, validate(payInstallmentSchema), payInstallment);
 
 export default router;

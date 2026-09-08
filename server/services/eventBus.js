@@ -1,4 +1,5 @@
 import EventLog from '../modules/automation/eventLog.model.js';
+import { stripPHI } from '../middleware/phiRestrict.js';
 import { logError, logInfo } from '../utils/logger.js';
 
 /**
@@ -45,11 +46,14 @@ export function subscribeToAll(handler) {
  */
 async function persistEvent({ type, tenant, branch, data, occurredAt }) {
   try {
+    // M5: PHI (phone, email, etc.) is stripped from the persisted copy so the
+    // audit log is safe at rest. In-memory handlers still receive the full
+    // data object (automation engine needs {{patient.phone}} for WhatsApp).
     await EventLog.create({
       type,
       tenant: tenant || null,
       branch: branch || null,
-      data: data || {},
+      data: stripPHI(data || {}),
       occurredAt,
     });
   } catch (err) {
