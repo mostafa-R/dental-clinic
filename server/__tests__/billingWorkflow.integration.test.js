@@ -180,13 +180,20 @@ describe('Billing workflow (real DB)', () => {
       expect(paid.status).toBe('partial');
       expect(paid.paidAmount).toBe(40);
 
-      const journals = await JournalEntry.find({ sourceId: inv._id, sourceModel: 'Invoice' });
+      const journals = await JournalEntry.find({ sourceId: inv._id, sourceModel: 'Invoice', sourceType: 'payment' });
       expect(journals.length).toBe(1);
       const entry = journals[0];
       const sumD = entry.lines.reduce((s, l) => s + l.debit, 0);
       const sumC = entry.lines.reduce((s, l) => s + l.credit, 0);
       expect(Math.abs(sumD - sumC)).toBe(0);
       expect(entry.totalDebit).toBe(40);
+
+      // Accrual model: issuing the invoice recognized revenue via AR and the
+      // payment cleared the receivable (Dr cash / Cr accounts_receivable) —
+      // revenue must NOT be credited again on collection.
+      const revenueLines = entry.lines.filter((l) => l.account === 'revenue');
+      expect(revenueLines.length).toBe(0);
+      expect(entry.lines.some((l) => l.account === 'accounts_receivable')).toBe(true);
     });
 
     it('overpayment excess is auto-credited to the patient wallet', async () => {
@@ -226,8 +233,12 @@ describe('Billing workflow (real DB)', () => {
       const payments = (await Invoice.findById(inv._id)).payments;
       expect(payments.filter((p) => p.idempotencyKey === key).length).toBe(1);
 
-      const journals = await JournalEntry.find({ sourceId: inv._id });
-      expect(journals.length).toBe(1); // no duplicate journal
+      // Exactly one payment journal regardless of the idempotent replay, and a
+      // single issuance entry from createInvoice.
+      const paymentJournals = await JournalEntry.find({ sourceId: inv._id, sourceType: 'payment' });
+      expect(paymentJournals.length).toBe(1); // no duplicate journal
+      const issuance = await JournalEntry.find({ sourceId: inv._id, sourceType: 'invoice' });
+      expect(issuance.length).toBe(1); // revenue recognized once at issue
     });
 
     it('rejects a payment on an invoice from another branch (404)', async () => {

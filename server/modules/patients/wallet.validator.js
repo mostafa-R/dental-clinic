@@ -2,7 +2,11 @@ import { z } from 'zod';
 
 import { INSTALLMENT_STATUS, INSTALLMENT_PLAN_STATUS, INSTALLMENT_FREQUENCIES, WALLET_TX_TYPES } from '../../constants/wallet.js';
 
-const objectId = z.string().length(24, 'Invalid id');
+// Strict ObjectId check: a 24-char string is not enough — it must also be
+// valid hexadecimal so typos/dirty ids are rejected before they hit Mongo.
+const objectId = z
+  .string()
+  .regex(/^[0-9a-fA-F]{24}$/, 'Invalid id');
 
 export const createInstallmentPlanSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
@@ -22,13 +26,24 @@ export const createInstallmentPlanSchema = z.object({
 });
 
 export const payInstallmentSchema = z.object({
-  installmentId: z.string().length(24, 'Invalid installment id'),
+  installmentId: objectId,
   amount: z.number().positive('Payment amount must be positive'),
   // PRD §6.3: an overdue installment can be settled with an optional late fee.
   lateFee: z.number().min(0, 'Late fee cannot be negative').optional(),
   paymentMethod: z.enum(['cash', 'card', 'transfer', 'wallet']).optional(),
   paymentRef: z.string().max(100).optional(),
   notes: z.string().max(300).optional(),
+}).superRefine((data, ctx) => {
+  // Traceability (L6): card and transfer payments need an external
+  // transaction reference; cash and wallet are the internal rails.
+  const method = data.paymentMethod || 'cash';
+  if ((method === 'card' || method === 'transfer') && !(data.paymentRef && data.paymentRef.trim())) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['paymentRef'],
+      message: 'paymentRef is required for card/transfer payments',
+    });
+  }
 });
 
 export const updateInstallmentPlanSchema = z.object({

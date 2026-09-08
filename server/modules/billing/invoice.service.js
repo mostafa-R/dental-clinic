@@ -12,6 +12,7 @@ import { addTransaction } from '../patients/wallet.service.js';
 import User from '../users/user.model.js';
 import Commission from './commission.model.js';
 import Invoice from './invoice.model.js';
+import JournalEntry from '../accounting/journalEntry.model.js';
 import { postJournalEntry } from '../accounting/journal.service.js';
 
 const POPULATE = [
@@ -22,7 +23,7 @@ const POPULATE = [
 ];
 
 /** Map a payment method to the asset account money moves through. */
-function accountForMethod(method) {
+export function accountForMethod(method) {
   if (method === 'cash') return 'cash';
   if (method === 'wallet') return 'wallet_clearing';
   return 'bank'; // card / transfer
@@ -160,6 +161,44 @@ async function accrueCommissionForInvoice(invoice, session, userId) {
   // Items removed from the invoice since the last accrual lose their record.
   for (const stale of unmatched.values()) {
     await stale.deleteOne({ session });
+  }
+
+  // BR-BL-05: accrue the commission obligation (Dr expenses / Cr
+  // commissions_payable). The invoice's total earned (pending) commission is
+  // the liability; it is cleared from commissions_payable when paid out. If an
+  // accrual entry already exists for this invoice (e.g. a voided commission
+  // re-earned), post only the net change so the ledger never double counts.
+  const pendingTotal = round2(
+    (await Commission.find({ invoice: invoice._id, doctor: doctor._id, status: 'pending' }).session(session))
+      .reduce((sum, c) => sum + (Number(c.amount) || 0), 0),
+  );
+  if (pendingTotal > 0) {
+    const prior = await JournalEntry.findOne({
+      branch: invoice.branch,
+      sourceType: 'commission',
+      sourceId: invoice._id,
+    }).session(session);
+    const priorAmount = prior ? round2(Math.abs(prior.totalCredit || 0)) : 0;
+    const delta = round2(pendingTotal - priorAmount);
+    if (Math.abs(delta) > 0.01) {
+      await postJournalEntry(
+        {
+          tenant: invoice.tenant,
+          branch: invoice.branch,
+          date: new Date(),
+          sourceType: 'commission',
+          sourceId: invoice._id,
+          sourceModel: 'Commission',
+          description: `Doctor commission accrual — invoice ${invoice.invoiceNo}`,
+          lines: [
+            { account: 'expenses', debit: Math.abs(delta), memo: 'doctor commission' },
+            { account: 'commissions_payable', credit: Math.abs(delta), memo: invoice.invoiceNo },
+          ],
+          userId,
+        },
+        session,
+      );
+    }
   }
 }
 
@@ -317,6 +356,28 @@ export async function createInvoice({ data, branch, tenant, userId }) {
         },
       ],
       { session }
+    );
+
+    // BR-BL-05 / accrual: recognize revenue at sale time and carry the
+    // receivable on the books (Dr accounts_receivable / Cr revenue). The
+    // receivable is cleared as payments are collected. Booking this entry
+    // means an unpaid invoice is never invisible to the ledger.
+    await postJournalEntry(
+      {
+        tenant: invoice.tenant,
+        branch: invoice.branch,
+        date: new Date(),
+        sourceType: 'invoice',
+        sourceId: invoice._id,
+        sourceModel: 'Invoice',
+        description: `Invoice ${invoice.invoiceNo} issued`,
+        lines: [
+          { account: 'accounts_receivable', debit: invoice.total, memo: invoice.invoiceNo },
+          { account: 'revenue', credit: invoice.total, memo: invoice.invoiceNo },
+        ],
+        userId,
+      },
+      session,
     );
 
     return invoice;
@@ -541,11 +602,13 @@ export async function applyInvoicePayment(
   }
 
   // BR-BL-05: double-entry record of the collected money. The applied portion
-  // is revenue; an overpayment excess sits in the patient's wallet (liability)
-  // rather than revenue until it is spent.
+  // clears the receivable that was created when the invoice was issued (it was
+  // already recognized as revenue at that point). An overpayment excess sits
+  // in the patient's wallet (liability, Cr wallet_clearing) rather than
+  // revenue until it is spent.
   const paymentLines = [
     { account: accountForMethod(method), debit: applied, memo: method },
-    { account: 'revenue', credit: applied, memo: fresh.invoiceNo },
+    { account: 'accounts_receivable', credit: applied, memo: fresh.invoiceNo },
   ];
   // Overpaid cash/card sits as a wallet liability until spent (a wallet-method
   // payment never leaves the wallet, so nothing moves).
@@ -717,6 +780,58 @@ export async function voidInvoice(id, branchFilter, { reason, userId } = {}) {
       { session },
     );
 
+    // BR-BL-05 reversal entries so the ledger stays reconciled after a void:
+    //   1. Reverse the receivable that was never collected (the sale is
+    //      cancelled). Collected cash (Dr cash/Cr AR) stays as collected cash;
+    //      only the uncollected receivable and its revenue are reversed.
+    //   2. Reverse the commission accrual that was previously booked, because
+    //      the voided invoice's commissions are no longer earned.
+    const unpaidReceivable = round2(invoice.total - invoice.paidAmount);
+    if (unpaidReceivable > 0) {
+      await postJournalEntry(
+        {
+          tenant: invoice.tenant,
+          branch: invoice.branch,
+          date: new Date(),
+          sourceType: 'adjustment',
+          sourceId: invoice._id,
+          sourceModel: 'Invoice',
+          description: `Void invoice ${invoice.invoiceNo} — reverse uncollected receivable`,
+          lines: [
+            { account: 'revenue', debit: unpaidReceivable, memo: invoice.invoiceNo },
+            { account: 'accounts_receivable', credit: unpaidReceivable, memo: invoice.invoiceNo },
+          ],
+          userId: userId || null,
+        },
+        session,
+      );
+    }
+
+    const priorCommissionEntry = await JournalEntry.findOne({
+      branch: invoice.branch,
+      sourceType: 'commission',
+      sourceId: invoice._id,
+    }).session(session);
+    if (priorCommissionEntry) {
+      await postJournalEntry(
+        {
+          tenant: invoice.tenant,
+          branch: invoice.branch,
+          date: new Date(),
+          sourceType: 'adjustment',
+          sourceId: invoice._id,
+          sourceModel: 'Commission',
+          description: `Void invoice ${invoice.invoiceNo} — reverse commission accrual`,
+          lines: [
+            { account: 'commissions_payable', debit: priorCommissionEntry.totalCredit, memo: invoice.invoiceNo },
+            { account: 'expenses', credit: priorCommissionEntry.totalCredit, memo: 'commission reversal' },
+          ],
+          userId: userId || null,
+        },
+        session,
+      );
+    }
+
     return invoice;
   });
 
@@ -822,8 +937,12 @@ export async function refundPayment(id, branchFilter, { amount, method, referenc
       }
     }
 
-    // BR-BL-05: reverse the money movement — refunds hit the dedicated
-    // 'refunds' account, not revenue.
+    // BR-BL-05: reverse the collection. Because revenue was already recognized
+    // when the invoice was issued (and AR was cleared by the original payment),
+    // a refund here reinstates the receivable: money goes back out (Cr asset /
+    // Cr wallet_clearing for a wallet refund) and AR increases (Dr
+    // accounts_receivable). The invoice total is not reduced by a refund — a
+    // cancelled sale is handled by voiding the invoice, which reverses revenue.
     await postJournalEntry(
       {
         tenant: invoice.tenant,
@@ -834,7 +953,7 @@ export async function refundPayment(id, branchFilter, { amount, method, referenc
         sourceModel: 'Invoice',
         description: `Refund for invoice ${invoice.invoiceNo} (${refundMethod})`,
         lines: [
-          { account: 'refunds', debit: refundAmount, memo: invoice.invoiceNo },
+          { account: 'accounts_receivable', debit: refundAmount, memo: invoice.invoiceNo },
           {
             account: shouldCreditWallet ? 'wallet_clearing' : accountForMethod(refundMethod),
             credit: refundAmount,

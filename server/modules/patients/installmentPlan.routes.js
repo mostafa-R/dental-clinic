@@ -7,7 +7,7 @@ import {
   payInstallment,
 } from './installmentPlan.controller.js';
 import { protect } from '../../middleware/auth.js';
-import { checkPermission } from '../../middleware/checkPermission.js';
+import { checkAnyPermission } from '../../middleware/checkPermission.js';
 import { phiRestrict } from '../../middleware/phiRestrict.js';
 import { validate } from '../../middleware/validate.js';
 import {
@@ -25,7 +25,7 @@ const router = Router({ mergeParams: true });
  *   get:
  *     tags: [Installment Plans]
  *     summary: List a patient's installment plans
- *     description: Requires `billing:read`.
+ *     description: Requires `billing:read` or `installments:read`.
  *     security:
  *       - cookieAuth: []
  *     parameters:
@@ -63,7 +63,7 @@ const router = Router({ mergeParams: true });
  *       '404':
  *         $ref: '#/components/responses/NotFound'
  */
-router.get('/', protect, checkPermission('billing', 'read'), phiRestrict, validate(listInstallmentPlansSchema, 'query'), listInstallmentPlans);
+router.get('/', protect, checkAnyPermission([['billing', 'read'], ['installments', 'read']]), phiRestrict, validate(listInstallmentPlansSchema, 'query'), listInstallmentPlans);
 
 /**
  * @swagger
@@ -71,7 +71,7 @@ router.get('/', protect, checkPermission('billing', 'read'), phiRestrict, valida
  *   post:
  *     tags: [Installment Plans]
  *     summary: Create an installment plan
- *     description: Requires `billing:create`. The sum of installments must equal `totalAmount`. Only one active plan per invoice.
+ *     description: Requires `billing:create` or `installments:create`. The sum of installments must equal `totalAmount`. Only one active plan per invoice, and the plan total cannot exceed the invoice's outstanding balance.
  *     security:
  *       - cookieAuth: []
  *     parameters:
@@ -126,7 +126,7 @@ router.get('/', protect, checkPermission('billing', 'read'), phiRestrict, valida
  *       '409':
  *         $ref: '#/components/responses/Conflict'
  */
-router.post('/', protect, checkPermission('billing', 'create'), phiRestrict, validate(createInstallmentPlanSchema), createInstallmentPlan);
+router.post('/', protect, checkAnyPermission([['billing', 'create'], ['installments', 'create']]), phiRestrict, validate(createInstallmentPlanSchema), createInstallmentPlan);
 
 /**
  * @swagger
@@ -134,7 +134,7 @@ router.post('/', protect, checkPermission('billing', 'create'), phiRestrict, val
  *   patch:
  *     tags: [Installment Plans]
  *     summary: Update an installment plan
- *     description: Requires `billing:update`. Completed/defaulted plans are immutable.
+ *     description: Requires `billing:update` or `installments:update`. Completed plans are immutable; defaulted plans can be reopened to `active`.
  *     security:
  *       - cookieAuth: []
  *     parameters:
@@ -180,7 +180,7 @@ router.post('/', protect, checkPermission('billing', 'create'), phiRestrict, val
  *       '409':
  *         $ref: '#/components/responses/Conflict'
  */
-router.patch('/:planId', protect, checkPermission('billing', 'update'), phiRestrict, validate(updateInstallmentPlanSchema), updateInstallmentPlan);
+router.patch('/:planId', protect, checkAnyPermission([['billing', 'update'], ['installments', 'update']]), phiRestrict, validate(updateInstallmentPlanSchema), updateInstallmentPlan);
 
 /**
  * @swagger
@@ -188,7 +188,7 @@ router.patch('/:planId', protect, checkPermission('billing', 'update'), phiRestr
  *   post:
  *     tags: [Installment Plans]
  *     summary: Pay an installment
- *     description: Requires `billing:update`. Executed in a transaction to prevent double-payment races. Wallet payments debit the patient wallet.
+ *     description: Requires `billing:update` or `installments:update`. Executed in a transaction to prevent double-payment races. Wallet payments debit the patient wallet. Pass `x-idempotency-key` to dedupe a retry on the linked invoice ledger. Defaulted plans are resumed to `active` on payment.
  *     security:
  *       - cookieAuth: []
  *     parameters:
@@ -200,6 +200,10 @@ router.patch('/:planId', protect, checkPermission('billing', 'update'), phiRestr
  *         name: planId
  *         required: true
  *         schema: { $ref: '#/components/schemas/ObjectId' }
+ *       - in: header
+ *         name: x-idempotency-key
+ *         schema: { type: string }
+ *         description: Optional key that makes the linked invoice payment idempotent.
  *     requestBody:
  *       required: true
  *       content:

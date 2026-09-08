@@ -21,6 +21,10 @@ vi.mock("../utils/branchScope.js", () => ({ toObjectId: (v) => v }));
 vi.mock("../modules/users/user.model.js", () => ({ default: {} }));
 vi.mock("../modules/billing/commission.model.js", () => ({ default: {} }));
 
+vi.mock("../modules/accounting/journal.service.js", () => ({
+  postJournalEntry: vi.fn(),
+}));
+
 vi.mock("../core/transaction.js", () => ({
   withTransaction: vi.fn(async (fn) => {
     const session = { mock: true };

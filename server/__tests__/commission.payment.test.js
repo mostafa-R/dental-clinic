@@ -29,6 +29,10 @@ vi.mock("../modules/accounting/journal.service.js", () => ({
   postJournalEntry: vi.fn(),
 }));
 
+vi.mock("../modules/accounting/journalEntry.model.js", () => ({
+  default: { findOne: vi.fn(() => ({ session: vi.fn().mockResolvedValue(null) })) },
+}));
+
 vi.mock("../core/transaction.js", () => ({
   withTransaction: vi.fn(async (fn) => {
     const session = { mock: true };
@@ -108,7 +112,7 @@ describe("addPayment — commission on full payment (ISSUE-014)", () => {
 
     await addPayment(INV_ID, {}, { amount: 100, method: "cash", userId: "u1" });
 
-    expect(Commission.find).toHaveBeenCalledTimes(1);
+    expect(Commission.find).toHaveBeenCalledTimes(2); // existing records + pending-accrual reconciliation
     expect(Commission.create).toHaveBeenCalledWith(
       [expect.objectContaining({ baseAmount: 100, rate: 10, invoice: INV_ID })],
       expect.objectContaining({ session: { mock: true } }),

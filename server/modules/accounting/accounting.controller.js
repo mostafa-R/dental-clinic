@@ -109,15 +109,45 @@ export const deleteExpense = asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     throw ApiError.badRequest("Invalid expense id");
   }
-  const expense = await Expense.findOneAndUpdate(
-    { _id: req.params.id, ...filterByBranch(req), isActive: true },
-    { $set: { isActive: false } },
-    { returnDocument: "after" },
-  );
-  if (!expense) {
-    throw ApiError.notFound("Expense not found");
-  }
-  emitToBranch(String(expense.branch), 'expense:deleted', { _id: expense._id });
+  const result = await withTransaction(async (session) => {
+    const expense = await Expense.findOneAndUpdate(
+      { _id: req.params.id, ...filterByBranch(req), isActive: true },
+      { $set: { isActive: false } },
+      { returnDocument: "after", session },
+    );
+    if (!expense) {
+      throw ApiError.notFound("Expense not found");
+    }
+
+    // BR-BL-05: reverse the original expense posting (Dr cash/bank /
+    // Cr expenses) so deleting an expense doesn't leave the money on the
+    // books as having left the business.
+    await postJournalEntry(
+      {
+        tenant: expense.tenant,
+        branch: expense.branch,
+        date: expense.date || new Date(),
+        sourceType: 'adjustment',
+        sourceId: expense._id,
+        sourceModel: 'Expense',
+        description: `Delete expense ${expense.expenseNo || expense._id} — reversal`,
+        lines: [
+          {
+            account: (expense.paymentMethod || 'cash') === 'cash' ? 'cash' : 'bank',
+            debit: expense.amount,
+            memo: expense.category,
+          },
+          { account: 'expenses', credit: expense.amount, memo: expense.category },
+        ],
+        userId: req.user._id,
+      },
+      session,
+    );
+
+    return expense;
+  });
+
+  emitToBranch(String(result.branch), 'expense:deleted', { _id: result._id });
   return sendSuccess(res, { message: "Expense deleted" });
 });
 
@@ -160,7 +190,10 @@ export const createDrawing = asyncHandler(async (req, res) => {
 
   const branch = await resolveBranchForCreate(req, data.branch);
 
-  const owner = await User.findOne({ _id: data.owner, ...(tenant ? { tenant } : {}), ...(branch ? { branch } : {}) });
+  // `resolveBranchForCreate` always yields a branch, so the owner lookup is
+  // always branch-scoped — a drawing can only reference an owner in the
+  // selected branch, never across branches/tenants.
+  const owner = await User.findOne({ _id: data.owner, branch, ...(tenant ? { tenant } : {}) });
   if (!owner) {
     throw ApiError.badRequest("Referenced owner does not exist in this branch/tenant", {
       owner: "not found",
@@ -282,6 +315,35 @@ export const deleteDrawing = asyncHandler(async (req, res) => {
       }
     }
 
+    // BR-BL-05: reverse the original drawing posting (Dr cash/bank/wallet /
+    // Cr owner_drawing) so deleting a drawing puts the money back on the books.
+    await postJournalEntry(
+      {
+        tenant: drawing.tenant,
+        branch: drawing.branch,
+        date: drawing.date || new Date(),
+        sourceType: 'adjustment',
+        sourceId: drawing._id,
+        sourceModel: 'OwnerDrawing',
+        description: `Delete drawing ${drawing.drawingNo} — reversal`,
+        lines: [
+          {
+            account:
+              (drawing.paymentMethod || 'cash') === 'wallet'
+                ? 'wallet_clearing'
+                : (drawing.paymentMethod || 'cash') === 'cash'
+                  ? 'cash'
+                  : 'bank',
+            debit: drawing.amount,
+            memo: drawing.paymentMethod || 'cash',
+          },
+          { account: 'owner_drawing', credit: drawing.amount, memo: 'drawing reversal' },
+        ],
+        userId: req.user._id,
+      },
+      session,
+    );
+
     return drawing;
   });
 
@@ -327,22 +389,54 @@ export const updateCommissionStatus = asyncHandler(async (req, res) => {
   }
   const { status } = req.validatedBody;
 
-  const commission = await Commission.findOne({
-    _id: req.params.id,
-    ...filterByBranch(req),
+  const result = await withTransaction(async (session) => {
+    const commission = await Commission.findOne({
+      _id: req.params.id,
+      ...filterByBranch(req),
+    }).session(session);
+    if (!commission) {
+      throw ApiError.notFound("Commission not found");
+    }
+
+    const wasPaid = commission.status === 'paid';
+    commission.status = status;
+    if (status === "paid") commission.paidDate = new Date();
+
+    await commission.save({ session });
+
+    // BR-BL-05: paying a commission settles the obligation that was accrued
+    // when the commission was earned (Dr commissions_payable / Cr cash). This
+    // keeps the ledger reconciled with the P&L — no money can leave the books
+    // unseen. Idempotent: only post when transitioning into paid.
+    if (status === 'paid' && !wasPaid) {
+      const amount = round2(Number(commission.amount) || 0);
+      if (amount > 0) {
+        await postJournalEntry(
+          {
+            tenant: commission.tenant,
+            branch: commission.branch,
+            date: new Date(),
+            sourceType: 'commission',
+            sourceId: commission._id,
+            sourceModel: 'Commission',
+            description: `Commission ${commission.commissionNo} paid — ${commission.procedureName}`,
+            lines: [
+              { account: 'commissions_payable', debit: amount, memo: commission.procedureName },
+              { account: 'cash', credit: amount, memo: 'commission payout' },
+            ],
+            userId: req.user._id,
+          },
+          session,
+        );
+      }
+    }
+
+    await commission.populate("doctor", "name commissionRate");
+    return commission;
   });
-  if (!commission) {
-    throw ApiError.notFound("Commission not found");
-  }
 
-  commission.status = status;
-  if (status === "paid") commission.paidDate = new Date();
-
-  await commission.save();
-  await commission.populate("doctor", "name commissionRate");
-
-  emitToBranch(String(commission.branch || ''), 'commission:updated', { commission });
-  return sendSuccess(res, { commission: serializePHI(commission, req) });
+  emitToBranch(String(result.branch || ''), 'commission:updated', { commission: serializePHI(result, req) });
+  return sendSuccess(res, { commission: serializePHI(result, req) });
 });
 
 /**
@@ -468,9 +562,13 @@ export const getAccountingSummary = asyncHandler(async (req, res) => {
   const totalDrawings = round2(drawings);
   const pendingCommissions = round2(commissions.pending?.total || 0);
   const paidCommissions = round2(commissions.paid?.total || 0);
-  // Paid commissions are money already paid out to doctors — they must reduce
-  // net profit too, otherwise profit is overstated once a commission is marked paid.
-  const netProfit = round2(totalRevenue - totalExpenses - totalDrawings - pendingCommissions - paidCommissions);
+  // Commission expense is booked in the GL as an accrual (Dr expenses /
+  // Cr commissions_payable) when earned, but it does NOT appear in the
+  // Expense-collection aggregate above (that only sums Expense docs). The
+  // full commission obligation — pending + paid — is that GL expense, so it is
+  // subtracted explicitly to keep netProfit consistent with the ledger.
+  const totalCommissionExpense = round2(pendingCommissions + paidCommissions);
+  const netProfit = round2(totalRevenue - totalExpenses - totalDrawings - totalCommissionExpense);
 
   return sendSuccess(res, {
     summary: {
@@ -569,9 +667,16 @@ async function computeExpectedTakings(branchFilter, start, end) {
   for (const row of paymentAgg) {
     expected[dayCloseBucket(row._id)] += row.total;
   }
-  // Money that left the drawer during the day reduces the expected float.
+  // Money that left the drawer during the day (cash expenses, cash/bank owner
+  // drawings) reduces the expected float. Wallet-bucket funds never touch the
+  // physical drawer — a paid-from-wallet drawing merely reduces a patient's
+  // prepaid liability (Cr wallet_clearing), it does not take cash out — so it
+  // is deliberately left out here and reported separately as wallet activity.
   for (const row of [...expenseAgg, ...drawingAgg]) {
-    expected[dayCloseBucket(row._id)] -= row.total;
+    const bucket = dayCloseBucket(row._id);
+    if (bucket !== 'wallet') {
+      expected[bucket] -= row.total;
+    }
   }
   for (const key of Object.keys(expected)) {
     expected[key] = round2(expected[key]);
@@ -620,9 +725,12 @@ export const closeDay = asyncHandler(async (req, res) => {
   const tenant = currentTenant(req);
   const { date: dateStr, branch: branchId, countedCash, notes } = req.validatedBody;
 
-  // Day close is always scoped to ONE branch — system admins must pass one.
-  const resolvedBranch =
-    branchFilter.branch ?? (branchId ? toObjectId(branchId) : null) ?? (req.query.branch ? toObjectId(req.query.branch) : null);
+  // Day close is always scoped to ONE branch — system admins must pass one in
+  // the (validated) body. The raw req.query.branch is intentionally NOT
+  // trusted here; only the scoped branch from filterByBranch (which itself
+  // derives from the verified query filter for admins) or the validated body
+  // branch is used.
+  const resolvedBranch = branchFilter.branch ?? (branchId ? toObjectId(branchId) : null);
   if (!resolvedBranch) {
     throw ApiError.badRequest('A branch is required to close the day', {
       branch: 'required',

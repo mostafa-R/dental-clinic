@@ -6,8 +6,9 @@ import asyncHandler from '../../utils/asyncHandler.js';
 import { loadScopedPatient } from '../../utils/branchScope.js';
 import { stripPHI } from '../../middleware/phiRestrict.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
+import { postJournalEntry } from '../accounting/journal.service.js';
 import Invoice from '../billing/invoice.model.js';
-import { applyInvoicePayment } from '../billing/invoice.service.js';
+import { applyInvoicePayment, accountForMethod } from '../billing/invoice.service.js';
 import InstallmentPlan from './installment.model.js';
 import { addTransaction } from './wallet.service.js';
 
@@ -59,6 +60,16 @@ export const createInstallmentPlan = asyncHandler(async (req, res) => {
     throw ApiError.badRequest('Sum of installments must equal total amount');
   }
 
+  // L7: installment schedules must be strictly chronological so the reminder
+  // cron and the frontend timeline never see a jumbled order.
+  for (let i = 1; i < data.installments.length; i++) {
+    const prev = new Date(data.installments[i - 1].dueDate).getTime();
+    const cur = new Date(data.installments[i].dueDate).getTime();
+    if (cur < prev) {
+      throw ApiError.badRequest('Installment due dates must be in ascending order');
+    }
+  }
+
   if (data.invoice) {
     const invoice = await Invoice.findOne({ _id: data.invoice, branch: patient.branch, tenant: patient.tenant });
     if (!invoice) throw ApiError.notFound('Invoice not found');
@@ -66,11 +77,20 @@ export const createInstallmentPlan = asyncHandler(async (req, res) => {
       throw ApiError.badRequest('Invoice does not belong to this patient');
     }
 
+    // M3: a plan can never promise to collect more than the invoice still
+    // owes — otherwise the plan and invoice ledgers diverge permanently.
+    const outstanding = round2(invoice.total - invoice.paidAmount);
+    if (outstanding > 0 && round2(data.totalAmount) > outstanding + 0.01) {
+      throw ApiError.badRequest(
+        `Plan total (${data.totalAmount}) exceeds the invoice's outstanding balance (${outstanding})`,
+      );
+    }
+
     const existingPlan = await InstallmentPlan.findOne({
       invoice: data.invoice,
       branch: patient.branch,
       tenant: patient.tenant,
-      status: { $in: ['active', 'overdue'] },
+      status: 'active',
     });
     if (existingPlan) {
       throw ApiError.conflict('An active installment plan already exists for this invoice');
@@ -83,7 +103,7 @@ export const createInstallmentPlan = asyncHandler(async (req, res) => {
     patient: patient._id,
     invoice: data.invoice || null,
     title: data.title,
-    totalAmount: data.totalAmount,
+    totalAmount: round2(data.totalAmount),
     installments: data.installments.map((inst, i) => ({
       number: i + 1,
       dueDate: new Date(inst.dueDate),
@@ -95,7 +115,7 @@ export const createInstallmentPlan = asyncHandler(async (req, res) => {
   });
 
   emitToBranch(String(patient.branch), 'installment:created', { installmentPlan: plan });
-  return sendSuccess(res, { installmentPlan: plan }, 201);
+  return sendSuccess(res, { installmentPlan: serializePlan(plan, req) }, 201);
 });
 
 /**
@@ -107,13 +127,29 @@ export const updateInstallmentPlan = asyncHandler(async (req, res) => {
   if (!plan) throw ApiError.notFound('Installment plan not found');
 
   const data = req.validatedBody;
-  if (data.title !== undefined) plan.title = data.title;
-  if (data.notes !== undefined) plan.notes = data.notes;
-  if (data.status !== undefined) {
-    if (plan.status === 'completed' || plan.status === 'defaulted') {
-      throw ApiError.conflict(
-        `Cannot change the status of a ${plan.status} installment plan`,
-      );
+
+  // L8: every mutation is audited on the plan document itself.
+  const pushChange = (field, oldValue, newValue) => {
+    plan.changelog.push({
+      field,
+      oldValue,
+      newValue,
+      changedBy: req.user._id,
+    });
+  };
+
+  if (data.title !== undefined && data.title !== plan.title) {
+    pushChange('title', plan.title, data.title);
+    plan.title = data.title;
+  }
+  if (data.notes !== undefined && data.notes !== plan.notes) {
+    pushChange('notes', plan.notes, data.notes);
+    plan.notes = data.notes;
+  }
+  if (data.status !== undefined && data.status !== plan.status) {
+    // A completed plan is a terminal state — money already flowed.
+    if (plan.status === 'completed') {
+      throw ApiError.conflict('Cannot change the status of a completed installment plan');
     }
     if (data.status === 'completed') {
       const allPaid = plan.installments.every((inst) => inst.status === 'paid');
@@ -123,6 +159,12 @@ export const updateInstallmentPlan = asyncHandler(async (req, res) => {
       const hasOverdue = plan.installments.some((inst) => inst.status === 'overdue');
       if (!hasOverdue) throw ApiError.badRequest('Cannot mark plan as defaulted — no overdue installments');
     }
+    // High #2: a defaulted plan is NOT a dead end — the patient can be
+    // reopened when they resume paying (also done automatically on payment).
+    if (plan.status === 'defaulted' && data.status === 'active') {
+      // Reopen is allowed.
+    }
+    pushChange('status', plan.status, data.status);
     plan.status = data.status;
   }
 
@@ -134,19 +176,24 @@ export const updateInstallmentPlan = asyncHandler(async (req, res) => {
 /**
  * POST /patients/:patientId/installments/:planId/pay
  * Pay an installment within a MongoDB session to prevent double-payment races.
+ *
+ * The client can pass `x-idempotency-key` to dedupe a network retry on the
+ * linked invoice ledger. A hardcoded deterministic key is deliberately NOT
+ * used here — it made every later partial payment of the same installment
+ * replay the invoice booking for the full amount (High #1).
  */
 export const payInstallment = asyncHandler(async (req, res) => {
   const patient = await loadScopedPatient(req, req.params.patientId);
   const data = req.validatedBody;
+  const idempotencyKey = req.headers['x-idempotency-key'] || undefined;
 
   const result = await withTransaction(async (session) => {
     const plan = await InstallmentPlan.findOne({ _id: req.params.planId, patient: patient._id, branch: patient.branch, tenant: patient.tenant })
       .session(session);
     if (!plan) throw ApiError.notFound('Installment plan not found');
     if (plan.status === 'completed') throw ApiError.badRequest('Plan is already completed');
-    if (plan.status === 'defaulted') throw ApiError.badRequest('Cannot pay on a defaulted plan');
 
-    // Require explicit installment ID to prevent race conditions
+    // Require explicit installment ID to prevent race conditions.
     const installmentId = data.installmentId;
     if (!installmentId) {
       throw ApiError.badRequest('Installment ID is required');
@@ -166,7 +213,9 @@ export const payInstallment = asyncHandler(async (req, res) => {
       installment.lateFee = round2(Math.max(installment.lateFee || 0, data.lateFee));
     }
 
-    const dueTotal = round2(installment.amount + (installment.lateFee || 0));
+    const baseDue = round2(installment.amount);
+    const lateFee = installment.lateFee || 0;
+    const dueTotal = round2(baseDue + lateFee);
     const remaining = round2(dueTotal - installment.paidAmount);
     if (data.amount > remaining) {
       throw ApiError.badRequest(`Payment exceeds remaining balance of ${remaining}`);
@@ -182,6 +231,9 @@ export const payInstallment = asyncHandler(async (req, res) => {
     if (newTotalPaid > totalDuePlan) {
       throw ApiError.badRequest(`Payment would exceed plan total of ${totalDuePlan} (currently paid: ${totalPaidBefore})`);
     }
+
+    const planStatusBefore = plan.status;
+    const installmentStatusBefore = installment.status;
 
     installment.paidAmount = round2(installment.paidAmount + data.amount);
     installment.paymentMethod = data.paymentMethod || installment.paymentMethod || 'cash';
@@ -211,33 +263,98 @@ export const payInstallment = asyncHandler(async (req, res) => {
 
     plan.paidAmount = round2(plan.installments.reduce((s, inst) => s + inst.paidAmount, 0));
 
+    // High #2: defaulted plans are not a dead end. A payment either settles
+    // the plan (all paid → completed) or resumes an active schedule
+    // (defaulted → active) so the reminder cron keeps tracking it.
     const allPaid = plan.installments.every((inst) => inst.status === 'paid');
-    if (allPaid) plan.status = 'completed';
+    if (allPaid) {
+      plan.status = 'completed';
+    } else if (planStatusBefore === 'defaulted') {
+      plan.status = 'active';
+    }
+
+    // L8: audit every state transition this payment caused.
+    if (plan.status !== planStatusBefore) {
+      plan.changelog.push({
+        field: 'status',
+        oldValue: planStatusBefore,
+        newValue: plan.status,
+        changedBy: req.user._id,
+      });
+    }
+    if (installment.status !== installmentStatusBefore) {
+      plan.changelog.push({
+        field: `installments.${installment.number}.status`,
+        oldValue: installmentStatusBefore,
+        newValue: installment.status,
+        changedBy: req.user._id,
+      });
+    }
 
     await plan.save({ session });
 
-    // Keep the linked invoice ledger in sync (ISSUE-014): advance paidAmount,
-    // derive unpaid → partial → paid, push a payment entry, and accrue the
-    // doctor commission on full payment — all inside the same transaction.
+    // Apply the invoice ledger but ONLY for the balance the invoice still
+    // owes (High #3 / M2): a fully-paid (or void) invoice no longer makes the
+    // transaction fail with a 409 — and the over-invoice portion is booked as
+    // plan revenue below instead of being auto-credited into the wallet.
     let invoice = null;
+    let invoicePortion = 0;
     if (plan.invoice) {
-      invoice = await applyInvoicePayment(
+      const openInvoice = await Invoice.findOne({
+        _id: plan.invoice,
+        branch: patient.branch,
+        tenant: patient.tenant,
+      }).session(session);
+      if (openInvoice && openInvoice.status !== 'void') {
+        const invoiceBalance = round2(openInvoice.total - openInvoice.paidAmount);
+        if (invoiceBalance > 0) {
+          invoicePortion = round2(Math.min(data.amount, invoiceBalance));
+          const applied = await applyInvoicePayment(
+            {
+              invoiceId: String(openInvoice._id),
+              branchFilter: { branch: patient.branch, tenant: patient.tenant },
+              amount: invoicePortion,
+              method: installment.paymentMethod,
+              reference: installment.paymentRef || `Installment #${installment.number}`,
+              notes: `Installment plan payment — ${plan.title}`,
+              idempotencyKey,
+              // The wallet debit above already covers wallet-funded
+              // installments, so the invoice ledger must not debit the wallet
+              // a second time.
+              skipWalletDebit: true,
+              userId: req.user._id,
+            },
+            session,
+          );
+          invoice = applied && applied.idempotent ? applied.invoice : applied;
+        }
+      }
+    }
+
+    // Double-entry for the money the invoice did not absorb (M1):
+    //  - no linked invoice (or void / fully paid) → the full payment is plan
+    //    revenue,
+    //  - invoice balance smaller than the payment → the excess is the payable
+    //    fee / plan revenue, never a silent ledger gap.
+    const unbilled = round2(data.amount - invoicePortion);
+    if (unbilled >= 0.01) {
+      await postJournalEntry(
         {
-          invoiceId: plan.invoice,
-          branchFilter: { branch: patient.branch, tenant: patient.tenant },
-          amount: data.amount,
-          method: installment.paymentMethod,
-          reference: installment.paymentRef || `Installment #${installment.number}`,
-          notes: `Installment plan payment — ${plan.title}`,
-          idempotencyKey: `installment:${String(plan._id)}:${String(installment._id)}`,
+          tenant: plan.tenant ?? patient.tenant,
+          branch: plan.branch ?? patient.branch,
+          date: new Date(),
+          sourceType: 'installment_payment',
+          sourceId: plan._id,
+          sourceModel: 'InstallmentPlan',
+          description: `Installment plan payment (not tied to invoice) — ${plan.title} (#${installment.number})`,
+          lines: [
+            { account: accountForMethod(installment.paymentMethod), debit: unbilled, memo: installment.paymentMethod },
+            { account: 'revenue', credit: unbilled, memo: 'installment revenue' },
+          ],
           userId: req.user._id,
-          // The wallet debit above already covers wallet-funded installments,
-          // so the invoice ledger must not debit the wallet a second time.
-          skipWalletDebit: true,
         },
         session,
       );
-      if (invoice && invoice.idempotent) invoice = invoice.invoice;
     }
 
     return { installmentPlan: plan, installment, invoice };

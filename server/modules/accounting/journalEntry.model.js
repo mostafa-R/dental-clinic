@@ -6,6 +6,17 @@ import { round2 } from '../../constants/accounting.js';
 /**
  * Chart of accounts (PRD §7.5 / BR-BL-05). Kept intentionally small — these
  * are the ledgers the clinic actually reports on.
+ *
+ * Usage conventions (accrual-based reconciliation):
+ *  - `accounts_receivable` is debited when an invoice is issued (and revenue
+ *    credited), then credited as collections arrive — so its balance equals
+ *    outstanding receivables and revenue is recognized at sale time, not on
+ *    cash timing.
+ *  - `wallet_clearing` is the patient-prepaid-wallet liability. It is credited
+ *    when money is added to a patient's wallet and debited when spent, so the
+ *    account reconciles against the sum of patient wallet balances.
+ *  - `commissions_payable` is credited when a doctor commission is earned
+ *    (accrued) and debited when it is paid out.
  */
 export const ACCOUNTS = [
   'cash',
@@ -19,7 +30,19 @@ export const ACCOUNTS = [
   'commissions_payable',
 ];
 
-export const JOURNAL_SOURCE_TYPES = ['payment', 'refund', 'expense', 'drawing', 'adjustment'];
+export const JOURNAL_SOURCE_TYPES = [
+  'payment',
+  'refund',
+  'expense',
+  'drawing',
+  'commission',
+  'invoice',
+  'adjustment',
+  'wallet',
+  'installment_payment',
+];
+
+export const JOURNAL_SOURCE_MODELS = ['Invoice', 'Expense', 'OwnerDrawing', 'Commission', 'Wallet', 'InstallmentPlan'];
 
 const journalLineSchema = new mongoose.Schema(
   {
@@ -59,7 +82,7 @@ const journalEntrySchema = new mongoose.Schema(
     },
     sourceModel: {
       type: String,
-      enum: ['Invoice', 'Expense', 'OwnerDrawing'],
+      enum: JOURNAL_SOURCE_MODELS,
       default: null,
     },
     description: { type: String, trim: true, maxlength: 300, default: '' },

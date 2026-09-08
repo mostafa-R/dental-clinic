@@ -21,6 +21,17 @@ const installmentSchema = new mongoose.Schema(
   { _id: true },
 );
 
+const changelogSchema = new mongoose.Schema(
+  {
+    field: { type: String, required: true },
+    oldValue: mongoose.Schema.Types.Mixed,
+    newValue: mongoose.Schema.Types.Mixed,
+    changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    at: { type: Date, default: () => new Date() },
+  },
+  { _id: false },
+);
+
 const installmentPlanSchema = new mongoose.Schema(
   {
     tenant: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', index: true, default: null },
@@ -34,6 +45,7 @@ const installmentPlanSchema = new mongoose.Schema(
     frequency: { type: String, enum: INSTALLMENT_FREQUENCIES, default: 'monthly' },
     status: { type: String, enum: INSTALLMENT_PLAN_STATUS, default: 'active' },
     notes: { type: String, trim: true, maxlength: 1000, default: '' },
+    changelog: { type: [changelogSchema], default: [] },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true },
@@ -67,8 +79,11 @@ installmentPlanSchema.set('toObject', { virtuals: true });
 
 installmentPlanSchema.index({ branch: 1, status: 1 });
 installmentPlanSchema.index({ patient: 1, status: 1 });
+// Cron sweep uses a cursor keyed on (status, _id) so it can page forward
+// without loading whole result sets into memory (M4).
+installmentPlanSchema.index({ status: 1, _id: 1 });
 installmentPlanSchema.index({ 'installments.dueDate': 1, 'installments.status': 1 });
-installmentPlanSchema.index({ invoice: 1, status: 1 }, { partialFilterExpression: { invoice: { $ne: null }, status: { $in: ['active', 'overdue'] } } });
+installmentPlanSchema.index({ invoice: 1, status: 1 }, { partialFilterExpression: { invoice: { $ne: null }, status: { $in: ['active'] } } });
 
 const InstallmentPlan = mongoose.model('InstallmentPlan', installmentPlanSchema);
 
