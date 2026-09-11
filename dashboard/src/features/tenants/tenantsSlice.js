@@ -15,20 +15,6 @@ export const fetchTenants = createAsyncThunk(
   },
 );
 
-export const fetchTenantById = createAsyncThunk(
-  "tenants/fetchTenantById",
-  async (id, { rejectWithValue }) => {
-    try {
-      const response = await api.get(`/tenants/${id}`);
-      return response.data;
-    } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch tenant",
-      );
-    }
-  },
-);
-
 export const createTenant = createAsyncThunk(
   "tenants/createTenant",
   async (data, { rejectWithValue }) => {
@@ -164,18 +150,6 @@ const tenantsSlice = createSlice({
         };
       })
       .addCase(fetchTenants.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      })
-      // Fetch single tenant
-      .addCase(fetchTenantById.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(fetchTenantById.fulfilled, (state, action) => {
-        state.loading = false;
-        state.selectedTenant = action.payload;
-      })
-      .addCase(fetchTenantById.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       })

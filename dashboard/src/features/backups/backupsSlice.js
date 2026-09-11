@@ -15,20 +15,6 @@ export const fetchBackups = createAsyncThunk(
   },
 );
 
-export const fetchBackupById = createAsyncThunk(
-  "backups/fetchBackupById",
-  async (id, { rejectWithValue }) => {
-    try {
-      const response = await api.get(`/backups/${id}`);
-      return response.data;
-    } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch backup",
-      );
-    }
-  },
-);
-
 export const triggerBackup = createAsyncThunk(
   "backups/triggerBackup",
   async (_, { rejectWithValue }) => {
@@ -87,17 +73,6 @@ const backupsSlice = createSlice({
         }
       })
       .addCase(fetchBackups.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      })
-      .addCase(fetchBackupById.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(fetchBackupById.fulfilled, (state, action) => {
-        state.loading = false;
-        state.selectedBackup = action.payload.data || action.payload;
-      })
-      .addCase(fetchBackupById.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       })

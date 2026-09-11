@@ -15,20 +15,6 @@ export const fetchPlans = createAsyncThunk(
   },
 );
 
-export const fetchPlanById = createAsyncThunk(
-  "plans/fetchPlanById",
-  async (id, { rejectWithValue }) => {
-    try {
-      const response = await api.get(`/plans/${id}`);
-      return response.data;
-    } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch plan",
-      );
-    }
-  },
-);
-
 export const createPlan = createAsyncThunk(
   "plans/createPlan",
   async (data, { rejectWithValue }) => {
@@ -101,18 +87,6 @@ const plansSlice = createSlice({
         state.items = Array.isArray(action.payload) ? action.payload : [];
       })
       .addCase(fetchPlans.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      })
-      // Fetch single plan
-      .addCase(fetchPlanById.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(fetchPlanById.fulfilled, (state, action) => {
-        state.loading = false;
-        state.selectedPlan = action.payload;
-      })
-      .addCase(fetchPlanById.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       })

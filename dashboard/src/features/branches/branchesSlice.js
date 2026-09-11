@@ -15,20 +15,6 @@ export const fetchBranches = createAsyncThunk(
   },
 );
 
-export const fetchBranchById = createAsyncThunk(
-  "branches/fetchBranchById",
-  async (id, { rejectWithValue }) => {
-    try {
-      const response = await api.get(`/branches/${id}`);
-      return response.data;
-    } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch branch",
-      );
-    }
-  },
-);
-
 export const createBranch = createAsyncThunk(
   "branches/createBranch",
   async (data, { rejectWithValue }) => {
@@ -122,9 +108,6 @@ const branchesSlice = createSlice({
       .addCase(fetchBranches.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
-      })
-      .addCase(fetchBranchById.fulfilled, (state, action) => {
-        state.selectedBranch = action.payload;
       })
       .addCase(createBranch.fulfilled, (state, action) => {
         state.items.unshift(action.payload);

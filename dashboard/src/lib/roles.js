@@ -18,10 +18,3 @@ export const TENANT_STATUS = {
   SUSPENDED: "suspended",
   CANCELLED: "cancelled",
 };
-
-// Subscription plans (kept for backward compat, prefer Plan model)
-export const PLANS = {
-  STARTER: "starter",
-  PROFESSIONAL: "professional",
-  ENTERPRISE: "enterprise",
-};

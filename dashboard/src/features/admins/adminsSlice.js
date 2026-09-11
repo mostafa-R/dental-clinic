@@ -15,20 +15,6 @@ export const fetchAdmins = createAsyncThunk(
   },
 );
 
-export const fetchAdminById = createAsyncThunk(
-  "admins/fetchAdminById",
-  async (id, { rejectWithValue }) => {
-    try {
-      const response = await api.get(`/admins/${id}`);
-      return response.data;
-    } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch admin",
-      );
-    }
-  },
-);
-
 export const createAdmin = createAsyncThunk(
   "admins/createAdmin",
   async (data, { rejectWithValue }) => {
@@ -66,22 +52,6 @@ export const deleteAdmin = createAsyncThunk(
     } catch (error) {
       return rejectWithValue(
         error.response?.data?.message || "Failed to delete admin",
-      );
-    }
-  },
-);
-
-export const updateAdminPermissions = createAsyncThunk(
-  "admins/updateAdminPermissions",
-  async ({ id, permissions }, { rejectWithValue }) => {
-    try {
-      const response = await api.put(`/admins/${id}/permissions`, {
-        permissions,
-      });
-      return response.data;
-    } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || "Failed to update permissions",
       );
     }
   },
@@ -140,18 +110,6 @@ const adminsSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      // Fetch single admin
-      .addCase(fetchAdminById.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(fetchAdminById.fulfilled, (state, action) => {
-        state.loading = false;
-        state.selectedAdmin = action.payload;
-      })
-      .addCase(fetchAdminById.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      })
       // Create admin
       .addCase(createAdmin.pending, (state) => {
         state.loading = true;
@@ -179,18 +137,6 @@ const adminsSlice = createSlice({
       // Delete admin
       .addCase(deleteAdmin.fulfilled, (state, action) => {
         state.items = state.items.filter((a) => a._id !== action.payload);
-      })
-      // Update permissions
-      .addCase(updateAdminPermissions.fulfilled, (state, action) => {
-        const index = state.items.findIndex(
-          (a) => a._id === action.payload._id,
-        );
-        if (index !== -1) {
-          state.items[index] = action.payload;
-        }
-        if (state.selectedAdmin?._id === action.payload._id) {
-          state.selectedAdmin = action.payload;
-        }
       });
   },
 });
