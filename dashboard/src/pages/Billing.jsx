@@ -20,12 +20,14 @@ import {
 import { fetchPlans } from "../features/plans/plansSlice";
 import { formatCurrency, formatDate } from "../lib/format";
 import { t } from "../lib/i18n";
+import { canUserAccess } from "../lib/permissions";
 
 export default function Billing() {
   const dispatch = useDispatch();
   const { items, revenueStats, loading } = useSelector((state) => state.subscriptions);
   const { items: plans } = useSelector((state) => state.plans);
   const { language } = useSelector((state) => state.ui);
+  const { user } = useSelector((state) => state.auth);
   const [paymentModal, setPaymentModal] = useState(null);
   const [editModal, setEditModal] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -42,6 +44,8 @@ export default function Billing() {
   if (loading && !revenueStats.totalRevenue) {
     return <PageLoader />;
   }
+
+  const can = (key) => canUserAccess(user, key);
 
   return (
     <div className="p-6">
@@ -169,13 +173,15 @@ export default function Billing() {
                     <td className="px-4 py-3 text-slate-500">{sub.nextPaymentAt ? formatDate(sub.nextPaymentAt, language) : "—"}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => { setEditModal(sub); setEditPlan(sub.plan); }}
-                          className="text-xs text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
-                        >
-                          {t("edit", language)}
-                        </button>
-                        {sub.status === 'past_due' && (
+                        {can("billing.update") && (
+                          <button
+                            onClick={() => { setEditModal(sub); setEditPlan(sub.plan); }}
+                            className="text-xs text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+                          >
+                            {t("edit", language)}
+                          </button>
+                        )}
+                        {sub.status === 'past_due' && can("billing.payment") && (
                           <button
                             onClick={() => { setPaymentModal(sub); setPaymentAmount(String(sub.amount || "")); }}
                             className="text-xs text-emerald-600 hover:text-emerald-500 dark:text-emerald-400"

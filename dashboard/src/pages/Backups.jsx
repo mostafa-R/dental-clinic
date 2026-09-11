@@ -8,6 +8,7 @@ import { ArrowUpTrayIcon } from "../components/ui/icons";
 import { fetchBackups, triggerBackup } from "../features/backups/backupsSlice";
 import { formatDate } from "../lib/format";
 import { t } from "../lib/i18n";
+import { canUserAccess } from "../lib/permissions";
 
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return "0 B";
@@ -41,6 +42,7 @@ export default function Backups() {
   const dispatch = useDispatch();
   const { items, loading, triggering, error } = useSelector((state) => state.backups);
   const { language } = useSelector((state) => state.ui);
+  const { user } = useSelector((state) => state.auth);
 
   useEffect(() => {
     dispatch(fetchBackups());
@@ -56,9 +58,11 @@ export default function Backups() {
         <p className="text-sm text-slate-500 dark:text-slate-400">
           {t("backupsDesc", language)}
         </p>
-        <Button onClick={handleTriggerBackup} loading={triggering} icon={ArrowUpTrayIcon}>
-          {t("triggerBackup", language)}
-        </Button>
+        {canUserAccess(user, "backups.trigger") && (
+          <Button onClick={handleTriggerBackup} loading={triggering} icon={ArrowUpTrayIcon}>
+            {t("triggerBackup", language)}
+          </Button>
+        )}
       </div>
 
       {error && (

@@ -9,6 +9,7 @@ import {
   toggleModule,
 } from "../features/featureFlags/featureFlagsSlice";
 import { t } from "../lib/i18n";
+import { canUserAccess } from "../lib/permissions";
 
 const MODULE_LABELS = {
   dashboard: "Dashboard",
@@ -30,6 +31,7 @@ export default function FeatureFlags() {
   const { items: tenants, loading: tenantsLoading } = useSelector((state) => state.tenants);
   const { tenants: moduleData, toggling } = useSelector((state) => state.featureFlags);
   const { language } = useSelector((state) => state.ui);
+  const { user } = useSelector((state) => state.auth);
   const [selectedTenant, setSelectedTenant] = useState("");
 
   useEffect(() => {
@@ -44,6 +46,7 @@ export default function FeatureFlags() {
 
   const current = selectedTenant ? moduleData[selectedTenant] : null;
   const allModules = current?.availableModules || [];
+  const canToggle = canUserAccess(user, "featureFlags.toggle");
 
   const handleToggle = (mod) => {
     if (!selectedTenant) return;
@@ -100,8 +103,8 @@ export default function FeatureFlags() {
                       {MODULE_LABELS[mod] || mod}
                     </span>
                     <div
-                      className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer ${enabled ? "bg-indigo-600" : "bg-slate-300 dark:bg-slate-600"}`}
-                      onClick={() => handleToggle(mod)}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${enabled ? "bg-indigo-600" : "bg-slate-300 dark:bg-slate-600"} ${canToggle ? "cursor-pointer" : "opacity-60"}`}
+                      onClick={canToggle ? () => handleToggle(mod) : undefined}
                     >
                       <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${enabled ? "translate-x-5" : ""}`} />
                     </div>

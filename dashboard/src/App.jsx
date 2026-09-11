@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
+import RequireAccess from "./components/RequireAccess";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import { PageLoader } from "./components/ui/Spinner";
 import { getCurrentUser } from "./features/auth/authSlice";
@@ -58,21 +59,126 @@ function App() {
 
         <Route element={<ProtectedRoute />}>
           <Route element={<DashboardLayout />}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/tenants" element={<Tenants />} />
-            <Route path="/branches" element={<Branches />} />
-            <Route path="/billing" element={<Billing />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/admins" element={<Admins />} />
-            <Route path="/audit-logs" element={<AuditLogs />} />
-            <Route path="/error-logs" element={<ErrorLogs />} />
-            <Route path="/feature-flags" element={<FeatureFlags />} />
-            <Route path="/health" element={<Health />} />
-            <Route path="/plans" element={<Plans />} />
-            <Route path="/quarantine" element={<Quarantine />} />
-            <Route path="/backups" element={<Backups />} />
-            <Route path="/performance" element={<Performance />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route
+              path="/"
+              element={
+                <RequireAccess accessKey="dashboard">
+                  <Dashboard />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/tenants"
+              element={
+                <RequireAccess accessKey="tenants">
+                  <Tenants />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/branches"
+              element={
+                <RequireAccess accessKey="branches">
+                  <Branches />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/billing"
+              element={
+                <RequireAccess accessKey="billing">
+                  <Billing />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/analytics"
+              element={
+                <RequireAccess accessKey="analytics">
+                  <Analytics />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/admins"
+              element={
+                <RequireAccess accessKey="admins">
+                  <Admins />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/audit-logs"
+              element={
+                <RequireAccess accessKey="auditLogs">
+                  <AuditLogs />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/error-logs"
+              element={
+                <RequireAccess accessKey="errorLogs">
+                  <ErrorLogs />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/feature-flags"
+              element={
+                <RequireAccess accessKey="featureFlags">
+                  <FeatureFlags />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/health"
+              element={
+                <RequireAccess accessKey="health">
+                  <Health />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/plans"
+              element={
+                <RequireAccess accessKey="plans">
+                  <Plans />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/quarantine"
+              element={
+                <RequireAccess accessKey="quarantine">
+                  <Quarantine />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/backups"
+              element={
+                <RequireAccess accessKey="backups">
+                  <Backups />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/performance"
+              element={
+                <RequireAccess accessKey="performance">
+                  <Performance />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <RequireAccess accessKey="settings">
+                  <Settings />
+                </RequireAccess>
+              }
+            />
           </Route>
         </Route>
 

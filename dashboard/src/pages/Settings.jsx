@@ -17,6 +17,7 @@ import {
 } from "../features/twofa/twofaSlice";
 import { setLanguage, setTheme } from "../features/ui/uiSlice";
 import { t } from "../lib/i18n";
+import { canUserAccess } from "../lib/permissions";
 
 export default function Settings() {
   const dispatch = useDispatch();
@@ -294,9 +295,11 @@ export default function Settings() {
           <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
             {t("platformSettings", language)}
           </h3>
-          <Button onClick={handlePlatformSave} loading={saving}>
-            {t("save", language)}
-          </Button>
+          {canUserAccess(user, "settings.update") && (
+            <Button onClick={handlePlatformSave} loading={saving}>
+              {t("save", language)}
+            </Button>
+          )}
         </div>
         <div className="space-y-4">
           <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg">

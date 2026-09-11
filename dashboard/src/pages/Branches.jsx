@@ -21,6 +21,7 @@ import {
 import { fetchTenants } from "../features/tenants/tenantsSlice";
 import { formatDate } from "../lib/format";
 import { t } from "../lib/i18n";
+import { canUserAccess } from "../lib/permissions";
 
 export default function Branches() {
   const dispatch = useDispatch();
@@ -29,6 +30,7 @@ export default function Branches() {
   );
   const { items: tenants } = useSelector((state) => state.tenants);
   const { language } = useSelector((state) => state.ui);
+  const { user } = useSelector((state) => state.auth);
   const [search, setSearch] = useState(filters.search || "");
   const [tenantFilter, setTenantFilter] = useState(filters.tenant || "");
   const [showForm, setShowForm] = useState(false);
@@ -44,6 +46,8 @@ export default function Branches() {
     const t = tenants.find((tn) => tn._id === id);
     return t?.name || id;
   };
+
+  const can = (key) => canUserAccess(user, key);
 
   const handleSearch = () => {
     dispatch(setPage(1));
@@ -94,10 +98,12 @@ export default function Branches() {
             {t("search", language)}
           </Button>
         </div>
-        <Button onClick={() => setShowForm(true)}>
-          <PlusIcon className="w-4 h-4" />
-          {t("addBranch", language)}
-        </Button>
+        {can("branches.create") && (
+          <Button onClick={() => setShowForm(true)}>
+            <PlusIcon className="w-4 h-4" />
+            {t("addBranch", language)}
+          </Button>
+        )}
       </div>
 
       <Card padding="p-0">
@@ -174,24 +180,28 @@ export default function Branches() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-end">
                       <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedBranch(branch);
-                            setShowForm(true);
-                          }}
-                        >
-                          {t("edit", language)}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-600 hover:text-red-700"
-                          onClick={() => setDeleteTarget(branch)}
-                        >
-                          {t("deleteBranch", language)}
-                        </Button>
+                        {can("branches.update") && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedBranch(branch);
+                              setShowForm(true);
+                            }}
+                          >
+                            {t("edit", language)}
+                          </Button>
+                        )}
+                        {can("branches.delete") && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:text-red-700"
+                            onClick={() => setDeleteTarget(branch)}
+                          >
+                            {t("deleteBranch", language)}
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

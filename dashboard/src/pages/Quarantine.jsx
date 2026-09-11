@@ -12,11 +12,13 @@ import {
   removeQuarantine,
 } from "../features/quarantine/quarantineSlice";
 import { t } from "../lib/i18n";
+import { canUserAccess } from "../lib/permissions";
 
 export default function Quarantine() {
   const dispatch = useDispatch();
   const { checks, loading } = useSelector((state) => state.quarantine);
   const { language } = useSelector((state) => state.ui);
+  const { user } = useSelector((state) => state.auth);
   const [quarantineTarget, setQuarantineTarget] = useState(null);
   const [removeTarget, setRemoveTarget] = useState(null);
   const [reason, setReason] = useState("");
@@ -39,6 +41,8 @@ export default function Quarantine() {
     setRemoveTarget(null);
     dispatch(fetchAbuseChecks());
   };
+
+  const can = (key) => canUserAccess(user, key);
 
   return (
     <div className="p-6">
@@ -87,6 +91,7 @@ export default function Quarantine() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
+                        {can("quarantine.set") && (
                         <Button
                           variant="danger"
                           size="sm"
@@ -95,6 +100,8 @@ export default function Quarantine() {
                         >
                           {t("quarantineTenant", language)}
                         </Button>
+                      )}
+                      {can("quarantine.remove") && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -104,6 +111,7 @@ export default function Quarantine() {
                         >
                           {t("removeQuarantine", language)}
                         </Button>
+                      )}
                       </div>
                     </td>
                   </tr>

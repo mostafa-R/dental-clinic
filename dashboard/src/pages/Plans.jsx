@@ -20,6 +20,7 @@ import {
 } from "../features/plans/plansSlice";
 import { formatCurrency } from "../lib/format";
 import { t } from "../lib/i18n";
+import { canUserAccess } from "../lib/permissions";
 
 const ALL_MODULES = [
   { key: "dashboard", label: "Dashboard" },
@@ -40,6 +41,7 @@ export default function Plans() {
   const dispatch = useDispatch();
   const { items, loading } = useSelector((state) => state.plans);
   const { language } = useSelector((state) => state.ui);
+  const { user } = useSelector((state) => state.auth);
   const [showForm, setShowForm] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [formData, setFormData] = useState({
@@ -166,6 +168,8 @@ export default function Plans() {
     setDeleteConfirm(null);
   };
 
+  const can = (key) => canUserAccess(user, key);
+
   if (loading && !items.length) {
     return <PageLoader />;
   }
@@ -176,10 +180,12 @@ export default function Plans() {
         <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
           Subscription Plans
         </h2>
-        <Button onClick={() => setShowForm(true)}>
-          <PlusIcon className="w-4 h-4" />
-          {t("addPlan", language)}
-        </Button>
+        {can("plans.create") && (
+          <Button onClick={() => setShowForm(true)}>
+            <PlusIcon className="w-4 h-4" />
+            {t("addPlan", language)}
+          </Button>
+        )}
       </div>
 
       {items.length === 0 ? (
@@ -188,10 +194,12 @@ export default function Plans() {
           description="Create subscription plans for your platform."
           icon={Squares2X2Icon}
           action={
-            <Button onClick={() => setShowForm(true)}>
-              <PlusIcon className="w-4 h-4" />
-              {t("addPlan", language)}
-            </Button>
+            can("plans.create") && (
+              <Button onClick={() => setShowForm(true)}>
+                <PlusIcon className="w-4 h-4" />
+                {t("addPlan", language)}
+              </Button>
+            )
           }
         />
       ) : (
@@ -285,6 +293,7 @@ export default function Plans() {
               )}
 
               <div className="flex gap-2">
+                {can("plans.update") && (
                 <Button
                   variant="secondary"
                   className="flex-1"
@@ -292,6 +301,8 @@ export default function Plans() {
                 >
                   {t("edit", language)}
                 </Button>
+              )}
+              {can("plans.delete") && (
                 <Button
                   variant="ghost"
                   className="text-red-600 hover:text-red-700"
@@ -299,6 +310,7 @@ export default function Plans() {
                 >
                   {t("delete", language)}
                 </Button>
+              )}
               </div>
             </Card>
           ))}

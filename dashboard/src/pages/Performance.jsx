@@ -7,6 +7,7 @@ import StatCard from "../components/ui/StatCard";
 import { PageLoader } from "../components/ui/Spinner";
 import { fetchPerfStats, resetPerfStats } from "../features/perf/perfSlice";
 import { t } from "../lib/i18n";
+import { canUserAccess } from "../lib/permissions";
 
 function msColor(ms) {
   if (ms < 50) return "text-emerald-600 dark:text-emerald-400";
@@ -20,6 +21,7 @@ export default function Performance() {
   const dispatch = useDispatch();
   const { data, loading, resetting } = useSelector((state) => state.perf);
   const { language } = useSelector((state) => state.ui);
+  const { user } = useSelector((state) => state.auth);
 
   useEffect(() => {
     dispatch(fetchPerfStats());
@@ -46,9 +48,11 @@ export default function Performance() {
           <Button variant="ghost" onClick={() => dispatch(fetchPerfStats())} loading={loading}>
             {t("refresh", language)}
           </Button>
-          <Button variant="danger" onClick={handleReset} loading={resetting}>
-            {t("resetStats", language)}
-          </Button>
+          {canUserAccess(user, "performance.reset") && (
+            <Button variant="danger" onClick={handleReset} loading={resetting}>
+              {t("resetStats", language)}
+            </Button>
+          )}
         </div>
       </div>
 

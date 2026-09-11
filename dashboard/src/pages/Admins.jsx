@@ -22,7 +22,11 @@ import {
 } from "../features/admins/adminsSlice";
 import { formatDate } from "../lib/format";
 import { t } from "../lib/i18n";
-import { ROLE_PERMISSIONS, SITE_PERMISSIONS } from "../lib/permissions";
+import {
+  canUserAccess,
+  ROLE_PERMISSIONS,
+  SITE_PERMISSIONS,
+} from "../lib/permissions";
 
 const AVAILABLE_ROLES = ["super_admin", "admin", "support"];
 
@@ -32,6 +36,7 @@ export default function Admins() {
     (state) => state.admins,
   );
   const { language } = useSelector((state) => state.ui);
+  const { user } = useSelector((state) => state.auth);
   const [search, setSearch] = useState(filters.search || "");
   const [roleFilter, setRoleFilter] = useState(filters.role || "");
   const [showForm, setShowForm] = useState(false);
@@ -137,6 +142,8 @@ export default function Admins() {
     setDeleteConfirm(null);
   };
 
+  const can = (key) => canUserAccess(user, key);
+
   const getRoleBadge = (role) => {
     const variants = {
       super_admin: "danger",
@@ -185,10 +192,12 @@ export default function Admins() {
             {t("search", language)}
           </Button>
         </div>
-        <Button onClick={() => setShowForm(true)}>
-          <PlusIcon className="w-4 h-4" />
-          {t("addAdmin", language)}
-        </Button>
+        {can("admins.create") && (
+          <Button onClick={() => setShowForm(true)}>
+            <PlusIcon className="w-4 h-4" />
+            {t("addAdmin", language)}
+          </Button>
+        )}
       </div>
 
       <Card padding="p-0">
@@ -198,10 +207,12 @@ export default function Admins() {
             description="Add site administrators to manage the platform."
             icon={ShieldCheckIcon}
             action={
-              <Button onClick={() => setShowForm(true)}>
-                <PlusIcon className="w-4 h-4" />
-                {t("addAdmin", language)}
-              </Button>
+              can("admins.create") && (
+                <Button onClick={() => setShowForm(true)}>
+                  <PlusIcon className="w-4 h-4" />
+                  {t("addAdmin", language)}
+                </Button>
+              )
             }
           />
         ) : (
@@ -274,21 +285,25 @@ export default function Admins() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-end">
                       <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(admin)}
-                        >
-                          {t("edit", language)}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-600 hover:text-red-700"
-                          onClick={() => setDeleteConfirm(admin)}
-                        >
-                          {t("delete", language)}
-                        </Button>
+                        {can("admins.update") && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(admin)}
+                          >
+                            {t("edit", language)}
+                          </Button>
+                        )}
+                        {can("admins.delete") && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:text-red-700"
+                            onClick={() => setDeleteConfirm(admin)}
+                          >
+                            {t("delete", language)}
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

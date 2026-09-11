@@ -18,42 +18,138 @@ import {
   UsersIcon,
 } from "../ui/icons";
 import { t } from "../../lib/i18n";
+import { canUserAccess } from "../../lib/permissions";
 
 const navigation = [
   // Overview
-  { nameKey: "dashboard", href: "/", icon: HomeIcon, group: "overview" },
-  
+  {
+    nameKey: "dashboard",
+    href: "/",
+    icon: HomeIcon,
+    group: "overview",
+    accessKey: "dashboard",
+  },
+
   // Core Management
-  { nameKey: "tenants", href: "/tenants", icon: BuildingOfficeIcon, group: "core" },
-  { nameKey: "branches", href: "/branches", icon: UsersIcon, group: "core" },
-  { nameKey: "plans", href: "/plans", icon: Squares2X2Icon, group: "core" },
-  
+  {
+    nameKey: "tenants",
+    href: "/tenants",
+    icon: BuildingOfficeIcon,
+    group: "core",
+    accessKey: "tenants",
+  },
+  {
+    nameKey: "branches",
+    href: "/branches",
+    icon: UsersIcon,
+    group: "core",
+    accessKey: "branches",
+  },
+  {
+    nameKey: "plans",
+    href: "/plans",
+    icon: Squares2X2Icon,
+    group: "core",
+    accessKey: "plans",
+  },
+
   // Finance
-  { nameKey: "billing", href: "/billing", icon: CreditCardIcon, group: "finance" },
-  { nameKey: "analytics", href: "/analytics", icon: ChartBarIcon, group: "finance" },
-  
+  {
+    nameKey: "billing",
+    href: "/billing",
+    icon: CreditCardIcon,
+    group: "finance",
+    accessKey: "billing",
+  },
+  {
+    nameKey: "analytics",
+    href: "/analytics",
+    icon: ChartBarIcon,
+    group: "finance",
+    accessKey: "analytics",
+  },
+
   // Security & Admin
-  { nameKey: "admins", href: "/admins", icon: ShieldCheckIcon, group: "security" },
-  { nameKey: "featureFlags", href: "/feature-flags", icon: ToggleIcon, group: "security" },
-  { nameKey: "quarantine", href: "/quarantine", icon: NoSymbolIcon, group: "security" },
-  
+  {
+    nameKey: "admins",
+    href: "/admins",
+    icon: ShieldCheckIcon,
+    group: "security",
+    accessKey: "admins",
+  },
+  {
+    nameKey: "featureFlags",
+    href: "/feature-flags",
+    icon: ToggleIcon,
+    group: "security",
+    accessKey: "featureFlags",
+  },
+  {
+    nameKey: "quarantine",
+    href: "/quarantine",
+    icon: NoSymbolIcon,
+    group: "security",
+    accessKey: "quarantine",
+  },
+
   // Monitoring
-  { nameKey: "health", href: "/health", icon: HeartIcon, group: "monitoring" },
-  { nameKey: "performance", href: "/performance", icon: ClockIcon, group: "monitoring" },
-  { nameKey: "auditLogs", href: "/audit-logs", icon: CheckCircleIcon, group: "monitoring" },
-  { nameKey: "errorLogs", href: "/error-logs", icon: ExclamationTriangleIcon, group: "monitoring" },
-  
+  {
+    nameKey: "health",
+    href: "/health",
+    icon: HeartIcon,
+    group: "monitoring",
+    accessKey: "health",
+  },
+  {
+    nameKey: "performance",
+    href: "/performance",
+    icon: ClockIcon,
+    group: "monitoring",
+    accessKey: "performance",
+  },
+  {
+    nameKey: "auditLogs",
+    href: "/audit-logs",
+    icon: CheckCircleIcon,
+    group: "monitoring",
+    accessKey: "auditLogs",
+  },
+  {
+    nameKey: "errorLogs",
+    href: "/error-logs",
+    icon: ExclamationTriangleIcon,
+    group: "monitoring",
+    accessKey: "errorLogs",
+  },
+
   // System
-  { nameKey: "backups", href: "/backups", icon: ArrowUpTrayIcon, group: "system" },
-  { nameKey: "settings", href: "/settings", icon: CogIcon, group: "system" },
+  {
+    nameKey: "backups",
+    href: "/backups",
+    icon: ArrowUpTrayIcon,
+    group: "system",
+    accessKey: "backups",
+  },
+  {
+    nameKey: "settings",
+    href: "/settings",
+    icon: CogIcon,
+    group: "system",
+    accessKey: "settings",
+  },
 ];
 
 export default function Sidebar() {
   const { sidebarCollapsed } = useSelector((state) => state.ui);
   const { language } = useSelector((state) => state.ui);
+  const { user } = useSelector((state) => state.auth);
+
+  const visibleNav = navigation.filter(
+    (item) => !item.accessKey || canUserAccess(user, item.accessKey),
+  );
 
   // Group navigation items
-  const groupedNav = navigation.reduce((acc, item) => {
+  const groupedNav = visibleNav.reduce((acc, item) => {
     if (!acc[item.group]) acc[item.group] = [];
     acc[item.group].push(item);
     return acc;
@@ -66,7 +162,7 @@ export default function Sidebar() {
     { key: "security", label: "Security" },
     { key: "monitoring", label: "Monitoring" },
     { key: "system", label: "System" },
-  ];
+  ].filter((group) => (groupedNav[group.key]?.length || 0) > 0);
 
   return (
     <aside

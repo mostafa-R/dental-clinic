@@ -26,6 +26,7 @@ import { fetchPlans } from "../features/plans/plansSlice";
 import { formatDate } from "../lib/format";
 import { TENANT_STATUS } from "../lib/roles";
 import { t } from "../lib/i18n";
+import { canUserAccess } from "../lib/permissions";
 import { startImpersonation } from "../features/impersonation/impersonationSlice";
 import api from "../lib/axios";
 
@@ -36,6 +37,7 @@ export default function Tenants() {
   );
   const { items: plans } = useSelector((state) => state.plans);
   const { language } = useSelector((state) => state.ui);
+  const { user } = useSelector((state) => state.auth);
   const impersonation = useSelector((state) => state.impersonation);
   const [search, setSearch] = useState(filters.search || "");
   const [statusFilter, setStatusFilter] = useState(filters.status || "");
@@ -65,6 +67,8 @@ export default function Tenants() {
     const p = plans.find((pl) => pl.key === key);
     return p?.name || key;
   };
+
+  const can = (key) => canUserAccess(user, key);
 
   const handleSearch = () => {
     dispatch(setPage(1));
@@ -168,10 +172,12 @@ export default function Tenants() {
             {t("search", language)}
           </Button>
         </div>
-        <Button onClick={() => setShowForm(true)}>
-          <PlusIcon className="w-4 h-4" />
-          {t("addTenant", language)}
-        </Button>
+        {can("tenants.create") && (
+          <Button onClick={() => setShowForm(true)}>
+            <PlusIcon className="w-4 h-4" />
+            {t("addTenant", language)}
+          </Button>
+        )}
       </div>
 
       <Card padding="p-0">
@@ -181,10 +187,12 @@ export default function Tenants() {
             description={t("noTenantsDesc", language)}
             icon={BuildingOfficeIcon}
             action={
-              <Button onClick={() => setShowForm(true)}>
-                <PlusIcon className="w-4 h-4" />
-                {t("addTenant", language)}
-              </Button>
+              can("tenants.create") && (
+                <Button onClick={() => setShowForm(true)}>
+                  <PlusIcon className="w-4 h-4" />
+                  {t("addTenant", language)}
+                </Button>
+              )
             }
           />
         ) : (
@@ -258,80 +266,90 @@ export default function Tenants() {
                         >
                           {t("usage", language)}
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-amber-600 hover:text-amber-700"
-                          onClick={() => handleImpersonateClick(tenant)}
-                        >
-                          {t("loginAs", language)}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedTenant(tenant);
-                            setShowForm(true);
-                          }}
-                        >
-                          {t("edit", language)}
-                        </Button>
-                        {tenant.status === TENANT_STATUS.ACTIVE && (
+                        {can("tenants.impersonate") && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-amber-600 hover:text-amber-700"
+                            onClick={() => handleImpersonateClick(tenant)}
+                          >
+                            {t("loginAs", language)}
+                          </Button>
+                        )}
+                        {can("tenants.update") && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedTenant(tenant);
+                              setShowForm(true);
+                            }}
+                          >
+                            {t("edit", language)}
+                          </Button>
+                        )}
+                        {tenant.status === TENANT_STATUS.ACTIVE &&
+                          can("tenants.suspend") && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-600 hover:text-red-700"
+                              onClick={() =>
+                                setConfirmAction({
+                                  type: "suspend",
+                                  id: tenant._id,
+                                })
+                              }
+                            >
+                              {t("suspendTenant", language)}
+                            </Button>
+                          )}
+                        {tenant.status === TENANT_STATUS.SUSPENDED &&
+                          can("tenants.activate") && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-emerald-600 hover:text-emerald-700"
+                              onClick={() =>
+                                setConfirmAction({
+                                  type: "activate",
+                                  id: tenant._id,
+                                })
+                              }
+                            >
+                              {t("activateTenant", language)}
+                            </Button>
+                          )}
+                        {can("tenants.archive") && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-slate-500 hover:text-slate-700"
+                            onClick={() =>
+                              setConfirmAction({
+                                type: "archive",
+                                id: tenant._id,
+                              })
+                            }
+                          >
+                            {t("archiveTenant", language)}
+                          </Button>
+                        )}
+                        {can("tenants.delete") && (
                           <Button
                             variant="ghost"
                             size="sm"
                             className="text-red-600 hover:text-red-700"
                             onClick={() =>
                               setConfirmAction({
-                                type: "suspend",
+                                type: "delete",
                                 id: tenant._id,
                               })
                             }
                           >
-                            {t("suspendTenant", language)}
+                            {t("deleteTenant", language)}
                           </Button>
                         )}
-                        {tenant.status === TENANT_STATUS.SUSPENDED && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-emerald-600 hover:text-emerald-700"
-                            onClick={() =>
-                              setConfirmAction({
-                                type: "activate",
-                                id: tenant._id,
-                              })
-                            }
-                          >
-                            {t("activateTenant", language)}
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-slate-500 hover:text-slate-700"
-                          onClick={() =>
-                            setConfirmAction({
-                              type: "archive",
-                              id: tenant._id,
-                            })
-                          }
-                        >
-                          {t("archiveTenant", language)}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-600 hover:text-red-700"
-                          onClick={() =>
-                            setConfirmAction({
-                              type: "delete",
-                              id: tenant._id,
-                            })
-                          }
-                        >
-                          {t("deleteTenant", language)}
-                        </Button>
                       </div>
                     </td>
                   </tr>
