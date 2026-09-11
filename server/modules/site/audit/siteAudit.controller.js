@@ -1,7 +1,7 @@
-import AuditLog from "./auditLog.model.js";
-import asyncHandler from "../../../utils/asyncHandler.js";
 import ApiError from "../../../utils/ApiError.js";
+import asyncHandler from "../../../utils/asyncHandler.js";
 import { sendSuccess } from "../../../utils/sendSuccess.js";
+import AuditLog from "./auditLog.model.js";
 
 export const getAuditLogs = asyncHandler(async (req, res) => {
   const { page = 1, limit = 50, action, adminId, targetType, targetId, startDate, endDate } = req.validatedQuery;

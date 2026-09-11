@@ -1,11 +1,10 @@
-import mongoose from 'mongoose';
 
-import * as inventoryService from './inventory.service.js';
-import { currentTenant, filterByBranch, resolveBranchForCreate } from '../../utils/branchScope.js';
+import { emitToBranch } from '../../socket/index.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
+import { currentTenant, filterByBranch, resolveBranchForCreate } from '../../utils/branchScope.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
-import { emitToBranch } from '../../socket/index.js';
+import * as inventoryService from './inventory.service.js';
 
 export const listItems = asyncHandler(async (req, res) => {
   const branchFilter = filterByBranch(req);

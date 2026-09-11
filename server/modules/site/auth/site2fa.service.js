@@ -1,9 +1,9 @@
-import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import { TOTP, generateSecret, NobleCryptoPlugin, ScureBase32Plugin } from 'otplib';
-import SiteAdmin from '../admin/admin.model.js';
-import ApiError from '../../../utils/ApiError.js';
+import crypto from 'crypto';
+import { generateSecret, NobleCryptoPlugin, ScureBase32Plugin, TOTP } from 'otplib';
 import { getRedis } from '../../../config/redis.js';
+import ApiError from '../../../utils/ApiError.js';
+import SiteAdmin from '../admin/admin.model.js';
 
 const totp = new TOTP({
   window: 1,

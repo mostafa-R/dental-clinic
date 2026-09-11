@@ -1,5 +1,8 @@
 import { Router } from 'express';
 
+import { protect } from '../../middleware/auth.js';
+import { checkPermission } from '../../middleware/checkPermission.js';
+import { validate } from '../../middleware/validate.js';
 import {
   adjustStock,
   createItem,
@@ -8,9 +11,6 @@ import {
   listItems,
   updateItem,
 } from './inventory.controller.js';
-import { protect } from '../../middleware/auth.js';
-import { checkPermission } from '../../middleware/checkPermission.js';
-import { validate } from '../../middleware/validate.js';
 import {
   adjustStockSchema,
   createItemSchema,

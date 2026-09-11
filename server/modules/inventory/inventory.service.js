@@ -1,10 +1,10 @@
 import mongoose from 'mongoose';
 
-import InventoryItem from './inventory.model.js';
-import { toObjectId } from '../../utils/branchScope.js';
-import ApiError from '../../utils/ApiError.js';
-import { escapeRegex } from '../../utils/escapeRegex.js';
 import { emitItemAlerts } from '../../services/inventoryCron.js';
+import ApiError from '../../utils/ApiError.js';
+import { toObjectId } from '../../utils/branchScope.js';
+import { escapeRegex } from '../../utils/escapeRegex.js';
+import InventoryItem from './inventory.model.js';
 
 // Sane upper bound for a single item's quantity. Protects against an
 // unbounded `adjustment` inflating stock far beyond any real physical
@@ -329,17 +329,17 @@ export async function deductForProcedure({
     const fbTarget = candidates[1];
     const fbItems = session
       ? await InventoryItem.find({
-          branch: toObjectId(branchId),
-          tenant: tenantId ? toObjectId(tenantId) : null,
-          category: fbTarget.category,
-          quantity: { $gt: 0 },
-        }).sort('expiryDate').session(session)
+        branch: toObjectId(branchId),
+        tenant: tenantId ? toObjectId(tenantId) : null,
+        category: fbTarget.category,
+        quantity: { $gt: 0 },
+      }).sort('expiryDate').session(session)
       : await InventoryItem.find({
-          branch: toObjectId(branchId),
-          tenant: tenantId ? toObjectId(tenantId) : null,
-          category: fbTarget.category,
-          quantity: { $gt: 0 },
-        }).sort('expiryDate');
+        branch: toObjectId(branchId),
+        tenant: tenantId ? toObjectId(tenantId) : null,
+        category: fbTarget.category,
+        quantity: { $gt: 0 },
+      }).sort('expiryDate');
 
     for (const item of fbItems) {
       if (toDeduct <= 0) break;
@@ -390,17 +390,17 @@ export async function restockForInvoice({ branchId, tenantId, invoiceId, userId,
 
   const items = session
     ? await InventoryItem.find({
-        branch: toObjectId(branchId),
-        tenant: tenantId ? toObjectId(tenantId) : null,
-        'transactions.type': 'stock_out',
-        'transactions.reference': { $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:` },
-      }).session(session)
+      branch: toObjectId(branchId),
+      tenant: tenantId ? toObjectId(tenantId) : null,
+      'transactions.type': 'stock_out',
+      'transactions.reference': { $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:` },
+    }).session(session)
     : await InventoryItem.find({
-        branch: toObjectId(branchId),
-        tenant: tenantId ? toObjectId(tenantId) : null,
-        'transactions.type': 'stock_out',
-        'transactions.reference': { $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:` },
-      });
+      branch: toObjectId(branchId),
+      tenant: tenantId ? toObjectId(tenantId) : null,
+      'transactions.type': 'stock_out',
+      'transactions.reference': { $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:` },
+    });
 
   let reversals = 0;
   for (const item of items) {

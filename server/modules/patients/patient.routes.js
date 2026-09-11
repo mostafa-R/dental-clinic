@@ -1,5 +1,9 @@
 import { Router } from 'express';
 
+import { protect } from '../../middleware/auth.js';
+import { checkPermission } from '../../middleware/checkPermission.js';
+import { phiRestrict } from '../../middleware/phiRestrict.js';
+import { validate } from '../../middleware/validate.js';
 import {
   archivePatient,
   createPatient,
@@ -9,10 +13,6 @@ import {
   mergePatients,
   updatePatient,
 } from './patient.controller.js';
-import { protect } from '../../middleware/auth.js';
-import { checkPermission } from '../../middleware/checkPermission.js';
-import { phiRestrict } from '../../middleware/phiRestrict.js';
-import { validate } from '../../middleware/validate.js';
 import {
   createPatientSchema,
   listPatientsQuerySchema,

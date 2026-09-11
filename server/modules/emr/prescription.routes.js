@@ -1,13 +1,5 @@
 import { Router } from 'express';
 
-import {
-  createPrescription,
-  deletePrescription,
-  getPrescription,
-  getPrescriptionPrint,
-  listPrescriptions,
-  updatePrescription,
-} from './prescription.controller.js';
 import { protect } from '../../middleware/auth.js';
 import { checkPermission } from '../../middleware/checkPermission.js';
 import { phiRestrict } from '../../middleware/phiRestrict.js';
@@ -17,6 +9,14 @@ import {
   listEmrQuerySchema,
   updatePrescriptionSchema,
 } from './emr.validator.js';
+import {
+  createPrescription,
+  deletePrescription,
+  getPrescription,
+  getPrescriptionPrint,
+  listPrescriptions,
+  updatePrescription,
+} from './prescription.controller.js';
 
 const router = Router({ mergeParams: true });
 

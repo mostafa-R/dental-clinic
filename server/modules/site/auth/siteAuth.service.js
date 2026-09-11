@@ -3,12 +3,12 @@ import crypto from 'node:crypto';
 import nodemailer from 'nodemailer';
 import { getRedis } from '../../../config/redis.js';
 import ApiError from '../../../utils/ApiError.js';
+import { logger, logInfo, logWarn } from '../../../utils/logger.js';
 import {
   assertNotLocked,
   recordFailedLogin,
   resetFailedLogins,
 } from '../../../utils/loginThrottle.js';
-import { logger, logInfo, logWarn } from '../../../utils/logger.js';
 import SiteAdmin from '../admin/admin.model.js';
 import { bootstrap2fa } from './site2fa.service.js';
 

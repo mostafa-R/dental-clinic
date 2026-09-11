@@ -1,13 +1,13 @@
 import mongoose from 'mongoose';
 
-import TreatmentPlan from './treatmentPlan.model.js';
-import DentalChart from './dentalChart.model.js';
-import Invoice from '../billing/invoice.model.js';
+import { withTransaction } from '../../core/transaction.js';
+import { emitItemAlerts } from '../../services/inventoryCron.js';
 import ApiError from '../../utils/ApiError.js';
 import { toObjectId } from '../../utils/branchScope.js';
+import Invoice from '../billing/invoice.model.js';
 import { deductForProcedure } from '../inventory/inventory.service.js';
-import { emitItemAlerts } from '../../services/inventoryCron.js';
-import { withTransaction } from '../../core/transaction.js';
+import DentalChart from './dentalChart.model.js';
+import TreatmentPlan from './treatmentPlan.model.js';
 
 export const POPULATE = [
   { path: 'patient', select: 'patientId firstName lastName' },

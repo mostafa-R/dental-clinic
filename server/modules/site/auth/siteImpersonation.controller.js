@@ -2,8 +2,8 @@ import jwt from 'jsonwebtoken';
 import ApiError from "../../../utils/ApiError.js";
 import asyncHandler from "../../../utils/asyncHandler.js";
 import { sendSuccess } from "../../../utils/sendSuccess.js";
-import User from "../../users/user.model.js";
 import Role from "../../users/role.model.js";
+import User from "../../users/user.model.js";
 import Tenant from "../tenant/tenant.model.js";
 
 /**

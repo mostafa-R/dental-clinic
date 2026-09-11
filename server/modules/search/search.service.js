@@ -1,19 +1,19 @@
-import Patient from '../patients/patient.model.js';
-import Appointment from '../appointments/appointment.model.js';
-import Invoice from '../billing/invoice.model.js';
-import Branch from '../users/branch.model.js';
-import User from '../users/user.model.js';
-import Role from '../users/role.model.js';
-import InventoryItem from '../inventory/inventory.model.js';
+import { stripPHI } from '../../middleware/phiRestrict.js';
+import { cacheGet, cacheSet } from '../../utils/cache.js';
 import Expense from '../accounting/expense.model.js';
 import OwnerDrawing from '../accounting/ownerDrawing.model.js';
-import TreatmentPlan from '../emr/treatmentPlan.model.js';
-import Prescription from '../emr/prescription.model.js';
+import Appointment from '../appointments/appointment.model.js';
+import Invoice from '../billing/invoice.model.js';
 import ClinicalNote from '../emr/clinicalNote.model.js';
-import Wallet from '../patients/wallet.model.js';
+import Prescription from '../emr/prescription.model.js';
+import TreatmentPlan from '../emr/treatmentPlan.model.js';
+import InventoryItem from '../inventory/inventory.model.js';
 import InstallmentPlan from '../patients/installment.model.js';
-import { cacheGet, cacheSet } from '../../utils/cache.js';
-import { stripPHI } from '../../middleware/phiRestrict.js';
+import Patient from '../patients/patient.model.js';
+import Wallet from '../patients/wallet.model.js';
+import Branch from '../users/branch.model.js';
+import Role from '../users/role.model.js';
+import User from '../users/user.model.js';
 
 const EMPTY_RESULT = {
   patients: [], appointments: [], invoices: [],
@@ -78,12 +78,12 @@ export async function globalSearch(branchFilter, query, can = () => true, option
 
   const matchedPatients = can('patients')
     ? await Patient.find({
-        ...branchFilter,
-        $or: [{ firstName: regex }, { lastName: regex }, { phone: regex }, { email: regex }, { patientId: regex }],
-      })
-        .select('firstName lastName phone patientId')
-        .limit(5)
-        .lean()
+      ...branchFilter,
+      $or: [{ firstName: regex }, { lastName: regex }, { phone: regex }, { email: regex }, { patientId: regex }],
+    })
+      .select('firstName lastName phone patientId')
+      .limit(5)
+      .lean()
     : [];
 
   const matchedIds = matchedPatients.map((p) => p._id);
