@@ -21,9 +21,9 @@ siteApi.interceptors.response.use(
     const status = error.response?.status;
     const url = original?.url || '';
     const isAuthEndpoint =
-      url.includes('/v1/site/auth/login') ||
-      url.includes('/v1/site/auth/refresh') ||
-      url.includes('/v1/site/2fa/verify-login');
+      url.includes('/site/auth/login') ||
+      url.includes('/site/auth/refresh') ||
+      url.includes('/site/2fa/verify-login');
 
     if (status === 401 && original && !original._retry && !isAuthEndpoint) {
       if (isRefreshing) {
@@ -37,7 +37,7 @@ siteApi.interceptors.response.use(
       original._retry = true;
       isRefreshing = true;
       try {
-        await siteApi.post('/v1/site/auth/refresh');
+        await siteApi.post('/site/auth/refresh');
         queue.forEach((p) => p.resolve());
         queue = [];
         return siteApi(original);
@@ -51,7 +51,7 @@ siteApi.interceptors.response.use(
       }
     }
 
-    if (status === 401 && url.includes('/v1/site/auth/refresh')) {
+    if (status === 401 && url.includes('/site/auth/refresh')) {
       redirectToPlatformLogin();
     }
 

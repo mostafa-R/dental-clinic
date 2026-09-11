@@ -69,5 +69,5 @@ export const emrApi = {
       },
     }).then((r) => r.data.data);
   },
-  getDownloadUrl: (filename) => `/api/v1/emr/attachments/${filename}/download`,
+  getDownloadUrl: (filename) => `${import.meta.env.VITE_API_URL}/emr/attachments/${filename}/download`,
 };
