@@ -4,6 +4,8 @@
 **Scope:** Swagger documentation gaps, RBAC findings (verified against source), monitoring instrumentation issues, and architecture notes.
 **Method:** Every RBAC claim below was re-verified against the actual route files + runtime router introspection (`gated-routes.json`). No gaps are assumed from endpoint naming.
 
+> **Re-freeze note (2026-09-11):** contract re-frozen at **v1.0.1** after the security-scheme alignment below — the frozen snapshot now carries the corrected `bearerAuth`/`siteCookieAuth` refs (74) instead of the stale `siteAuth` refs. Runtime re-audit: MISSING=0, SPEC-ONLY=0 (see `contract/CONTRACT_FREEZE.md §6`). All items in §5 remain completed.
+
 ---
 
 ## 1. Swagger Documentation Gaps

@@ -1,9 +1,9 @@
 # Backend API Contract — Freeze Manifest
 
-**Contract version:** `v1.0.0` (frozen)
-**Freeze date:** 2026-09-11
-**Repo commit ref:** `079bfde` (HEAD at freeze time; contract artifact generated from working tree)
-**Spec file:** `server/audit/contract/openapi.frozen.yaml` (SHA-256 `E8EE16A16CCB8C1C59CC15315DA04AE3A35EC22C1FC53B248C616E2475FB6304`, 11,955 lines, 353,417 bytes)
+**Contract version:** `v1.0.1` (re-frozen)
+**Freeze date:** 2026-09-11 (initial) / 2026-09-11 (re-freeze v1.0.1)
+**Repo commit ref:** `401b553` (HEAD at re-freeze; initial freeze was at `079bfde`)
+**Spec file:** `server/audit/contract/openapi.frozen.yaml` (SHA-256 `95E9C598A8520EC90EECFD50F92DF2FC3BA287B9B27440AD8DE8D7C58FFD0417`, 11,902 lines, 354,523 bytes)
 
 ---
 
@@ -36,6 +36,7 @@ The **HTTP API contract** of the Dental OS backend, expressed as the OpenAPI 3.0
 - `openapi.yaml` is **generated**, not hand-maintained: `node scripts/dump-swagger.mjs` loads `server/swagger.js` in-process and dumps the spec via `js-yaml` → `server/audit/openapi.yaml` (see `scripts/dump-swagger.mjs`).
 - Runtime gate/route reality is captured by `audit-gates.mjs` (patches the `router` package to record mounts, walks the mounted tree, normalizes aliases) → `gated-routes.json` (220 rows).
 - Parity is checked by `verify-parity.mjs`: every code route must exist in the spec and vice-versa.
+  - > Note: `audit-gates.mjs` / `verify-parity.mjs` are not committed to this repo. The v1.0.1 re-freeze reproduced the same checks with an equivalent inline script (patches `router` 2.x `Router.prototype.use` to record mount paths since `Layer.path` is `undefined`, walks the mounted tree with `/v1` canonical + `/` alias dedup, normalizes `:param` → `{param}`) and compared against the regenerated spec: **MISSING=0, SPEC-ONLY=0**.
 - Any edits go into the **route files' `@swagger` blocks**, then re-run the pipeline. Never edit `openapi.frozen.yaml` by hand.
 
 ## 4. Change control (post-freeze rules)
@@ -63,3 +64,10 @@ The **HTTP API contract** of the Dental OS backend, expressed as the OpenAPI 3.0
 | `API_AUDIT_REPORT.md` | Coverage, auth, security, realtime, cron baseline |
 | `API_GAPS_REPORT.md` | Open (non-blocking) gaps + withdrawn false-positive findings |
 | `FRONTEND_API_GUIDE.md` | Integration guide for frontend teams |
+
+## 6. Freeze history
+
+| Version | Date | Commit | Spec SHA-256 | Notes |
+|---|---|---|---|---|
+| v1.0.0 | 2026-09-11 | `079bfde` | `E8EE16A16CCB8C1C59CC15315DA04AE3A35EC22C1FC53B248C616E2475FB6304` | Initial freeze (working-tree state at `079bfde`). |
+| v1.0.1 | 2026-09-11 | `401b553` | `95E9C598A8520EC90EECFD50F92DF2FC3BA287B9B27440AD8DE8D7C58FFD0417` | Re-freeze: regenerated `openapi.yaml` + `openapi.frozen.yaml` from current `swagger.js`. Runtime re-audit confirmed 220 ops with 100% spec↔code parity (MISSING=0, SPEC-ONLY=0; 218 v1 canonical + `/api/health` + `/api/metrics` = 220; 438 reachable). Frozen artifact now carries the aligned security scheme refs (`siteAuth` → `bearerAuth`/`siteCookieAuth`, 74 refs) that were already applied in the working spec but missing from the stale v1.0.0 snapshot. **Contract content is functionally unchanged — no endpoints, methods, RBAC, or schema shapes changed.** |

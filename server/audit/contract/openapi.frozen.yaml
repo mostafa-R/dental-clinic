@@ -2,24 +2,16 @@ openapi: 3.0.0
 info:
   title: Dental OS API
   version: 1.0.0
-  description: >-
+  description: |-
     Multi-tenant SaaS dental clinic management API.
-
 
     Two authentication realms exist:
 
+    1. **Clinic (staff) realm** - `/api/v1/*` routes. Authenticated via the HTTP-only `access_token` cookie set by `/auth/login`. Authorization is enforced per module with `checkPermission(module, action)`.
 
-    1. **Clinic (staff) realm** - `/api/v1/*` routes. Authenticated via the HTTP-only `access_token` cookie set by
-    `/auth/login`. Authorization is enforced per module with `checkPermission(module, action)`.
+    2. **Site (platform) realm** - `/api/v1/site/*` routes. Authenticated via the `Authorization: Bearer <jwt>` header OR the HTTP-only `site_access` cookie. Role-based access (`super_admin`, `admin`, `support`) and 2FA enforcement for sensitive operations apply.
 
-
-    2. **Site (platform) realm** - `/api/v1/site/*` routes. Authenticated via the `Authorization: Bearer <jwt>` header
-    OR the HTTP-only `site_access` cookie. Role-based access (`super_admin`, `admin`, `support`) and 2FA enforcement for
-    sensitive operations apply.
-
-
-    All successful responses share the envelope `{ success: true, data }`, with `meta`/`pagination` where applicable.
-    Errors use `{ success: false, message, details }`.
+    All successful responses share the envelope `{ success: true, data }`, with `meta`/`pagination` where applicable. Errors use `{ success: false, message, details }`.
 servers:
   - url: http://localhost:7000
     description: Development server
@@ -106,31 +98,23 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: >-
-        JWT access token sent in the `Authorization` header. Used by site (platform) admins via `Authorization: Bearer
-        <token>`. Impersonation tokens issued by `/site/impersonation/start` are also bearer JWTs.
+      description: 'JWT access token sent in the `Authorization` header. Used by site (platform) admins via `Authorization: Bearer <token>`. Impersonation tokens issued by `/site/impersonation/start` are also bearer JWTs.'
     cookieAuth:
       type: apiKey
       in: cookie
       name: access_token
-      description: >-
-        Clinic staff JWT access token, stored in the HTTP-only `access_token` cookie set by `POST /auth/login`. Required
-        for all clinic routes.
+      description: Clinic staff JWT access token, stored in the HTTP-only `access_token` cookie set by `POST /auth/login`. Required for all clinic routes.
     siteCookieAuth:
       type: apiKey
       in: cookie
       name: site_access
-      description: >-
-        Site admin JWT access token, stored in the HTTP-only `site_access` cookie set by `POST /site/auth/login`.
-        Alternative to the Bearer header.
+      description: Site admin JWT access token, stored in the HTTP-only `site_access` cookie set by `POST /site/auth/login`. Alternative to the Bearer header.
   parameters:
     TenantIdHeader:
       name: x-tenant-id
       in: header
       required: false
-      description: >-
-        Tenant (clinic) ObjectId used to scope a request to a specific tenant. Required for platform admins operating
-        across multiple tenants.
+      description: Tenant (clinic) ObjectId used to scope a request to a specific tenant. Required for platform admins operating across multiple tenants.
       schema:
         type: string
     PaginationPage:
@@ -2115,9 +2099,7 @@ paths:
       tags:
         - WhatsApp
       summary: Connect WhatsApp
-      description: >-
-        Requires `settings:update`. Starts the WhatsApp client connection (pairing for whatsapp_web, credential
-        validation for cloud_api).
+      description: Requires `settings:update`. Starts the WhatsApp client connection (pairing for whatsapp_web, credential validation for cloud_api).
       security:
         - cookieAuth: []
       responses:
@@ -2741,9 +2723,7 @@ paths:
       tags:
         - Roles
       summary: List roles
-      description: >-
-        Returns roles for the current tenant (plus platform-level roles) along with the module/action catalog. Requires
-        `roles:read`.
+      description: Returns roles for the current tenant (plus platform-level roles) along with the module/action catalog. Requires `roles:read`.
       security:
         - cookieAuth: []
       responses:
@@ -2938,9 +2918,7 @@ paths:
       tags:
         - Roles
       summary: Delete a custom role
-      description: >-
-        Requires `roles:delete`. Built-in roles cannot be deleted. Users assigned to the role are detached (roleId set
-        to null).
+      description: Requires `roles:delete`. Built-in roles cannot be deleted. Users assigned to the role are detached (roleId set to null).
       security:
         - cookieAuth: []
       parameters:
@@ -3273,9 +3251,7 @@ paths:
       tags:
         - Branches
       summary: Delete a branch
-      description: >-
-        Requires `branches:delete`. The last branch of a tenant cannot be deleted, nor can a branch that still has
-        assigned users.
+      description: Requires `branches:delete`. The last branch of a tenant cannot be deleted, nor can a branch that still has assigned users.
       security:
         - cookieAuth: []
       parameters:
@@ -3378,7 +3354,8 @@ paths:
       summary: Get users for a tenant
       description: Site realm. Requires `super_admin` or `admin` role and tenant access.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: tenantId
@@ -3418,7 +3395,8 @@ paths:
       summary: List branches
       description: Site realm. Requires `super_admin`, `admin`, or `support` role. Optionally filtered by tenant.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: List of branches
@@ -3445,11 +3423,10 @@ paths:
       tags:
         - Site Branches
       summary: Create a branch
-      description: >-
-        Site realm. Requires `super_admin` or `admin` role, 2FA confirmation, and tenant access. Validates that the
-        tenant exists.
+      description: Site realm. Requires `super_admin` or `admin` role, 2FA confirmation, and tenant access. Validates that the tenant exists.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       requestBody:
         required: true
         content:
@@ -3499,7 +3476,8 @@ paths:
       summary: Get a branch
       description: Site realm. Requires `super_admin`, `admin`, or `support` role and branch access.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -3534,11 +3512,10 @@ paths:
       tags:
         - Site Branches
       summary: Update a branch
-      description: >-
-        Site realm. Requires `super_admin` or `admin` role, 2FA confirmation, and branch access. Validates the branch
-        belongs to the tenant (if specified).
+      description: Site realm. Requires `super_admin` or `admin` role, 2FA confirmation, and branch access. Validates the branch belongs to the tenant (if specified).
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -3592,7 +3569,8 @@ paths:
       summary: Delete a branch
       description: Site realm. Requires `super_admin` role, 2FA confirmation, and branch access.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -3628,7 +3606,8 @@ paths:
       summary: List site admins
       description: Site realm. Requires `super_admin` or `admin` role.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: List of admins
@@ -3657,7 +3636,8 @@ paths:
       summary: Create a site admin
       description: Site realm. Requires `super_admin` role and 2FA confirmation.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       requestBody:
         required: true
         content:
@@ -3715,7 +3695,8 @@ paths:
       summary: Get a site admin
       description: Site realm. Requires `super_admin` or `admin` role.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -3752,7 +3733,8 @@ paths:
       summary: Update a site admin
       description: Site realm. Requires `super_admin` role and 2FA confirmation.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -3814,7 +3796,8 @@ paths:
       summary: Delete a site admin
       description: Site realm. Requires `super_admin` role and 2FA confirmation.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -3852,7 +3835,8 @@ paths:
       summary: Update admin permissions
       description: Site realm. Requires `super_admin` role and 2FA confirmation.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -3903,7 +3887,8 @@ paths:
       summary: List tenants
       description: Site realm. Requires `super_admin`, `admin`, or `support` role.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: List of tenants
@@ -3930,11 +3915,10 @@ paths:
       tags:
         - Site Tenants
       summary: Create a tenant
-      description: >-
-        Site realm. Requires `super_admin` or `admin` role and 2FA confirmation. Provisioning a tenant creates its
-        database, plan subscription, and initial admin.
+      description: Site realm. Requires `super_admin` or `admin` role and 2FA confirmation. Provisioning a tenant creates its database, plan subscription, and initial admin.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       requestBody:
         required: true
         content:
@@ -3992,7 +3976,8 @@ paths:
       summary: Get tenant statistics
       description: Site realm. Requires `super_admin`, `admin`, or `support` role.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -4027,7 +4012,8 @@ paths:
       summary: Get a tenant
       description: Site realm. Requires `super_admin`, `admin`, or `support` role.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -4064,7 +4050,8 @@ paths:
       summary: Update a tenant
       description: Site realm. Requires `super_admin` or `admin` role and 2FA confirmation.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -4116,7 +4103,8 @@ paths:
       summary: Delete a tenant
       description: Site realm. Most destructive operation. Requires `super_admin` role and 2FA confirmation.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -4150,11 +4138,10 @@ paths:
       tags:
         - Site Tenants
       summary: Suspend a tenant
-      description: >-
-        Site realm. Requires `super_admin` or `admin` role and 2FA confirmation. Suspended tenants block all clinic
-        traffic.
+      description: Site realm. Requires `super_admin` or `admin` role and 2FA confirmation. Suspended tenants block all clinic traffic.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -4190,7 +4177,8 @@ paths:
       summary: Activate a tenant
       description: Site realm. Requires `super_admin` or `admin` role and 2FA confirmation.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -4226,7 +4214,8 @@ paths:
       summary: Archive a tenant
       description: Site realm. Destructive. Requires `super_admin` role and 2FA confirmation.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -4262,7 +4251,8 @@ paths:
       summary: List subscriptions
       description: Site realm. Requires `super_admin`, `admin`, or `support` role.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: List of subscriptions
@@ -4292,7 +4282,8 @@ paths:
       summary: Get subscription revenue statistics
       description: Site realm. Requires `super_admin`, `admin`, or `support` role.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Revenue statistics
@@ -4317,7 +4308,8 @@ paths:
       summary: Update a subscription
       description: Site realm. Requires `super_admin` or `admin` role and 2FA confirmation.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -4378,11 +4370,10 @@ paths:
       tags:
         - Site Subscriptions
       summary: Record a manual subscription payment
-      description: >-
-        Site realm. Requires `super_admin` or `admin` role and 2FA confirmation. Records an offline payment against the
-        tenant's subscription.
+      description: Site realm. Requires `super_admin` or `admin` role and 2FA confirmation. Records an offline payment against the tenant's subscription.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: tenantId
@@ -4439,7 +4430,8 @@ paths:
       summary: Remove a tenant from quarantine
       description: Site realm. Requires `super_admin` role and 2FA confirmation.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: tenantId
@@ -4475,7 +4467,8 @@ paths:
       summary: Quarantine a tenant
       description: Site realm. Requires `super_admin` role and 2FA confirmation. Blocks the tenant and flags it for abuse review.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: tenantId
@@ -4522,7 +4515,8 @@ paths:
       summary: List pending abuse checks
       description: Site realm. Requires `super_admin` or `admin` role. Returns tenants flagged by automated abuse detection.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Pending checks
@@ -4550,12 +4544,11 @@ paths:
       tags:
         - Platform Analytics
       summary: Get comprehensive platform overview
-      description: >
-        Site realm. Requires `super_admin`, or an `admin`/`support` whose effective permissions include
-        `platform:overview:view`. Aggregates tenants, users, patients, appointments, financials, inventory, SaaS
-        subscriptions, and system health into a single dashboard payload. No patient PII is returned.
+      description: |
+        Site realm. Requires `super_admin`, or an `admin`/`support` whose effective permissions include `platform:overview:view`. Aggregates tenants, users, patients, appointments, financials, inventory, SaaS subscriptions, and system health into a single dashboard payload. No patient PII is returned.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Platform overview
@@ -4568,11 +4561,11 @@ paths:
       tags:
         - Platform Analytics
       summary: Get platform-wide financial analytics
-      description: >
-        Requires `financial:view`. Revenue (total/byTenant/byBranch/byDoctor/ byService/byMonth), expenses, payments by
-        method, refunds, commissions, and outstanding balances. Filters by tenant/branch/doctor/date range.
+      description: |
+        Requires `financial:view`. Revenue (total/byTenant/byBranch/byDoctor/ byService/byMonth), expenses, payments by method, refunds, commissions, and outstanding balances. Filters by tenant/branch/doctor/date range.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Financial analytics
@@ -4585,11 +4578,11 @@ paths:
       tags:
         - Platform Analytics
       summary: Get inventory analytics
-      description: >
-        Requires `inventory:view`. Items, stock value, low/out-of-stock, expiry, most-used items, and distribution by
-        category/branch/tenant.
+      description: |
+        Requires `inventory:view`. Items, stock value, low/out-of-stock, expiry, most-used items, and distribution by category/branch/tenant.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Inventory analytics
@@ -4602,12 +4595,11 @@ paths:
       tags:
         - Platform Analytics
       summary: Get patient analytics (level 1, no PII)
-      description: >
-        Requires `patient:analytics:view`. Aggregated patient counts recency, gender, age buckets, and activity —
-        without any patient PII. Raw PHI is only reachable through per-tenant clinic endpoints for authorized clinic
-        staff, never via the platform layer.
+      description: |
+        Requires `patient:analytics:view`. Aggregated patient counts recency, gender, age buckets, and activity — without any patient PII. Raw PHI is only reachable through per-tenant clinic endpoints for authorized clinic staff, never via the platform layer.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Patient analytics
@@ -4620,11 +4612,11 @@ paths:
       tags:
         - Platform Analytics
       summary: Get appointment analytics
-      description: >
-        Requires `appointments:view`. Total/today/upcoming appointments, status distribution, no-show rate, and
-        distribution by tenant/branch/doctor/ month.
+      description: |
+        Requires `appointments:view`. Total/today/upcoming appointments, status distribution, no-show rate, and distribution by tenant/branch/doctor/ month.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Appointment analytics
@@ -4637,11 +4629,11 @@ paths:
       tags:
         - Platform Analytics
       summary: Get doctor performance analytics
-      description: >
-        Requires `doctors:view`. Per-doctor appointment volume, completion and no-show rates, distinct patients treated,
-        and commission totals.
+      description: |
+        Requires `doctors:view`. Per-doctor appointment volume, completion and no-show rates, distinct patients treated, and commission totals.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Doctor performance
@@ -4654,11 +4646,11 @@ paths:
       tags:
         - Platform Analytics
       summary: Get treatment plan analytics
-      description: >
-        Requires `treatments:view`. Treatment plan counts by status/branch/ tenant, estimated vs completed revenue, and
-        most common procedures. No patient PII is returned.
+      description: |
+        Requires `treatments:view`. Treatment plan counts by status/branch/ tenant, estimated vs completed revenue, and most common procedures. No patient PII is returned.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Treatment analytics
@@ -4671,11 +4663,11 @@ paths:
       tags:
         - Platform Analytics
       summary: Get SaaS billing & subscription analytics
-      description: >
-        Requires `saas-billing:view`. MRR/ARR, subscription statuses, revenue by plan and month, churn, trial
-        conversion, and upcoming renewals.
+      description: |
+        Requires `saas-billing:view`. MRR/ARR, subscription statuses, revenue by plan and month, churn, trial conversion, and upcoming renewals.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: SaaS billing analytics
@@ -4688,11 +4680,11 @@ paths:
       tags:
         - Platform Analytics
       summary: Get security monitoring overview
-      description: >
-        Requires `security:view`. Site admin 2FA adoption, Redis-backed login throttle snapshot (locked accounts +
-        failed challenges), recent security and impersonation audit events, and audit chain integrity.
+      description: |
+        Requires `security:view`. Site admin 2FA adoption, Redis-backed login throttle snapshot (locked accounts + failed challenges), recent security and impersonation audit events, and audit chain integrity.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Security monitoring
@@ -4705,11 +4697,11 @@ paths:
       tags:
         - Platform Analytics
       summary: Get system activity & health
-      description: >
-        Requires `activity:view`. Live health status, uptime, memory, MongoDB/ Redis status, API usage/perf stats, error
-        counts, and today's audit activity.
+      description: |
+        Requires `activity:view`. Live health status, uptime, memory, MongoDB/ Redis status, API usage/perf stats, error counts, and today's audit activity.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: System activity
@@ -4722,11 +4714,11 @@ paths:
       tags:
         - Platform Analytics
       summary: Get global & per-tenant usage/storage analytics
-      description: >
-        Requires `usage:view`. Global and per-plan/per-tenant usage counts (branches, users, doctors, patients,
-        appointments) and estimated storage usage against configured limits. No patient PII is returned.
+      description: |
+        Requires `usage:view`. Global and per-plan/per-tenant usage counts (branches, users, doctors, patients, appointments) and estimated storage usage against configured limits. No patient PII is returned.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Usage analytics
@@ -4739,11 +4731,11 @@ paths:
       tags:
         - Platform Analytics
       summary: Get background job status
-      description: >
-        Requires `activity:view`. Current running status and last acquisition time for each scheduled background job
-        (cron) via the cron_locks set.
+      description: |
+        Requires `activity:view`. Current running status and last acquisition time for each scheduled background job (cron) via the cron_locks set.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Background jobs
@@ -4756,11 +4748,11 @@ paths:
       tags:
         - Platform Analytics
       summary: List site admin roles
-      description: >
-        Returns the static set of site admin roles (`super_admin`, `admin`, `support`). Protected at the router level by
-        `protectSite` + `authorizeSite('super_admin', 'admin', 'support')`. Contains no tenant/patient data.
+      description: |
+        Returns the static set of site admin roles (`super_admin`, `admin`, `support`). Protected at the router level by `protectSite` + `authorizeSite('super_admin', 'admin', 'support')`. Contains no tenant/patient data.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Site admin roles
@@ -4793,7 +4785,8 @@ paths:
       summary: Get tenant modules and feature flags
       description: Site realm. Requires `super_admin` or `admin` role.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: tenantId
@@ -4833,7 +4826,8 @@ paths:
       summary: Toggle a single module
       description: Site realm. Requires `super_admin` role and 2FA confirmation.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: tenantId
@@ -4887,7 +4881,8 @@ paths:
       summary: Replace tenant modules
       description: Site realm. Requires `super_admin` role and 2FA confirmation. Sets the full module set at once.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: tenantId
@@ -4940,7 +4935,8 @@ paths:
       summary: List error logs
       description: Site realm. Requires `super_admin` or `admin` role.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: List of error logs
@@ -4970,7 +4966,8 @@ paths:
       summary: Get error log statistics
       description: Site realm. Requires `super_admin` or `admin` role.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Error log statistics
@@ -4995,7 +4992,8 @@ paths:
       summary: Resolve an error log
       description: Site realm. Requires `super_admin` or `admin` role. Marks the error log as resolved.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -5033,7 +5031,8 @@ paths:
       summary: List backups
       description: Site realm. Requires `super_admin` or `admin` role.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: List of backups
@@ -5062,7 +5061,8 @@ paths:
       summary: Trigger a manual backup
       description: Site realm. Requires `super_admin` role and 2FA confirmation. Runs an on-demand database backup immediately.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '201':
           description: Backup triggered
@@ -5092,7 +5092,8 @@ paths:
       summary: Get a backup
       description: Site realm. Requires `super_admin` or `admin` role.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -5128,11 +5129,10 @@ paths:
       tags:
         - Site Impersonation
       summary: Start impersonating a clinic user
-      description: >-
-        Site realm. Requires `super_admin` or `admin` role and 2FA confirmation. Switches the site session to act on
-        behalf of the clinic user. PHI stays masked for the impersonator.
+      description: Site realm. Requires `super_admin` or `admin` role and 2FA confirmation. Switches the site session to act on behalf of the clinic user. PHI stays masked for the impersonator.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       requestBody:
         required: true
         content:
@@ -5178,7 +5178,8 @@ paths:
       summary: End impersonation
       description: Site realm. Requires `super_admin` or `admin` role. Returns to the site admin session.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Impersonation ended
@@ -5204,9 +5205,7 @@ paths:
       tags:
         - Site Auth
       summary: Site admin login
-      description: >-
-        Public. Authenticates a site admin. If 2FA is enabled, returns a challenge token that must be completed via
-        `POST /site/2fa/verify-login`; otherwise sets the `site_access` cookie.
+      description: Public. Authenticates a site admin. If 2FA is enabled, returns a challenge token that must be completed via `POST /site/2fa/verify-login`; otherwise sets the `site_access` cookie.
       requestBody:
         required: true
         content:
@@ -5252,9 +5251,7 @@ paths:
       tags:
         - Site Auth
       summary: Initiate account recovery
-      description: >-
-        Public. Step 1 of recovery. Validates email and recovery key, then issues a recovery token and sends a 6-digit
-        OTP by email.
+      description: Public. Step 1 of recovery. Validates email and recovery key, then issues a recovery token and sends a 6-digit OTP by email.
       requestBody:
         required: true
         content:
@@ -5341,7 +5338,8 @@ paths:
       summary: Get current site admin
       description: Site realm. Returns the authenticated site admin profile.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Current admin
@@ -5386,7 +5384,8 @@ paths:
       summary: Logout site admin
       description: Site realm. Clears site auth cookies.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Logged out
@@ -5412,7 +5411,8 @@ paths:
       summary: Create a site admin
       description: Site realm. Requires `super_admin` role. Creates an additional site admin account.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       requestBody:
         required: true
         content:
@@ -5465,9 +5465,7 @@ paths:
       tags:
         - Site 2FA
       summary: Complete 2FA during login
-      description: >-
-        Public. Completes the 2FA challenge started by `POST /site/auth/login`. On success sets the `site_access`
-        cookie.
+      description: Public. Completes the 2FA challenge started by `POST /site/auth/login`. On success sets the `site_access` cookie.
       requestBody:
         required: true
         content:
@@ -5514,7 +5512,8 @@ paths:
       summary: Get 2FA status
       description: Site realm. Returns whether 2FA is enabled for the authenticated admin.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: 2FA status
@@ -5538,11 +5537,10 @@ paths:
       tags:
         - Site 2FA
       summary: Start 2FA setup
-      description: >-
-        Site realm. Generates a TOTP secret and provisioning URI for the authenticator app. 2FA becomes active after
-        `POST /site/2fa/verify`.
+      description: Site realm. Generates a TOTP secret and provisioning URI for the authenticator app. 2FA becomes active after `POST /site/2fa/verify`.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Setup data
@@ -5574,7 +5572,8 @@ paths:
       summary: Enable 2FA
       description: Site realm. Verifies a TOTP code to activate 2FA for the authenticated admin.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       requestBody:
         required: true
         content:
@@ -5620,7 +5619,8 @@ paths:
       summary: Disable 2FA
       description: Site realm. Verifies the current TOTP code and disables 2FA for the authenticated admin.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       requestBody:
         required: true
         content:
@@ -5660,11 +5660,10 @@ paths:
       tags:
         - Site Audit
       summary: List audit logs
-      description: >-
-        Site realm. Requires `super_admin`, `admin`, or `support` role. Supports filtering by action, admin, target, and
-        date range.
+      description: Site realm. Requires `super_admin`, `admin`, or `support` role. Supports filtering by action, admin, target, and date range.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - $ref: '#/components/parameters/PaginationPage'
         - $ref: '#/components/parameters/PaginationLimit'
@@ -5734,7 +5733,8 @@ paths:
       summary: List distinct audit actions
       description: Site realm. Requires `super_admin`, `admin`, or `support` role. Useful for building filter dropdowns.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Distinct actions
@@ -5762,11 +5762,10 @@ paths:
       tags:
         - Site Audit
       summary: Verify the audit hash-chain integrity
-      description: >-
-        Site realm. Requires `super_admin` role. Recomputes every entry's HMAC and verifies prev/next linkage, reporting
-        the first tampered, inserted, or deleted record.
+      description: Site realm. Requires `super_admin` role. Recomputes every entry's HMAC and verifies prev/next linkage, reporting the first tampered, inserted, or deleted record.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Chain verification result
@@ -5793,11 +5792,10 @@ paths:
       tags:
         - Site Analytics
       summary: Get global platform statistics
-      description: >-
-        Site realm. Requires `super_admin`, `admin`, or `support` role. Aggregates tenants, users, invoices, and revenue
-        across the platform.
+      description: Site realm. Requires `super_admin`, `admin`, or `support` role. Aggregates tenants, users, invoices, and revenue across the platform.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Global statistics
@@ -5820,11 +5818,10 @@ paths:
       tags:
         - Site Analytics
       summary: Get growth data
-      description: >-
-        Site realm. Requires `super_admin`, `admin`, or `support` role. Returns time-series growth of tenants, users,
-        and revenue.
+      description: Site realm. Requires `super_admin`, `admin`, or `support` role. Returns time-series growth of tenants, users, and revenue.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Growth data
@@ -5847,11 +5844,10 @@ paths:
       tags:
         - Site Analytics
       summary: Get tenant usage
-      description: >-
-        Site realm. Requires `super_admin`, `admin`, or `support` role. Returns usage and activity for a specific
-        tenant.
+      description: Site realm. Requires `super_admin`, `admin`, or `support` role. Returns usage and activity for a specific tenant.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: tenantId
@@ -5884,9 +5880,7 @@ paths:
       tags:
         - Search
       summary: Global search
-      description: >-
-        Requires `patients:read`. Searches across all modules the user can read. Only results the user has `read`
-        permission for are returned; PHI is masked during impersonation.
+      description: Requires `patients:read`. Searches across all modules the user can read. Only results the user has `read` permission for are returned; PHI is masked during impersonation.
       security:
         - cookieAuth: []
       parameters:
@@ -5924,7 +5918,8 @@ paths:
       summary: Get platform settings
       description: Site realm. Requires `super_admin`, `admin`, or `support` role.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Current platform settings
@@ -5982,11 +5977,10 @@ paths:
       tags:
         - Platform Settings
       summary: Update platform settings
-      description: >-
-        Site realm. Requires `super_admin` role and 2FA confirmation. Updating `allowedDomains`, `maintenanceMode`, or
-        `autoSuspendDays` triggers immediate enforcement.
+      description: Site realm. Requires `super_admin` role and 2FA confirmation. Updating `allowedDomains`, `maintenanceMode`, or `autoSuspendDays` triggers immediate enforcement.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       requestBody:
         required: true
         content:
@@ -6067,7 +6061,8 @@ paths:
       summary: List subscription plans
       description: Site realm. Requires `super_admin`, `admin`, or `support` role.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: List of plans
@@ -6096,7 +6091,8 @@ paths:
       summary: Create a plan
       description: Site realm. Requires `super_admin` role and 2FA confirmation.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       requestBody:
         required: true
         content:
@@ -6173,7 +6169,8 @@ paths:
       summary: Get a plan
       description: Site realm. Requires `super_admin`, `admin`, or `support` role.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -6210,7 +6207,8 @@ paths:
       summary: Update a plan
       description: Site realm. Requires `super_admin` role and 2FA confirmation.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -6291,7 +6289,8 @@ paths:
       summary: Delete a plan
       description: Site realm. Requires `super_admin` role and 2FA confirmation.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       parameters:
         - in: path
           name: id
@@ -6389,9 +6388,7 @@ paths:
       tags:
         - Wallets
       summary: Add a manual wallet transaction
-      description: >-
-        Requires `accounting:update` or `billing:delete` (PRD §6.6 — reception alone cannot create wallet credits). A
-        wallet debit must reference an invoice, installment, or carry an explicit reference.
+      description: Requires `accounting:update` or `billing:delete` (PRD §6.6 — reception alone cannot create wallet credits). A wallet debit must reference an invoice, installment, or carry an explicit reference.
       security:
         - cookieAuth: []
       parameters:
@@ -6594,9 +6591,7 @@ paths:
       tags:
         - Patients
       summary: Find suspected duplicate patient records
-      description: >-
-        Requires `patients:read`. Groups active patients that share a phone number or name+date of birth within the same
-        branch.
+      description: Requires `patients:read`. Groups active patients that share a phone number or name+date of birth within the same branch.
       security:
         - cookieAuth: []
       responses:
@@ -6793,9 +6788,7 @@ paths:
       tags:
         - Patients
       summary: Merge a duplicate patient into another record
-      description: >-
-        Requires `patients:update`. All references are repointed to the surviving record, wallet balances combine, and
-        the duplicate is archived with `mergedInto` set.
+      description: Requires `patients:update`. All references are repointed to the surviving record, wallet balances combine, and the duplicate is archived with `mergedInto` set.
       security:
         - cookieAuth: []
       parameters:
@@ -6900,9 +6893,7 @@ paths:
       tags:
         - Installment Plans
       summary: Create an installment plan
-      description: >-
-        Requires `billing:create` or `installments:create`. The sum of installments must equal `totalAmount`. Only one
-        active plan per invoice, and the plan total cannot exceed the invoice's outstanding balance.
+      description: Requires `billing:create` or `installments:create`. The sum of installments must equal `totalAmount`. Only one active plan per invoice, and the plan total cannot exceed the invoice's outstanding balance.
       security:
         - cookieAuth: []
       parameters:
@@ -6990,9 +6981,7 @@ paths:
       tags:
         - Installment Plans
       summary: Update an installment plan
-      description: >-
-        Requires `billing:update` or `installments:update`. Completed plans are immutable; defaulted plans can be
-        reopened to `active`.
+      description: Requires `billing:update` or `installments:update`. Completed plans are immutable; defaulted plans can be reopened to `active`.
       security:
         - cookieAuth: []
       parameters:
@@ -7057,10 +7046,7 @@ paths:
       tags:
         - Installment Plans
       summary: Pay an installment
-      description: >-
-        Requires `billing:update` or `installments:update`. Executed in a transaction to prevent double-payment races.
-        Wallet payments debit the patient wallet. Pass `x-idempotency-key` to dedupe a retry on the linked invoice
-        ledger. Defaulted plans are resumed to `active` on payment.
+      description: Requires `billing:update` or `installments:update`. Executed in a transaction to prevent double-payment races. Wallet payments debit the patient wallet. Pass `x-idempotency-key` to dedupe a retry on the linked invoice ledger. Defaulted plans are resumed to `active` on payment.
       security:
         - cookieAuth: []
       parameters:
@@ -7453,9 +7439,7 @@ paths:
       tags:
         - Inventory
       summary: Adjust stock
-      description: >-
-        Requires `inventory:update`. Applies a stock transaction (stock in, out, adjustment, or expiry) and updates the
-        item quantity.
+      description: Requires `inventory:update`. Applies a stock transaction (stock in, out, adjustment, or expiry) and updates the item quantity.
       security:
         - cookieAuth: []
       parameters:
@@ -8978,9 +8962,7 @@ paths:
       tags:
         - Clinical Notes
       summary: Create a clinical note
-      description: >-
-        Requires `emr:create`. The doctor must belong to the patient's branch and be a doctor. A `nextAppointment`
-        optionally creates the follow-up appointment.
+      description: Requires `emr:create`. The doctor must belong to the patient's branch and be a doctor. A `nextAppointment` optionally creates the follow-up appointment.
       security:
         - cookieAuth: []
       parameters:
@@ -9242,9 +9224,7 @@ paths:
       tags:
         - EMR Attachments
       summary: Upload a medical attachment
-      description: >-
-        Requires `emr:create` and multipart/form-data. Files are encrypted at rest. Allowed types: image/jpeg,
-        image/png, image/webp, image/gif, application/pdf, application/dicom. Max 50MB.
+      description: 'Requires `emr:create` and multipart/form-data. Files are encrypted at rest. Allowed types: image/jpeg, image/png, image/webp, image/gif, application/pdf, application/dicom. Max 50MB.'
       security:
         - cookieAuth: []
       requestBody:
@@ -9304,9 +9284,7 @@ paths:
       tags:
         - EMR Attachments
       summary: Download / preview a medical attachment
-      description: >-
-        Requires `emr:read`. Streams the decrypted file inline. The file must be registered AND owned by the caller's
-        tenant/branch - knowing a filename is not enough to fetch files outside the caller's scope.
+      description: Requires `emr:read`. Streams the decrypted file inline. The file must be registered AND owned by the caller's tenant/branch - knowing a filename is not enough to fetch files outside the caller's scope.
       security:
         - cookieAuth: []
       parameters:
@@ -9344,9 +9322,7 @@ paths:
       tags:
         - EMR Attachments
       summary: Soft-delete a medical attachment
-      description: >-
-        Requires `emr:delete`. Marks the record inactive and removes the encrypted file from disk. Only attachments
-        within the caller's tenant/branch scope can be deleted.
+      description: Requires `emr:delete`. Marks the record inactive and removes the encrypted file from disk. Only attachments within the caller's tenant/branch scope can be deleted.
       security:
         - cookieAuth: []
       parameters:
@@ -9385,9 +9361,7 @@ paths:
       tags:
         - Dashboard
       summary: Get dashboard statistics
-      description: >-
-        Requires `dashboard:read`. Returns today's overview, staff and appointment breakdowns, billing outstanding, and
-        the module catalog with enabled flags.
+      description: Requires `dashboard:read`. Returns today's overview, staff and appointment breakdowns, billing outstanding, and the module catalog with enabled flags.
       security:
         - cookieAuth: []
       responses:
@@ -9475,9 +9449,7 @@ paths:
       tags:
         - Chat
       summary: Send a chat message
-      description: >-
-        Requires `chat:create`. The user must be assigned to a branch. Either `recipient` (direct message) or `channel`
-        must be provided, but not both.
+      description: Requires `chat:create`. The user must be assigned to a branch. Either `recipient` (direct message) or `channel` must be provided, but not both.
       security:
         - cookieAuth: []
       requestBody:
@@ -9800,9 +9772,7 @@ paths:
       tags:
         - Billing
       summary: Create an invoice
-      description: >-
-        Requires `billing:create`. Pre-validates the patient and appointment (if given), then creates the invoice and
-        its number inside a transaction. Invoice totals are computed from the line items.
+      description: Requires `billing:create`. Pre-validates the patient and appointment (if given), then creates the invoice and its number inside a transaction. Invoice totals are computed from the line items.
       security:
         - cookieAuth: []
       requestBody:
@@ -10053,9 +10023,7 @@ paths:
       tags:
         - Billing
       summary: Update an invoice
-      description: >-
-        Requires `billing:update`. Financial fields (items/discount/tax) cannot be modified on a paid invoice, and void
-        invoices cannot be edited.
+      description: Requires `billing:update`. Financial fields (items/discount/tax) cannot be modified on a paid invoice, and void invoices cannot be edited.
       security:
         - cookieAuth: []
       parameters:
@@ -10153,9 +10121,7 @@ paths:
       tags:
         - Billing
       summary: Record a payment
-      description: >-
-        Requires `billing:update`. Deduplicated via the `x-idempotency-key` header. Wallet payments debit the patient
-        wallet and a fully-paid invoice accrues the doctor commission atomically.
+      description: Requires `billing:update`. Deduplicated via the `x-idempotency-key` header. Wallet payments debit the patient wallet and a fully-paid invoice accrues the doctor commission atomically.
       security:
         - cookieAuth: []
       parameters:
@@ -10229,10 +10195,7 @@ paths:
       tags:
         - Billing
       summary: Refund a payment
-      description: >-
-        Requires `billing.delete` or `accounting.update` (PRD §6.6 — reception alone cannot refund). Records a negative
-        payment. Wallet refunds credit the patient wallet; commissions are adjusted proportionally. Deduplicated via
-        `x-idempotency-key`.
+      description: Requires `billing.delete` or `accounting.update` (PRD §6.6 — reception alone cannot refund). Records a negative payment. Wallet refunds credit the patient wallet; commissions are adjusted proportionally. Deduplicated via `x-idempotency-key`.
       security:
         - cookieAuth: []
       parameters:
@@ -10669,9 +10632,7 @@ paths:
       tags:
         - Auth
       summary: Activate an impersonation session
-      description: >-
-        Exchanges a bearer impersonation token (from `/site/impersonation/start`) for a clinic session cookie so the
-        admin can act as the target user with PHI masking.
+      description: Exchanges a bearer impersonation token (from `/site/impersonation/start`) for a clinic session cookie so the admin can act as the target user with PHI masking.
       requestBody:
         required: true
         content:
@@ -10824,9 +10785,7 @@ paths:
       tags:
         - Appointments
       summary: List appointments
-      description: >-
-        Requires `appointments:read`. Filters by date range, doctor, patient (id or search term), or status. PHI is
-        masked during impersonation.
+      description: Requires `appointments:read`. Filters by date range, doctor, patient (id or search term), or status. PHI is masked during impersonation.
       security:
         - cookieAuth: []
       parameters:
@@ -10901,9 +10860,7 @@ paths:
       tags:
         - Appointments
       summary: Create an appointment
-      description: >-
-        Requires `appointments:create`. Validates the patient/doctor references, clinic working hours, doctor
-        availability, and prevents double-booking (doctor and patient).
+      description: Requires `appointments:create`. Validates the patient/doctor references, clinic working hours, doctor availability, and prevents double-booking (doctor and patient).
       security:
         - cookieAuth: []
       requestBody:
@@ -10972,9 +10929,7 @@ paths:
       tags:
         - Appointments
       summary: Live queue board for today
-      description: >-
-        Requires `appointments:read`. Returns waiting (checked_in) and in-chair (in_progress) patients plus completed
-        count.
+      description: Requires `appointments:read`. Returns waiting (checked_in) and in-chair (in_progress) patients plus completed count.
       security:
         - cookieAuth: []
       responses:
@@ -11012,10 +10967,8 @@ paths:
       tags:
         - Appointments
       summary: Call the next waiting patient to a chair
-      description: >
-        Requires `appointments:update`. Atomically claims the earliest waiting (checked_in) appointment of the day and
-        moves it to in_progress, emitting `queue.patient.called` on the branch room and the tenant `queue:{tenantId}`
-        room. Pass `doctor` to call per-doctor queues.
+      description: |
+        Requires `appointments:update`. Atomically claims the earliest waiting (checked_in) appointment of the day and moves it to in_progress, emitting `queue.patient.called` on the branch room and the tenant `queue:{tenantId}` room. Pass `doctor` to call per-doctor queues.
       security:
         - cookieAuth: []
       requestBody:
@@ -11191,9 +11144,7 @@ paths:
       tags:
         - Appointments
       summary: Transition appointment status
-      description: >-
-        Requires `appointments:update`. Only the status field is mutated (e.g. `scheduled` → `checked_in` →
-        `completed`). Billing and medical data are never altered by this route.
+      description: Requires `appointments:update`. Only the status field is mutated (e.g. `scheduled` → `checked_in` → `completed`). Billing and medical data are never altered by this route.
       security:
         - cookieAuth: []
       parameters:
@@ -11464,9 +11415,7 @@ paths:
       tags:
         - Accounting
       summary: Record an owner drawing
-      description: >-
-        Requires `accounting:create`. The owner must be a clinic admin or system role. Wallet drawings debit the
-        patient's wallet atomically.
+      description: Requires `accounting:create`. The owner must be a clinic admin or system role. Wallet drawings debit the patient's wallet atomically.
       security:
         - cookieAuth: []
       requestBody:
@@ -11528,9 +11477,7 @@ paths:
       tags:
         - Accounting
       summary: Delete an owner drawing
-      description: >-
-        Requires `accounting:delete`. Soft-deletes the drawing and credits the patient wallet back if it was paid from a
-        wallet.
+      description: Requires `accounting:delete`. Soft-deletes the drawing and credits the patient wallet back if it was paid from a wallet.
       security:
         - cookieAuth: []
       parameters:
@@ -11769,9 +11716,7 @@ paths:
       tags:
         - Accounting
       summary: Day Close preview
-      description: >-
-        Requires `accounting:read`. Returns the expected takings per payment method for one day (net of refunds,
-        expenses and drawings) and whether the day is already closed.
+      description: Requires `accounting:read`. Returns the expected takings per payment method for one day (net of refunds, expenses and drawings) and whether the day is already closed.
       security:
         - cookieAuth: []
       parameters:
@@ -11788,10 +11733,8 @@ paths:
       tags:
         - Accounting
       summary: Close the day (BR-BL-04)
-      description: >
-        Requires `accounting:update` (clinic manager/accountant). Snapshots the expected takings, records the counted
-        cash with the resulting difference as an immutable audit record, and notifies the branch over the socket.
-        Re-closing a closed day returns 409.
+      description: |
+        Requires `accounting:update` (clinic manager/accountant). Snapshots the expected takings, records the counted cash with the resulting difference as an immutable audit record, and notifies the branch over the socket. Re-closing a closed day returns 409.
       security:
         - cookieAuth: []
       requestBody:
@@ -11846,9 +11789,7 @@ paths:
       tags:
         - Accounting
       summary: Double-entry journal ledger (BR-BL-05)
-      description: >-
-        Requires `accounting:read`. Returns posted journal entries plus running debit/credit totals — the two must
-        always match.
+      description: Requires `accounting:read`. Returns posted journal entries plus running debit/credit totals — the two must always match.
       security:
         - cookieAuth: []
       parameters:
@@ -11872,11 +11813,10 @@ paths:
       tags:
         - Platform Performance
       summary: Get in-process performance statistics
-      description: >-
-        Site realm. Requires `super_admin` or `admin` role. Returns request counts, average response times, and error
-        counts tracked by the in-process perf monitor.
+      description: Site realm. Requires `super_admin` or `admin` role. Returns request counts, average response times, and error counts tracked by the in-process perf monitor.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Performance statistics
@@ -11908,7 +11848,8 @@ paths:
       summary: Reset performance statistics
       description: Site realm. Requires `super_admin` role. Clears the in-process perf counters.
       security:
-        - siteAuth: []
+        - bearerAuth: []
+        - siteCookieAuth: []
       responses:
         '200':
           description: Statistics reset
@@ -11935,9 +11876,8 @@ paths:
       tags:
         - Health
       summary: Sanitized system health check
-      description: >
-        Reports a lightweight health status (ok/degraded) without exposing internal versions, paths, database names, or
-        error internals. Intended for load balancers and uptime probes. No authentication required.
+      description: |
+        Reports a lightweight health status (ok/degraded) without exposing internal versions, paths, database names, or error internals. Intended for load balancers and uptime probes. No authentication required.
       responses:
         '200':
           description: Service healthy
@@ -11948,9 +11888,8 @@ paths:
       tags:
         - Health
       summary: Detailed system metrics (site admin only)
-      description: >
-        Returns detailed system metrics including performance statistics, database query performance, error rates, Redis
-        metrics, and system information. Requires a super_admin site session.
+      description: |
+        Returns detailed system metrics including performance statistics, database query performance, error rates, Redis metrics, and system information. Requires a super_admin site session.
       security:
         - bearerAuth: []
         - siteCookieAuth: []

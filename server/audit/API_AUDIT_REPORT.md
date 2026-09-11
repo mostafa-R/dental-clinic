@@ -80,6 +80,7 @@ Every RBAC claim in this report was **verified against the actual route source f
 | **Ghost** (documented, not implemented) | 0 | 0% |
 
 **Coverage status:** **100% parity** — `GET /api/v1/site/analytics/platform/roles` received its missing `@swagger` block on 2026-09-11. Parity check (spec ↔ runtime router introspection): MISSING = 0, SPEC-ONLY = 0.
+> **Re-verified 2026-09-11 (contract v1.0.1 re-freeze):** runtime router introspection re-run against the regenerated spec — still MISSING=0, SPEC-ONLY=0 (218 v1 canonical ops + `/api/health` + `/api/metrics` = 220; 438 reachable URL variants). See `contract/CONTRACT_FREEZE.md §6`.
 
 ---
 
