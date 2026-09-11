@@ -417,7 +417,7 @@ describe("deleteClinicalNote", () => {
     expect(emitToBranch).toHaveBeenCalledWith(
       PATIENT.branch,
       "clinical-note:deleted",
-      expect.objectContaining({ _id: expect.anything() }),
+      expect.objectContaining({ note: expect.objectContaining({ _id: expect.anything() }) }),
     );
   });
 });

@@ -135,21 +135,44 @@ export const updatePrescriptionSchema = z
 
 /* --------------------------------------------------------------- Clinical note */
 
+// L6: URLs are service paths (/api/...) or https — arbitrary/javascript:/
+// data: schemes are rejected to stop script-injection attachment links.
+const attachmentUrl = z
+  .string()
+  .min(1, 'Attachment URL is required')
+  .max(1024)
+  .refine(
+    (u) => u.startsWith('/api/') || /^https:\/\//i.test(u),
+    { message: 'Attachment URL must be a local /api/ path or an https:// link' },
+  );
+
+// New attachments (created inline within a note) always require a URL.
 const attachmentSchema = z.object({
   _id: objectId.optional(),
   type: z.enum(ATTACHMENT_TYPES).optional(),
-  // L6: URLs are service paths (/api/...) or https — arbitrary/javascript:/
-  // data: schemes are rejected to stop script-injection attachment links.
-  url: z
-    .string()
-    .min(1, 'Attachment URL is required')
-    .max(1024)
-    .refine(
-      (u) => u.startsWith('/api/') || /^https:\/\//i.test(u),
-      { message: 'Attachment URL must be a local /api/ path or an https:// link' },
-    ),
+  url: attachmentUrl,
   caption: z.string().max(200).optional(),
 });
+
+// Update path is an upsert: entries carrying an existing subdoc _id only patch
+// that attachment (caption/type) and must not be forced to supply a URL, while
+// brand-new entries still need a valid URL.
+const attachmentUpsertSchema = z
+  .object({
+    _id: objectId.optional(),
+    type: z.enum(ATTACHMENT_TYPES).optional(),
+    url: attachmentUrl.optional(),
+    caption: z.string().max(200).optional(),
+  })
+  .superRefine((a, ctx) => {
+    if (!a._id && !a.url) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['url'],
+        message: 'Attachment URL is required',
+      });
+    }
+  });
 
 export const createClinicalNoteSchema = z.object({
   doctor: objectId,
@@ -172,7 +195,7 @@ export const updateClinicalNoteSchema = z
     examination: z.string().max(2000).optional(),
     diagnosis: z.string().max(1000).optional(),
     plan: z.string().max(2000).optional(),
-    attachments: z.array(attachmentSchema).max(20).optional(),
+    attachments: z.array(attachmentUpsertSchema).max(20).optional(),
     nextAppointment: dateOrEmpty,
     nextAppointmentNotes: z.string().max(500).optional(),
   })
