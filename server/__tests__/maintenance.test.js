@@ -64,6 +64,24 @@ describe("maintenance middleware", () => {
     expect(next.mock.calls[0][0]).toBeUndefined();
   });
 
+  it("also allows the versioned /v1/site auth flow", async () => {
+    vi.mocked(cacheGet).mockResolvedValue(true);
+
+    const next = await run(makeReq("/v1/site/auth/login"));
+
+    expect(next.mock.calls[0][0]).toBeUndefined();
+  });
+
+  it("also allows versioned /v1/site health and 2FA routes", async () => {
+    vi.mocked(cacheGet).mockResolvedValue(true);
+
+    const health = await run(makeReq("/v1/site/health"));
+    const twofa = await run(makeReq("/v1/site/2fa/status"));
+
+    expect(health.mock.calls[0][0]).toBeUndefined();
+    expect(twofa.mock.calls[0][0]).toBeUndefined();
+  });
+
   it("allows requests carrying a valid site-admin token", async () => {
     vi.mocked(cacheGet).mockResolvedValue(true);
     vi.mocked(verifyAccessToken).mockReturnValue({ type: "site" });
@@ -103,5 +121,23 @@ describe("maintenance middleware", () => {
     await clearMaintenanceCache();
 
     expect(cacheDel).toHaveBeenCalledWith("platform", "maintenance");
+  });
+
+  it("fails closed when the flag cannot be read (Redis/DB unavailable)", async () => {
+    vi.mocked(cacheGet).mockRejectedValue(new Error("redis down"));
+    vi.mocked(PlatformSetting.findOne).mockRejectedValue(new Error("db down"));
+
+    const next = await run(makeReq("/patients"));
+
+    expect(next.mock.calls[0][0]).toMatchObject({ statusCode: 503 });
+  });
+
+  it("still serves the whitelist when the flag cannot be read", async () => {
+    vi.mocked(cacheGet).mockRejectedValue(new Error("redis down"));
+    vi.mocked(PlatformSetting.findOne).mockRejectedValue(new Error("db down"));
+
+    const next = await run(makeReq("/v1/site/auth/login"));
+
+    expect(next.mock.calls[0][0]).toBeUndefined();
   });
 });

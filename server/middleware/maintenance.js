@@ -35,7 +35,17 @@ async function isMaintenanceMode() {
     cachedAt = Date.now();
     return cachedMaintenance;
   } catch {
-    return false;
+    // Fail closed: if the maintenance flag cannot be read (Redis and/or the
+    // platform DB are unavailable), assume the platform IS under maintenance.
+    // Serving half-initialized state to clinics is worse than a short 503,
+    // and the always-allowed health / site-auth paths remain reachable.
+    cachedMaintenance = true;
+    cachedAt = Date.now();
+    console.error(
+      '[Maintenance] Could not read maintenance flag (Redis/DB down) — ' +
+        'fail-closed: blocking non-whitelisted traffic.',
+    );
+    return true;
   }
 }
 
@@ -60,7 +70,10 @@ function hasValidSiteAdminToken(req) {
  * 503 so a deploy does not serve half-initialized state to clinics.
  */
 export async function maintenance(req, _res, next) {
-  const path = req.path;
+  // req.path is relative to the /api mount, so versioned routes show up as
+  // /v1/site/... Normalize the /v1 prefix away so the whitelist matches both
+  // the canonical (/api/v1/site/...) and alias (/api/site/...) forms.
+  const path = req.path.replace(/^\/v1(?=\/|$)/, '');
 
   const alwaysAllowed =
     path === '/health' ||

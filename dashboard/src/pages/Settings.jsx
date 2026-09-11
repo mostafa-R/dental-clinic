@@ -15,6 +15,7 @@ import {
   disable2fa,
   clearSetupData,
 } from "../features/twofa/twofaSlice";
+import { fetchPlans } from "../features/plans/plansSlice";
 import { setLanguage, setTheme } from "../features/ui/uiSlice";
 import { t } from "../lib/i18n";
 import { canUserAccess } from "../lib/permissions";
@@ -24,6 +25,8 @@ export default function Settings() {
   const { theme, language } = useSelector((state) => state.ui);
   const { user } = useSelector((state) => state.auth);
   const { settings, loading } = useSelector((state) => state.platform);
+  const { items: plans } = useSelector((state) => state.plans);
+  const isSuperAdmin = user?.role === "super_admin";
   const [saving, setSaving] = useState(false);
   const [showDisableModal, setShowDisableModal] = useState(false);
   const [show2faModal, setShow2faModal] = useState(false);
@@ -39,6 +42,10 @@ export default function Settings() {
 
   useEffect(() => {
     dispatch(fetchPlatformSettings());
+  }, [dispatch]);
+
+  useEffect(() => {
+    dispatch(fetchPlans());
   }, [dispatch]);
 
   useEffect(() => {
@@ -138,9 +145,23 @@ export default function Settings() {
             <p className="font-medium text-slate-900 dark:text-white">
               {twofa.enabled ? t("twoFactorEnabled", language) : t("twoFactorDisabled", language)}
             </p>
+            {twofa.enabled && isSuperAdmin && (
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                {t("superAdmin2faRequired", language)}
+              </p>
+            )}
+            {!twofa.enabled && isSuperAdmin && (
+              <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">
+                {t("superAdmin2faLocked", language)}
+              </p>
+            )}
           </div>
-          {twofa.enabled ? (
+          {twofa.enabled && !isSuperAdmin ? (
             <Button variant="danger" onClick={() => setShowDisableModal(true)}>
+              {t("disable2fa", language)}
+            </Button>
+          ) : twofa.enabled ? (
+            <Button variant="danger" disabled>
               {t("disable2fa", language)}
             </Button>
           ) : (
@@ -371,9 +392,17 @@ export default function Settings() {
               }
               className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
             >
-              <option value="starter">Starter</option>
-              <option value="professional">Professional</option>
-              <option value="enterprise">Enterprise</option>
+              {plans.length > 0 ? (
+                plans.map((plan) => (
+                  <option key={plan._id} value={plan.key}>
+                    {plan.name}
+                  </option>
+                ))
+              ) : (
+                <option value={platformFormData.defaultPlan}>
+                  {platformFormData.defaultPlan}
+                </option>
+              )}
             </select>
           </div>
 

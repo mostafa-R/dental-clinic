@@ -39,11 +39,19 @@ async function seed() {
 
   if (existing) {
     console.log(`Site admin already exists: ${existing.email}`);
-    if (existing.role === "super_admin" && !existing.twoFactorEnabled && process.env.SEED_BOOTSTRAP_2FA === "true") {
+    const disabled2fa = existing.role === "super_admin" && !existing.twoFactorEnabled;
+    const broken2fa =
+      existing.role === "super_admin" && existing.twoFactorEnabled && !existing.twoFactorSecret;
+
+    if (broken2fa || (disabled2fa && process.env.SEED_BOOTSTRAP_2FA === "true")) {
       const result = await bootstrap2fa(existing);
       print2faBootstrap(existing, result);
-      console.warn("WARNING: 2FA was re-bootstrapped for the existing admin. Previous codes are no longer valid.");
-    } else if (existing.role === "super_admin" && !existing.twoFactorEnabled) {
+      if (broken2fa) {
+        console.warn("WARNING: super admin had 2FA enabled without a TOTP secret and could not log in. 2FA was re-bootstrapped; previous codes are no longer valid.");
+      } else {
+        console.warn("WARNING: 2FA was re-bootstrapped for the existing admin. Previous codes are no longer valid.");
+      }
+    } else if (disabled2fa) {
       console.warn("WARNING: super admin has 2FA disabled and cannot log in. Re-run with SEED_BOOTSTRAP_2FA=true or use the recovery endpoint.");
     }
   } else {
