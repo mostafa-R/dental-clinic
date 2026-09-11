@@ -17,7 +17,11 @@ export async function sendMessage({ branch, tenant, senderId, recipient, channel
     if (!recipientUser || !recipientUser.isActive) {
       throw ApiError.badRequest('Recipient does not exist', { recipient: 'not found' });
     }
-    if (recipientUser.branch && String(recipientUser.branch) !== String(branch)) {
+    const recipientBranchId = recipientUser.branch
+      ? String(recipientUser.branch._id ?? recipientUser.branch)
+      : null;
+    const branchId = branch ? String(branch._id ?? branch) : null;
+    if (recipientBranchId && branchId && recipientBranchId !== branchId) {
       throw ApiError.badRequest('Recipient does not belong to your branch', {
         recipient: 'branch mismatch',
       });
@@ -77,20 +81,24 @@ export async function listMessages(branch, { recipient, senderId, channel, limit
 
 export async function markRead(branch, userId, messageIds) {
   const ids = messageIds.map(toObjectId);
-  const msgDocs = await Message.find(
-    { _id: { $in: ids }, branch: toObjectId(branch), recipient: toObjectId(userId) },
-    'sender',
-  );
-  await Message.updateMany(
-    { _id: { $in: ids }, branch: toObjectId(branch), recipient: toObjectId(userId) },
-    { isRead: true, readAt: new Date() },
-  );
-  return [...new Set(msgDocs.map((m) => String(m.sender)))];
+  const filter = {
+    _id: { $in: ids },
+    branch: toObjectId(branch),
+    recipient: toObjectId(userId),
+  };
+  const msgDocs = await Message.find(filter, 'sender').lean();
+  const result = await Message.updateMany(filter, { isRead: true, readAt: new Date() });
+  return {
+    updated: result.modifiedCount,
+    senders: [...new Set(msgDocs.map((m) => String(m.sender)))],
+  };
 }
 
 export async function getUnreadCounts(branch, userId, tenant) {
+  const dmMatch = { branch: toObjectId(branch), recipient: toObjectId(userId), isRead: false };
+  if (tenant) dmMatch.tenant = toObjectId(tenant);
   const dmResults = await Message.aggregate([
-    { $match: { branch: toObjectId(branch), recipient: toObjectId(userId), isRead: false } },
+    { $match: dmMatch },
     { $group: { _id: '$sender', count: { $sum: 1 } } },
   ]);
 
@@ -108,6 +116,7 @@ export async function getUnreadCounts(branch, userId, tenant) {
         channel: ch,
         sender: { $ne: toObjectId(userId) },
       };
+      if (tenant) match.tenant = toObjectId(tenant);
       const lastRead = channelReadMap[ch];
       if (lastRead) {
         match.createdAt = { $gt: lastRead };

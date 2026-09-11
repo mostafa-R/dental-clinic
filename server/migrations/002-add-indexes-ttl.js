@@ -18,6 +18,20 @@ async function listIndexes(collection) {
 }
 
 /**
+ * True when the index key is EXACTLY `expected` — same fields and same sort
+ * directions, and no extra prefix fields. The naive `key.channel === 1 &&
+ * key.createdAt === -1` check wrongly matches compound indexes such as
+ * { branch: 1, channel: 1, createdAt: -1 } and silently skips creating the
+ * real prefix index.
+ */
+function hasExactKey(index, expected) {
+  const key = index && index.key ? index.key : {};
+  const entries = Object.entries(expected);
+  if (Object.keys(key).length !== entries.length) return false;
+  return entries.every(([field, dir]) => key[field] === dir);
+}
+
+/**
  * Migration: 002-add-indexes-ttl
  * 
  * Adds:
@@ -42,9 +56,9 @@ export async function up() {
     const messagesCollection = db.collection('messages');
     const messageIndexes = await listIndexes(messagesCollection);
     
-    // Check if the index already exists
+    // Check if the index already exists (exact key match)
     const channelCreatedAtIndex = messageIndexes.find(
-      (idx) => idx.key.channel === 1 && idx.key.createdAt === -1
+      (idx) => hasExactKey(idx, { channel: 1, createdAt: -1 })
     );
     
     if (!channelCreatedAtIndex) {
@@ -72,7 +86,7 @@ export async function up() {
     const invoiceIndexes = await listIndexes(invoicesCollection);
     
     const branchDueDateStatusIndex = invoiceIndexes.find(
-      (idx) => idx.key.branch === 1 && idx.key.dueDate === 1 && idx.key.status === 1
+      (idx) => hasExactKey(idx, { branch: 1, dueDate: 1, status: 1 })
     );
     
     if (!branchDueDateStatusIndex) {

@@ -5,6 +5,10 @@ on:
     branches: [main, develop]
   pull_request:
 
+defaults:
+  run:
+    working-directory: server
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -16,7 +20,8 @@ jobs:
         uses: actions/checkout@v4
 
       # Single-node replica set so transactional tests (invoice counters,
-      # payment races) actually run. A standalone mongod cannot do transactions.
+      # payment races, tenant isolation, quota slots) actually run.
+      # A standalone mongod cannot do transactions.
       - name: Start MongoDB (single-node replica set)
         uses: supercharge/mongodb-github-action@1.12.1
         with:
@@ -28,6 +33,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
+          cache-dependency-path: server/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -35,8 +41,16 @@ jobs:
       - name: Syntax check
         run: npm run check
 
-      - name: Contract tests
+      # Full unit + contract + security + tenant-isolation suite.
+      - name: Full test suite
         run: npm test
+        env:
+          TEST_MONGO_URI: mongodb://127.0.0.1:27017/dental_os_test
+
+      # Re-runs the suite and FAILS the build if the configured coverage
+      # thresholds (vitest.config.js coverage.thresholds) are not met.
+      - name: Coverage gate
+        run: npm run test:coverage
         env:
           TEST_MONGO_URI: mongodb://127.0.0.1:27017/dental_os_test
 

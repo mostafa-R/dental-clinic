@@ -6,6 +6,7 @@ import Invoice from '../billing/invoice.model.js';
 import ApiError from '../../utils/ApiError.js';
 import { toObjectId } from '../../utils/branchScope.js';
 import { deductForProcedure } from '../inventory/inventory.service.js';
+import { emitItemAlerts } from '../../services/inventoryCron.js';
 import { withTransaction } from '../../core/transaction.js';
 
 export const POPULATE = [
@@ -99,40 +100,52 @@ export async function generateInvoiceFromPlan(plan, patient, { itemIds, discount
     }], { session }).then((docs) => docs[0]);
 
     const deductionLog = [];
+    const alertItems = [];
+    const awardFees = [];
     for (const item of selectedItems) {
       item.invoice = invoice._id;
       if (item.status === 'pending') {
         item.status = 'in_progress';
         item.completedDate = null;
       }
-      if (item.tooth) {
-        const tooth = dentalChart?.teeth?.find((t) => t.number === item.tooth);
-        const toothState = tooth?.state || '';
-        // Auto-deduction is a secondary inventory effect. If it fails (e.g.
-        // insufficient stock) the invoice itself is still valid — log the
-        // shortfall and bill anyway rather than aborting the whole sale.
-        try {
-          const deductions = await deductForProcedure(
-            patient.branch,
-            patient.tenant,
-            toothState,
-            item.procedureName,
-            userId,
-            session,
-          );
-          if (deductions.length) deductionLog.push({ item: item.procedureName, deductions });
-        } catch (err) {
-          console.warn(
-            `[TreatmentPlan] Stock deduction skipped for "${item.procedureName}": ${err.message}`,
-          );
-        }
+      // Auto-deduction keyed on the PROCEDURE NAME (issue #3), independent of
+      // whether the item is linked to a tooth. It never blocks invoicing on
+      // insufficient stock (issue #2): a shortfall is recorded on the log so
+      // the operator can see it surfaced in the response. Items without a
+      // meaningful procedure name are skipped (nothing to map).
+      const tooth = item.tooth !== null && dentalChart?.teeth
+        ? dentalChart.teeth.find((t) => t.number === item.tooth)
+        : null;
+      const toothState = tooth?.state || '';
+      if (!item.procedureName || !String(item.procedureName).trim()) {
+        continue;
+      }
+      const deduction = await deductForProcedure({
+        branchId: patient.branch,
+        tenantId: patient.tenant,
+        toothState,
+        procedureName: item.procedureName,
+        userId,
+        session,
+        invoiceId: invoice._id,
+      });
+      if (deduction.deductions.length) {
+        deductionLog.push({ item: item.procedureName, ...deduction });
+        alertItems.push(...deduction.updatedItems);
+      } else if (deduction.shortfall > 0) {
+        // Bill anyway; surface the shortfall clearly.
+        deductionLog.push({
+          item: item.procedureName,
+          deductions: [],
+          shortfall: deduction.shortfall,
+        });
       }
     }
 
     freshPlan.updatedBy = userId;
     await freshPlan.save({ session });
 
-    return { invoice, plan: freshPlan, deductions: deductionLog };
+    return { invoice, plan: freshPlan, deductions: deductionLog, alertItems };
   });
 
   await result.invoice.populate([
@@ -140,6 +153,18 @@ export async function generateInvoiceFromPlan(plan, patient, { itemIds, discount
     { path: 'payments.recordedBy', select: 'name' },
     { path: 'createdBy', select: 'name' },
   ]);
+
+  // Emit low-stock / expiring alerts AFTER the transaction commits, using the
+  // post-decrement documents, so no phantom alerts fire on rolled-back state
+  // (issue #1/#5).
+  for (const item of result.alertItems || []) {
+    try {
+      emitItemAlerts(item);
+    } catch (err) {
+      // Emission is best-effort; never break the invoice response.
+      console.warn(`[TreatmentPlan] Alert emission failed: ${err.message}`);
+    }
+  }
 
   return { invoice: result.invoice, plan: result.plan, deductions: result.deductions };
 }

@@ -31,6 +31,12 @@ vi.mock('../utils/cache.js', () => ({
   cacheRole: vi.fn()
 }));
 
+// Prevent real audit-chain writes to the shared test DB during unit tests.
+vi.mock('../middleware/audit.js', () => ({
+  auditTenantAction: vi.fn(),
+  audit: vi.fn(() => vi.fn()),
+}));
+
 vi.mock('../constants/roles.js', () => ({
   DEFAULT_ROLES: {
     RECEPTIONIST: {
@@ -74,6 +80,7 @@ vi.mock('../constants/permissions.js', () => ({
 import Role from '../modules/users/role.model.js';
 import User from '../modules/users/user.model.js';
 import { invalidateRoleCache } from '../utils/cache.js';
+import { auditTenantAction } from '../middleware/audit.js';
 import { getDefaultRoles } from '../constants/roles.js';
 import { MODULES } from '../constants/permissions.js';
 
@@ -311,6 +318,7 @@ describe('Enhanced Role Controller', () => {
       expect(role.permissions).toEqual(mockReq.body.permissions);
       expect(role.save).toHaveBeenCalled();
       expect(invalidateRoleCache).toHaveBeenCalledWith('role123');
+      expect(auditTenantAction).toHaveBeenCalled();
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
         data: { role: expect.any(Object) }

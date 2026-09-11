@@ -98,7 +98,8 @@ router.use(protectSite);
  *     summary: Get 2FA status
  *     description: Site realm. Returns whether 2FA is enabled for the authenticated admin.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: 2FA status
@@ -125,7 +126,8 @@ router.get('/status', get2faStatus);
  *     summary: Start 2FA setup
  *     description: Site realm. Generates a TOTP secret and provisioning URI for the authenticator app. 2FA becomes active after `POST /site/2fa/verify`.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: Setup data
@@ -156,7 +158,8 @@ router.post('/setup', setup2fa);
  *     summary: Enable 2FA
  *     description: Site realm. Verifies a TOTP code to activate 2FA for the authenticated admin.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -202,7 +205,8 @@ router.post(
  *     summary: Disable 2FA
  *     description: Site realm. Verifies the current TOTP code and disables 2FA for the authenticated admin.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     requestBody:
  *       required: true
  *       content:

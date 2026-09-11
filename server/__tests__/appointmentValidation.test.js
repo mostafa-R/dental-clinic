@@ -299,11 +299,70 @@ describe('Appointment Validation', () => {
       })).rejects.toThrow();
     });
 
-    it('should detect patient double-booking', async () => {
-      // This is validated in the controller via assertNoPatientOverlap
-      // The controller will reject if patient already has an appointment
-      // at overlapping times
-      expect(true).toBe(true);
+    it('should detect patient double-booking via unique index', async () => {
+      const Appointment = (await import('../modules/appointments/appointment.model.js')).default;
+      const Patient = (await import('../modules/patients/patient.model.js')).default;
+      const User = (await import('../modules/users/user.model.js')).default;
+      const Branch = (await import('../modules/users/branch.model.js')).default;
+      const Tenant = (await import('../modules/site/tenant/tenant.model.js')).default;
+
+      const tenant = await Tenant.create({
+        name: 'Patient Overlap Clinic',
+        email: 'overlap-patient@test.com',
+        slug: 'overlap-patient-clinic',
+        plan: 'professional',
+        status: 'active',
+        isActive: true,
+      });
+
+      const branch = await Branch.create({
+        tenant: tenant._id,
+        name: 'Branch P',
+      });
+
+      const doctor = await User.create({
+        tenant: tenant._id,
+        branch: branch._id,
+        name: 'Dr. PatientOverlap',
+        email: 'dr-patient-overlap@test.com',
+        password: 'Password123!',
+        roleId: new mongoose.Types.ObjectId(),
+        isDoctor: true,
+      });
+
+      const patient = await Patient.create({
+        tenant: tenant._id,
+        branch: branch._id,
+        firstName: 'Jane',
+        lastName: 'Doe',
+        phone: '+1234567891',
+      });
+
+      const start = new Date('2025-01-06T14:00:00Z');
+      const end = new Date('2025-01-06T15:00:00Z');
+
+      // First appointment succeeds
+      await Appointment.create({
+        tenant: tenant._id,
+        branch: branch._id,
+        doctor: doctor._id,
+        patient: patient._id,
+        start,
+        end,
+        status: 'scheduled',
+      });
+
+      // Second appointment with SAME patient, SAME branch, SAME start
+      // triggers the partial unique index on {branch, patient, start}
+      await expect(Appointment.create({
+        tenant: tenant._id,
+        branch: branch._id,
+        doctor: doctor._id,
+        patient: patient._id,
+        start,
+        end: new Date('2025-01-06T15:30:00Z'),
+        status: 'scheduled',
+      })).rejects.toThrow();
     });
   });
 });

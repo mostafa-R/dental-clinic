@@ -3,6 +3,7 @@ import ApiError from "../../../utils/ApiError.js";
 import asyncHandler from "../../../utils/asyncHandler.js";
 import { sendSuccess } from "../../../utils/sendSuccess.js";
 import User from "../../users/user.model.js";
+import Role from "../../users/role.model.js";
 import Tenant from "../tenant/tenant.model.js";
 
 /**
@@ -31,6 +32,18 @@ export const startImpersonation = asyncHandler(async (req, res) => {
   const user = await User.findOne({ _id: userId, tenant: tenantId }).populate('branch', 'name');
   if (!user || !user.isActive) {
     throw ApiError.notFound('User not found or inactive in this tenant');
+  }
+
+  // H7: role-cap the impersonation target. A support/admin session must never
+  // impersonate a clinic owner (or any super-admin-like user), which would
+  // grant it owner-level permissions inside the clinic. Only super_admin may
+  // impersonate the tenant's owner.
+  const userRole = user.roleId
+    ? await Role.findById(user.roleId).select('key isSystemAdmin isBuiltIn').lean()
+    : null;
+  const targetIsOwner = userRole?.isSystemAdmin || userRole?.key === 'clinic_admin' || userRole?.key === 'super_admin';
+  if (targetIsOwner && req.siteAdmin?.role !== 'super_admin') {
+    throw ApiError.forbidden('Only super_admin can impersonate the clinic owner');
   }
 
   const impersonationToken = jwt.sign(
@@ -68,13 +81,37 @@ export const startImpersonation = asyncHandler(async (req, res) => {
 /**
  * POST /site/impersonation/end
  * Log the end of an impersonation session.
+ *
+ * H7: revoking a token must be scoped. The caller supplies the impersonation
+ * token they hold; it is only honoured when that token was issued to THIS site
+ * admin (impersonator claim matches). A generic `userId` can no longer be used
+ * to bump an arbitrary clinic user's tokenVersion and log them out.
  */
 export const endImpersonation = asyncHandler(async (req, res) => {
-  const { userId } = req.body || {};
-  if (userId) {
-    await User.findByIdAndUpdate(userId, { $inc: { tokenVersion: 1 } });
+  const { impersonationToken } = req.body || {};
+
+  if (!impersonationToken) {
+    throw ApiError.badRequest('impersonationToken is required to end impersonation');
   }
-  req.auditTargetName = userId ? String(userId) : '';
-  req.auditDetails = { action: 'impersonation.end', userId: userId ? String(userId) : null };
+
+  let decoded;
+  try {
+    decoded = jwt.verify(impersonationToken, process.env.JWT_SECRET);
+  } catch {
+    throw ApiError.badRequest('Invalid or expired impersonation token');
+  }
+
+  if (decoded.type !== 'impersonation') {
+    throw ApiError.badRequest('Not an impersonation token');
+  }
+
+  let targetUserId = null;
+  if (String(decoded.impersonator) === String(req.siteAdmin._id)) {
+    targetUserId = decoded.sub;
+    await User.findByIdAndUpdate(targetUserId, { $inc: { tokenVersion: 1 } });
+  }
+
+  req.auditTargetName = targetUserId ? String(targetUserId) : '';
+  req.auditDetails = { action: 'impersonation.end', userId: targetUserId ? String(targetUserId) : null };
   return sendSuccess(res, { message: 'Impersonation session ended' });
 });

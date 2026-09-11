@@ -2,11 +2,12 @@ import mongoose from 'mongoose';
 
 import Automation from './automation.model.js';
 import AutomationRun from './automationRun.model.js';
+import Branch from '../users/branch.model.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 import { currentTenant, toObjectId } from '../../utils/branchScope.js';
-import { applyRule } from '../../services/automationEngine.js';
+import { applyRule, invalidateAutomationCache } from '../../services/automationEngine.js';
 import {
   ACTION_TYPES,
   CONDITION_OPS,
@@ -20,6 +21,18 @@ function requireTenant(req) {
     throw ApiError.badRequest('Automation rules require a tenant');
   }
   return tenant;
+}
+
+/**
+ * L2: a branch scoped on an automation must belong to the rule's tenant,
+ * otherwise a clinic user could attach a branch that is another clinic's.
+ */
+async function assertBranchBelongsToTenant(branch, tenant) {
+  if (!branch) return;
+  const exists = await Branch.exists({ _id: branch, tenant, isActive: true });
+  if (!exists) {
+    throw ApiError.badRequest('Branch does not belong to this tenant');
+  }
 }
 
 export const listTriggers = asyncHandler(async (_req, res) =>
@@ -73,6 +86,8 @@ export const createAutomation = asyncHandler(async (req, res) => {
     throw ApiError.conflict('An automation with this name already exists');
   }
 
+  if (data.branch) await assertBranchBelongsToTenant(data.branch, tenant);
+
   const automation = await Automation.create({
     tenant,
     branch: data.branch ? toObjectId(data.branch) : null,
@@ -86,6 +101,8 @@ export const createAutomation = asyncHandler(async (req, res) => {
     createdBy: req.user._id,
     updatedBy: req.user._id,
   });
+
+  invalidateAutomationCache(tenant);
 
   return sendSuccess(res, { automation }, 201);
 });
@@ -105,7 +122,10 @@ export const updateAutomation = asyncHandler(async (req, res) => {
 
   if (data.name !== undefined) automation.name = data.name;
   if (data.description !== undefined) automation.description = data.description;
-  if (data.branch !== undefined) automation.branch = data.branch ? toObjectId(data.branch) : null;
+  if (data.branch !== undefined) {
+    await assertBranchBelongsToTenant(data.branch, tenant);
+    automation.branch = data.branch ? toObjectId(data.branch) : null;
+  }
   if (data.enabled !== undefined) automation.enabled = data.enabled;
   if (data.trigger !== undefined) automation.trigger = data.trigger;
   if (data.conditions !== undefined) automation.conditions = data.conditions;
@@ -114,6 +134,7 @@ export const updateAutomation = asyncHandler(async (req, res) => {
   automation.updatedBy = req.user._id;
 
   await automation.save();
+  invalidateAutomationCache(tenant);
   return sendSuccess(res, { automation });
 });
 
@@ -131,6 +152,7 @@ export const deleteAutomation = asyncHandler(async (req, res) => {
   automation.enabled = false;
   automation.updatedBy = req.user._id;
   await automation.save();
+  invalidateAutomationCache(tenant);
   return sendSuccess(res, { message: 'Automation deleted' });
 });
 
@@ -170,6 +192,8 @@ export const installTemplates = asyncHandler(async (req, res) => {
     });
     installed++;
   }
+
+  invalidateAutomationCache(tenant);
 
   return sendSuccess(res, { installed, existing, total: DEFAULT_TEMPLATES.length });
 });

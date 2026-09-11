@@ -1,4 +1,5 @@
 import Tenant from '../modules/site/tenant/tenant.model.js';
+import { appendAuditLog } from '../utils/auditChain.js';
 
 const ALERT_THRESHOLD = 500;
 const QUARANTINE_THRESHOLD = 2000;
@@ -115,6 +116,15 @@ async function checkAbuse(tenantId) {
         tenant.quarantinePreviousStatus = tenant.status;
         tenant.status = 'suspended';
         await tenant.save();
+
+        await appendAuditLog({
+          action: 'quarantine.set',
+          scope: 'site',
+          adminEmail: 'system',
+          adminRole: 'system',
+          target: { type: 'tenant', id: tenant._id, name: tenant.name },
+          details: { reason: tenant.quarantineReason, auto: true, rate },
+        }).catch(() => {});
       }
     } catch (err) {
       console.error('[AbuseDetection] Failed to quarantine tenant:', err.message);
@@ -267,6 +277,16 @@ export function startAbuseCron() {
             tenant.quarantinePreviousStatus = tenant.status;
             tenant.status = 'suspended';
             await tenant.save();
+
+            await appendAuditLog({
+              action: 'quarantine.set',
+              scope: 'site',
+              adminEmail: 'system',
+              adminRole: 'system',
+              target: { type: 'tenant', id: tenant._id, name: tenant.name },
+              details: { reason: s.reason, auto: true, cron: true },
+            }).catch(() => {});
+
             console.log(`[Abuse] Auto-quarantined tenant "${s.name}" — ${s.reason}`);
           }
         }

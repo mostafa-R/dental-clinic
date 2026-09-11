@@ -17,6 +17,7 @@ import { checkPermission } from '../../middleware/checkPermission.js';
 import { validate } from '../../middleware/validate.js';
 import {
   createAutomationSchema,
+  installTemplatesSchema,
   listQuerySchema,
   listRunsQuerySchema,
   testAutomationSchema,
@@ -53,7 +54,13 @@ router.get('/triggers', protect, checkPermission('automations', 'read'), listTri
  *       '200':
  *         description: Template install summary
  */
-router.post('/install-templates', protect, checkPermission('automations', 'create'), installTemplates);
+router.post(
+  '/install-templates',
+  protect,
+  checkPermission('automations', 'create'),
+  validate(installTemplatesSchema),
+  installTemplates,
+);
 
 /**
  * @swagger

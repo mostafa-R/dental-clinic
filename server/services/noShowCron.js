@@ -10,6 +10,7 @@ import { emitToBranch } from '../socket/index.js';
 import { publishEvent } from '../services/eventBus.js';
 import { stripPHI } from '../middleware/phiRestrict.js';
 import { sendWhatsAppMessage } from './whatsapp.js';
+import { isAutomationTemplateEnabled } from './automationEngine.js';
 
 // BR-PT-04: an appointment becomes a no-show 30 minutes after its scheduled
 // start if the patient never checked in.
@@ -80,6 +81,11 @@ async function sendNoShowWhatsApp(appointment, tenantId, timezone) {
       .select('_id')
       .lean();
     if (!settings) return;
+
+    // M4: if the clinic enabled the "No-show reschedule" automation template
+    // for the same event, let the engine send it — otherwise the patient
+    // receives two identical messages (one from the cron, one from the rule).
+    if (await isAutomationTemplateEnabled(tenantId, 'no-show-reschedule')) return;
 
     await sendWhatsAppMessage(
       String(tenantId),

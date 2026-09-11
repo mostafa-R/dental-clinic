@@ -7,6 +7,7 @@ import { sendSuccess } from '../../utils/sendSuccess.js';
 import { stripPHI } from '../../middleware/phiRestrict.js';
 import { loadTenantTimezone } from '../../utils/timezoneUtils.js';
 import { zonedTodayRangeUtc } from '../../utils/zonedDates.js';
+import { notifyTurnNow } from '../../services/queueNotificationService.js';
 
 // The waiting-room board only needs identification fields, never full PHI.
 const POPULATE = [
@@ -99,6 +100,7 @@ export const callNextPatient = asyncHandler(async (req, res) => {
   await appointment.populate(POPULATE);
 
   broadcastQueueEvent(appointment.branch, appointment.tenant, 'queue.patient.called', appointment);
+  notifyTurnNow(appointment);
 
   return sendSuccess(res, { appointment: serializeQueueEntry(appointment, req) });
 });

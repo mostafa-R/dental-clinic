@@ -55,5 +55,5 @@ export const markReadSchema = z.object({
 });
 
 export const markChannelReadSchema = z.object({
-  channel: z.string().max(50).min(1),
+  channel: z.enum(CHANNEL_NAMES),
 });

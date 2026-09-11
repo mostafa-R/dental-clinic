@@ -47,6 +47,27 @@ export const SITE_PERMISSIONS = {
   PLANS_CREATE: "plans:create",
   PLANS_UPDATE: "plans:update",
   PLANS_DELETE: "plans:delete",
+
+  // Platform analytics (system-wide, aggregated). `analytics:view` is the
+  // coarse legacy grant; the finer `platform:*` / `analytics:*` strings below
+  // gate individual dashboards. super_admin bypasses all of them.
+  PLATFORM_OVERVIEW_VIEW: "platform:overview:view",
+  FINANCIAL_VIEW: "financial:view",
+  INVENTORY_VIEW: "inventory:view",
+  PATIENT_ANALYTICS_VIEW: "patient:analytics:view",
+  APPOINTMENTS_VIEW: "appointments:view",
+  DOCTORS_VIEW: "doctors:view",
+  TREATMENTS_VIEW: "treatments:view",
+  USAGE_VIEW: "usage:view",
+  ACTIVITY_VIEW: "activity:view",
+  SAAS_BILLING_VIEW: "saas-billing:view",
+  SECURITY_VIEW: "security:view",
+  REPORTS_EXPORT: "reports:export",
+
+  // Raw protected-health-information access (L2). Never part of any role
+  // default — only super_admin (implicitly) or an explicit super_admin-granted
+  // permission may reach PHI-bearing endpoints, and those endpoints audit.
+  PATIENT_PHI_VIEW: "patient:phi:view",
 };
 
 export const ALL_SITE_PERMISSIONS = Object.values(SITE_PERMISSIONS);
@@ -61,11 +82,26 @@ export const SITE_ROLE_DEFAULT_PERMISSIONS = {
     SITE_PERMISSIONS.SUBSCRIPTIONS_UPDATE,
     SITE_PERMISSIONS.ANALYTICS_VIEW,
     SITE_PERMISSIONS.SETTINGS_VIEW,
+    SITE_PERMISSIONS.PLATFORM_OVERVIEW_VIEW,
+    SITE_PERMISSIONS.FINANCIAL_VIEW,
+    SITE_PERMISSIONS.INVENTORY_VIEW,
+    SITE_PERMISSIONS.PATIENT_ANALYTICS_VIEW,
+    SITE_PERMISSIONS.APPOINTMENTS_VIEW,
+    SITE_PERMISSIONS.DOCTORS_VIEW,
+    SITE_PERMISSIONS.TREATMENTS_VIEW,
+    SITE_PERMISSIONS.USAGE_VIEW,
+    SITE_PERMISSIONS.ACTIVITY_VIEW,
+    SITE_PERMISSIONS.SAAS_BILLING_VIEW,
   ],
   support: [
     SITE_PERMISSIONS.TENANTS_VIEW,
     SITE_PERMISSIONS.SUBSCRIPTIONS_VIEW,
     SITE_PERMISSIONS.ANALYTICS_VIEW,
+    SITE_PERMISSIONS.PLATFORM_OVERVIEW_VIEW,
+    SITE_PERMISSIONS.PATIENT_ANALYTICS_VIEW,
+    SITE_PERMISSIONS.APPOINTMENTS_VIEW,
+    SITE_PERMISSIONS.USAGE_VIEW,
+    SITE_PERMISSIONS.ACTIVITY_VIEW,
   ],
 };
 

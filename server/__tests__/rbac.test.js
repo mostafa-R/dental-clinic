@@ -16,7 +16,7 @@ vi.mock("../utils/cache.js", () => ({
   invalidatePermission: vi.fn(),
 }));
 
-import { checkPermission, resolveRole } from "../middleware/checkPermission.js";
+import { checkPermission, checkAnyPermission, resolveRole } from "../middleware/checkPermission.js";
 import { planIncludesModule } from "../constants/plans.js";
 import Role from "../modules/users/role.model.js";
 import { getCachedRole, cacheRole } from "../utils/cache.js";
@@ -249,5 +249,88 @@ describe("checkPermission middleware", () => {
     await checkPermission("billing", "create")(req, res, next);
     expect(req._roleResolved).toBeDefined();
     expect(getCachedRole).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("checkAnyPermission middleware", () => {
+  function makeReq(user) {
+    return { user, _roleResolved: undefined };
+  }
+  const res = {};
+
+  it("returns 401 when there is no authenticated user", async () => {
+    const next = vi.fn();
+    await checkAnyPermission([["billing", "delete"], ["accounting", "update"]])(makeReq(null), res, next);
+    expect(next.mock.calls[0][0]).toMatchObject({ statusCode: 401 });
+  });
+
+  it("blocks when the plan excludes every candidate module", async () => {
+    const next = vi.fn();
+    const req = makeReq({ roleId: "r1", tenant: { planModules: ["dashboard", "patients"] } });
+    await checkAnyPermission([["billing", "delete"], ["accounting", "update"]])(req, res, next);
+    expect(next.mock.calls[0][0]).toMatchObject({ statusCode: 403 });
+    expect(next.mock.calls[0][0].message).toContain("does not include the billing module");
+  });
+
+  it("lets a user through when they hold ANY of the pairs", async () => {
+    vi.mocked(getCachedRole).mockResolvedValue({
+      _id: "r1",
+      tenant: "t1",
+      isSystemAdmin: false,
+      permissions: [
+        { module: "billing", actions: ["read"] },
+        { module: "accounting", actions: ["update"] },
+      ],
+    });
+    const next = vi.fn();
+    const req = makeReq({ roleId: "r1", tenant: { _id: "t1", planModules: ["billing", "accounting"] } });
+    // 'billing delete' is NOT granted, but 'accounting update' IS → allowed.
+    await checkAnyPermission([["billing", "delete"], ["accounting", "update"]])(req, res, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(next.mock.calls[0][0]).toBeUndefined();
+  });
+
+  it("denies when none of the pairs are granted", async () => {
+    vi.mocked(getCachedRole).mockResolvedValue({
+      _id: "r1",
+      tenant: "t1",
+      isSystemAdmin: false,
+      permissions: [{ module: "accounting", actions: ["read"] }],
+    });
+    const next = vi.fn();
+    const req = makeReq({ roleId: "r1", tenant: { _id: "t1", planModules: ["billing", "accounting"] } });
+    await checkAnyPermission([["billing", "delete"], ["accounting", "update"]])(req, res, next);
+    expect(next.mock.calls[0][0]).toMatchObject({ statusCode: 403 });
+    expect(next.mock.calls[0][0].message).toContain(
+      "You do not have permission to delete billing or update accounting",
+    );
+  });
+
+  it("bypasses for system admins even when the plan lacks the modules", async () => {
+    vi.mocked(getCachedRole).mockResolvedValue({
+      _id: "r1",
+      tenant: "t1",
+      isSystemAdmin: true,
+      permissions: [],
+    });
+    const next = vi.fn();
+    const req = makeReq({ roleId: "r1", tenant: { _id: "t1", planModules: ["dashboard"] } });
+    await checkAnyPermission([["billing", "delete"], ["accounting", "update"]])(req, res, next);
+    expect(next.mock.calls[0][0]).toBeUndefined();
+  });
+
+  it("reuses the role resolved for the request", async () => {
+    vi.mocked(getCachedRole).mockClear();
+    vi.mocked(getCachedRole).mockResolvedValue({
+      _id: "r1",
+      tenant: null,
+      isSystemAdmin: false,
+      permissions: [{ module: "refunds", actions: ["approve"] }],
+    });
+    const next = vi.fn();
+    const req = makeReq({ roleId: "r1", tenant: null });
+    await checkAnyPermission([["refunds", "approve"], ["roles", "read"]])(req, res, next);
+    expect(next.mock.calls[0][0]).toBeUndefined();
+    expect(req._roleResolved).toBeDefined();
   });
 });

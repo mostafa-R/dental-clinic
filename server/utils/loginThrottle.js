@@ -85,3 +85,42 @@ export async function resetFailedLogins(account) {
   await redis.del(`${FAIL_PREFIX}${key}`);
   await redis.del(`${LOCK_PREFIX}${key}`);
 }
+
+/**
+ * Live security snapshot of the per-account login throttles: currently locked
+ * accounts (with remaining lock time) and consecutive-failure counters.
+ * Returns null when Redis is unavailable so callers can degrade gracefully.
+ * Keys are the account identifiers used by recordFailedLogin.
+ */
+export async function getLoginSecuritySnapshot() {
+  const redis = redisReady();
+  if (!redis) return null;
+
+  const [lockKeys, failKeys] = await Promise.all([
+    redis.keys(`${LOCK_PREFIX}*`),
+    redis.keys(`${FAIL_PREFIX}*`),
+  ]);
+
+  const locks = [];
+  for (const k of lockKeys || []) {
+    const ttl = await redis.ttl(k);
+    if (ttl > 0) {
+      locks.push({ account: k.slice(LOCK_PREFIX.length), remainingSeconds: ttl });
+    }
+  }
+
+  let failedChallenges = 0;
+  const failed = [];
+  for (const k of failKeys || []) {
+    const count = Number((await redis.get(k)) || 0);
+    if (count > 0) {
+      failedChallenges += count;
+      failed.push({ account: k.slice(FAIL_PREFIX.length), count });
+    }
+  }
+
+  return {
+    lockedAccounts: locks,
+    failed: { accounts: failed, total: failedChallenges },
+  };
+}

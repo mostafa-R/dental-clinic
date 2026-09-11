@@ -18,7 +18,8 @@ router.use(protectSite);
  *     summary: Remove a tenant from quarantine
  *     description: Site realm. Requires `super_admin` role and 2FA confirmation.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: tenantId
@@ -60,7 +61,8 @@ router.put(
  *     summary: Quarantine a tenant
  *     description: Site realm. Requires `super_admin` role and 2FA confirmation. Blocks the tenant and flags it for abuse review.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: tenantId
@@ -113,7 +115,8 @@ router.put(
  *     summary: List pending abuse checks
  *     description: Site realm. Requires `super_admin` or `admin` role. Returns tenants flagged by automated abuse detection.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: Pending checks

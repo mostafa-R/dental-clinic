@@ -6,9 +6,13 @@ import { validate } from '../../middleware/validate.js';
 import { getSettings, updateSettings, connect, getQrCode, disconnect, status, testMessage } from './whatsapp.controller.js';
 
 const whatsappSettingsSchema = z.object({
-  provider: z.enum(['whatsapp_web', 'cloud_api', 'twilio']).optional(),
+  provider: z.enum(['whatsapp_web', 'cloud_api']).optional(),
   enabled: z.boolean().optional(),
-  config: z.record(z.unknown()).optional(),
+  config: z.object({
+    phoneNumber: z.string().optional(),
+    phoneNumberId: z.string().optional(),
+    accessToken: z.string().optional(),
+  }).strict().optional(),
   settings: z.object({
     appointmentReminder: z.boolean().optional(),
     appointmentConfirm: z.boolean().optional(),
@@ -16,6 +20,7 @@ const whatsappSettingsSchema = z.object({
     reminderHoursSecondary: z.number().int().min(0).max(168).optional(),
     installmentReminder: z.boolean().optional(),
     noShowReminder: z.boolean().optional(),
+    queueNotifications: z.boolean().optional(),
   }).optional(),
 });
 
@@ -23,8 +28,8 @@ const testMessageSchema = z.object({
   to: z
     .string()
     .regex(
-      /^\+?[1-9]\d{7,14}(@c\.us)?$/,
-      'Phone number must be in E.164 format (e.g. +15551234567)',
+      /^\+?\d{7,15}(@c\.us)?$/,
+      'Phone number must be digits in E.164 or local format (e.g. +201234567890 or 01012345678)',
     ),
   message: z.string().min(1, 'Message required').max(1000),
 });
@@ -55,7 +60,7 @@ const router = Router();
  *                     settings:
  *                       type: object
  *                       properties:
- *                         provider: { type: string, enum: [whatsapp_web, cloud_api, twilio] }
+ *                         provider: { type: string, enum: [whatsapp_web, cloud_api] }
  *                         enabled: { type: boolean }
  *                         config: { type: object }
  *                         settings:
@@ -87,7 +92,7 @@ router.get('/settings', protect, checkPermission('settings', 'read'), getSetting
  *           schema:
  *             type: object
  *             properties:
- *               provider: { type: string, enum: [whatsapp_web, cloud_api, twilio] }
+ *               provider: { type: string, enum: [whatsapp_web, cloud_api] }
  *               enabled: { type: boolean }
  *               config: { type: object }
  *               settings:
@@ -124,7 +129,7 @@ router.put('/settings', protect, checkPermission('settings', 'update'), validate
  *   post:
  *     tags: [WhatsApp]
  *     summary: Connect WhatsApp
- *     description: Requires `settings:update`. Starts the WhatsApp client connection (pairing for whatsapp_web).
+ *     description: Requires `settings:update`. Starts the WhatsApp client connection (pairing for whatsapp_web, credential validation for cloud_api).
  *     security:
  *       - cookieAuth: []
  *     responses:
@@ -139,8 +144,11 @@ router.put('/settings', protect, checkPermission('settings', 'update'), validate
  *                 data:
  *                   type: object
  *                   properties:
- *                     message: { type: string }
- *                     qr: { type: string, nullable: true, description: QR code data URL when pairing is needed }
+ *                     status:
+ *                       type: string
+ *                       enum: [connecting, connected]
+ *                     provider: { type: string, enum: [whatsapp_web, cloud_api] }
+ *                     ready: { type: boolean, description: "Only set for whatsapp_web: whether the client finished pairing" }
  *       '401':
  *         $ref: '#/components/responses/Unauthorized'
  *       '403':
@@ -169,8 +177,8 @@ router.post('/connect', protect, checkPermission('settings', 'update'), connect)
  *                 data:
  *                   type: object
  *                   properties:
- *                     qr: { type: string, nullable: true }
- *                     qrExpiresAt: { type: string, format: date-time, nullable: true }
+ *                     qrCode: { type: string, nullable: true, description: Pairing QR data URL (whatsapp_web only) }
+ *                     status: { type: string }
  *       '401':
  *         $ref: '#/components/responses/Unauthorized'
  *       '403':
@@ -258,8 +266,8 @@ router.get('/status', protect, checkPermission('settings', 'read'), status);
  *             properties:
  *               to:
  *                 type: string
- *                 description: Phone number in E.164 format (e.g. +15551234567).
- *                 pattern: ^\+?[1-9]\d{7,14}(@c\.us)?$
+ *                 description: Phone number (E.164 or local format, e.g. +201234567890 or 01012345678).
+ *                 pattern: ^\+?\d{7,15}(@c\.us)?$
  *               message: { type: string, minLength: 1, maxLength: 1000 }
  *     responses:
  *       '200':

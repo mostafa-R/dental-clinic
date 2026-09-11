@@ -196,4 +196,117 @@ describe('Invoice Counter Transaction', () => {
       expect(seq2A).toBe(2);
     });
   });
+
+  describe.skipIf(!supportsTransactions)('Counter.next concurrency (real race)', () => {
+    it('should issue unique, gap-free sequence numbers under 50 concurrent callers', async () => {
+      const Counter = (await import('../core/counters.js')).default;
+      const N = 50;
+      const results = await Promise.allSettled(
+        Array.from({ length: N }, () => Counter.next('race-counter', 'tenant-race')),
+      );
+      const ok = results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
+
+      // All 50 succeeded (no E11000 crash on upsert race)
+      expect(ok).toHaveLength(N);
+
+      // Every sequence number is unique
+      const sorted = ok.slice().sort((a, b) => a - b);
+      expect(new Set(sorted).size).toBe(N);
+
+      // No gaps: the set is exactly 1..N
+      expect(sorted[0]).toBe(1);
+      expect(sorted[sorted.length - 1]).toBe(N);
+
+      // DB counter matches the last issued number
+      const counter = await Counter.findById('race-counter:tenant-race');
+      expect(counter.seq).toBe(N);
+    });
+
+    it('should issue 200 unique sequence numbers without failure', async () => {
+      const Counter = (await import('../core/counters.js')).default;
+      const N = 200;
+      const results = await Promise.allSettled(
+        Array.from({ length: N }, () => Counter.next('race-counter-200', 'tenant-race-200')),
+      );
+      const ok = results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
+      expect(ok).toHaveLength(N);
+      expect(new Set(ok).size).toBe(N);
+      expect(Math.max(...ok)).toBe(N);
+    });
+  });
+
+  describe('Invoice.create concurrent race', () => {
+    it('should assign 50 unique invoiceNo values under concurrent writes', async () => {
+      const Invoice = (await import('../modules/billing/invoice.model.js')).default;
+      const Patient = (await import('../modules/patients/patient.model.js')).default;
+      const Branch = (await import('../modules/users/branch.model.js')).default;
+      const Tenant = (await import('../modules/site/tenant/tenant.model.js')).default;
+
+      const tenant = await Tenant.create({
+        name: 'Race Clinic', email: 'race@test.com', slug: 'race-clinic',
+        plan: 'professional', status: 'active', isActive: true,
+      });
+      const branch = await Branch.create({
+        tenant: tenant._id, name: 'Main', address: '1 Main St', phone: '+3000000001',
+      });
+      const patient = await Patient.create({
+        tenant: tenant._id, branch: branch._id, firstName: 'Race', lastName: 'Patient',
+        phone: '+3000000002',
+      });
+
+      const N = 50;
+      const settled = await Promise.allSettled(
+        Array.from({ length: N }, (_, i) =>
+          Invoice.create({
+            tenant: tenant._id, branch: branch._id, patient: patient._id,
+            items: [{ description: `Service ${i}`, quantity: 1, unitPrice: 10 + i }],
+          }),
+        ),
+      );
+      const ok = settled.filter((r) => r.status === 'fulfilled').map((r) => r.value);
+      const nos = ok.map((inv) => inv.invoiceNo);
+
+      // All succeeded and every invoiceNo is unique
+      expect(ok).toHaveLength(N);
+      expect(new Set(nos).size).toBe(N);
+
+      // Format sanity
+      nos.forEach((no) => expect(no).toMatch(/^INV-\d{4}-\d{5}$/));
+
+      // Exactly N documents persisted in DB
+      const dbCount = await Invoice.countDocuments({ tenant: tenant._id });
+      expect(dbCount).toBe(N);
+    });
+
+    it('should reject a duplicate invoiceNo via the unique index', async () => {
+      const Invoice = (await import('../modules/billing/invoice.model.js')).default;
+      const Patient = (await import('../modules/patients/patient.model.js')).default;
+      const Branch = (await import('../modules/users/branch.model.js')).default;
+      const Tenant = (await import('../modules/site/tenant/tenant.model.js')).default;
+
+      const tenant = await Tenant.create({
+        name: 'Dup Clinic', email: 'dup@test.com', slug: 'dup-clinic',
+        plan: 'professional', status: 'active', isActive: true,
+      });
+      const branch = await Branch.create({
+        tenant: tenant._id, name: 'Main', address: '1 Main St', phone: '+4000000001',
+      });
+      const patient = await Patient.create({
+        tenant: tenant._id, branch: branch._id, firstName: 'Dup', lastName: 'Patient',
+        phone: '+4000000002',
+      });
+
+      const inv = await Invoice.create({
+        tenant: tenant._id, branch: branch._id, patient: patient._id,
+        items: [{ description: 'Original', quantity: 1, unitPrice: 100 }],
+      });
+
+      await expect(
+        Invoice.create({
+          tenant: tenant._id, branch: branch._id, patient: patient._id,
+          invoiceNo: inv.invoiceNo, items: [{ description: 'Dup', quantity: 1, unitPrice: 50 }],
+        }),
+      ).rejects.toMatchObject({ code: 11000 });
+    });
+  });
 });

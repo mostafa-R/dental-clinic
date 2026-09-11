@@ -62,6 +62,10 @@ export const updateAppointmentSchema = z
 
 export const transitionSchema = z.object({
   status: z.enum(APPOINTMENT_STATUS),
+  // Optional follow-up appointment rendered in the post-visit WhatsApp summary
+  // (PRD §6.2). Only meaningful when status === 'completed'; the controller
+  // persists it via notifyVisitCompleted.
+  nextAppointmentId: objectIdSchema.optional(),
 });
 
 export const callNextSchema = z.object({

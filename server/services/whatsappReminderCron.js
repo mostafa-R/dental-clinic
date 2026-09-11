@@ -6,8 +6,14 @@ import WhatsAppSetting from "../modules/whatsapp/whatsappSetting.model.js";
 import Patient from "../modules/patients/patient.model.js";
 import Branch from "../modules/users/branch.model.js";
 import { sendWhatsAppMessage } from "./whatsapp.js";
+import { tryAcquireCronLock, releaseCronLock } from "./cronLock.js";
 
 const REMINDER_CHECK_INTERVAL = "*/30 * * * *";
+// Single-instance guard for the 30-min tick. TTL stays under the interval so
+// a crashed tick frees the lock for the next pass, while a running pass blocks
+// concurrent workers from double-sending reminders.
+const CRON_LOCK_KEY = "whatsapp_reminder_cron";
+const CRON_LOCK_TTL_MS = 25 * 60 * 1000;
 // Egypt weekend (Fri/Sat): the 24h reminder for a weekend appointment is
 // shifted a full day earlier so it lands on the preceding workday (PRD §6.4).
 const WEEKEND_DAYS = [5, 6]; // getDay(): 5=Friday, 6=Saturday
@@ -134,6 +140,12 @@ async function sendMessagesForTenant(settings, type) {
 }
 
 async function processReminders() {
+  const token = await tryAcquireCronLock({
+    key: CRON_LOCK_KEY,
+    ttlMs: CRON_LOCK_TTL_MS,
+  });
+  if (!token) return; // another instance owns this tick
+
   try {
     const activeSettings = await WhatsAppSetting.find({
       enabled: true,
@@ -164,6 +176,8 @@ async function processReminders() {
     await Promise.allSettled(confirmPromises);
   } catch (err) {
     console.error("[WhatsApp-Reminder] Cron error:", err.message);
+  } finally {
+    await releaseCronLock(CRON_LOCK_KEY, token);
   }
 }
 

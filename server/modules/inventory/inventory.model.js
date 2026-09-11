@@ -152,12 +152,22 @@ inventoryItemSchema.virtual('isExpired').get(function isExpired() {
 inventoryItemSchema.set('toJSON', { virtuals: true });
 inventoryItemSchema.set('toObject', { virtuals: true });
 
-// Cap embedded transactions array to prevent unbounded document growth
-inventoryItemSchema.pre('save', function capTransactions() {
-  if (this.isModified('transactions') && this.transactions.length > MAX_INVENTORY_TRANSACTIONS) {
+// Cap embedded transactions array to prevent unbounded document growth.
+// Runs in `pre('validate')` (not `pre('save')`) because the stock-adjust and
+// auto-deduction flows use `findOneAndUpdate` + `$push` with `runValidators`,
+// which triggers `validate` but not `save` (issue #8).
+inventoryItemSchema.pre('validate', function capTransactions() {
+  if (this.isModified('transactions') && Array.isArray(this.transactions) && this.transactions.length > MAX_INVENTORY_TRANSACTIONS) {
     this.transactions = this.transactions.slice(-MAX_INVENTORY_TRANSACTIONS);
   }
 });
+
+// SKU must be unique within a branch (issue #11). Partial so items sharing a
+// blank/default SKU ('') don't collide with one another.
+inventoryItemSchema.index(
+  { branch: 1, sku: 1 },
+  { unique: true, partialFilterExpression: { sku: { $ne: '' } } },
+);
 
 inventoryItemSchema.index({ branch: 1, name: 1 });
 inventoryItemSchema.index({ branch: 1, category: 1 });

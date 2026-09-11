@@ -11,11 +11,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
+
+import { require2faChallenge } from '../middleware/require2fa.js';
+import SiteAdmin from '../modules/site/admin/admin.model.js';
+import * as redisConfig from '../config/redis.js';
 
 // Mock dependencies before importing
 vi.mock('../config/redis.js', () => ({
   getRedis: vi.fn(() => null),
 }));
+
+vi.mock('../modules/site/admin/admin.model.js', () => {
+  class MockSiteAdmin {}
+  MockSiteAdmin.findById = vi.fn();
+  return { default: MockSiteAdmin };
+});
 
 vi.mock('../utils/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -31,6 +42,144 @@ function jsonErrorHandler(err, _req, res, _next) {
 }
 
 const MINUTE = 60 * 1000;
+
+// The challenge guard signs and verifies with JWT_2FA_SECRET || JWT_SECRET.
+const CHALLENGE_SECRET = 'test-challenge-secret';
+
+function signChallenge({ sub, jti, type = '2fa_challenge' }) {
+  return jwt.sign({ type, sub, ...(jti ? { jti } : {}) }, CHALLENGE_SECRET, { expiresIn: '5m' });
+}
+
+describe('require2faChallenge (single-use challenge replay guard)', () => {
+  function makeChallengeApp() {
+    const app = express();
+    app.use(express.json());
+    app.post('/challenge', (req, res, next) => {
+      req.validatedBody = req.body;
+      next();
+    }, require2faChallenge, (req, res) => {
+      res.json({ success: true, adminId: String(req._2faAdmin._id) });
+    });
+    app.use(jsonErrorHandler);
+    return app;
+  }
+
+  beforeAll(() => {
+    // The middleware verifies with JWT_2FA_SECRET || JWT_SECRET; pin both so
+    // signed fixtures always match regardless of the ambient environment.
+    process.env.JWT_2FA_SECRET = CHALLENGE_SECRET;
+    process.env.JWT_SECRET = CHALLENGE_SECRET;
+  });
+
+  beforeEach(() => {
+    vi.mocked(SiteAdmin.findById).mockReset();
+  });
+
+  it('rejects a missing challenge token', async () => {
+    const res = await request(makeChallengeApp())
+      .post('/challenge')
+      .send({});
+    expect(res.status).toBe(401);
+    expect(res.body.message).toBe('2FA challenge token is required');
+  });
+
+  it('rejects an invalid or expired challenge token', async () => {
+    const res = await request(makeChallengeApp())
+      .post('/challenge')
+      .send({ challengeToken: 'not-a-jwt' });
+    expect(res.status).toBe(401);
+    expect(res.body.message).toBe('Invalid or expired challenge token');
+  });
+
+  it('rejects a token that is not of type 2fa_challenge', async () => {
+    const other = jwt.sign({ type: 'site_access', sub: 'a1' }, CHALLENGE_SECRET, { expiresIn: '5m' });
+    const res = await request(makeChallengeApp())
+      .post('/challenge')
+      .send({ challengeToken: other });
+    expect(res.status).toBe(401);
+    expect(res.body.message).toBe('Invalid token type');
+  });
+
+  it('rejects a token without a jti (cannot be a single-use challenge)', async () => {
+    const noJti = jwt.sign({ type: '2fa_challenge', sub: 'a1' }, CHALLENGE_SECRET, { expiresIn: '5m' });
+    const res = await request(makeChallengeApp())
+      .post('/challenge')
+      .send({ challengeToken: noJti });
+    expect(res.status).toBe(401);
+    expect(res.body.message).toBe('Challenge token has already been used');
+  });
+
+  it('accepts a fresh challenge once and forwards the admin', async () => {
+    const admin = { _id: 'a1', isActive: true, email: 'admin@test.com' };
+    vi.mocked(SiteAdmin.findById).mockResolvedValue(admin);
+
+    const token = signChallenge({ sub: 'a1', jti: 'unique-jti-1' });
+    const res = await request(makeChallengeApp())
+      .post('/challenge')
+      .send({ challengeToken: token });
+    expect(res.status).toBe(200);
+    expect(res.body.adminId).toBe('a1');
+    expect(SiteAdmin.findById).toHaveBeenCalledWith('a1');
+  });
+
+  it('rejects a replayed challenge token on second use (jti replay guard)', async () => {
+    const admin = { _id: 'a1', isActive: true };
+    vi.mocked(SiteAdmin.findById).mockResolvedValue(admin);
+    const req = request(makeChallengeApp());
+
+    const token = signChallenge({ sub: 'a1', jti: 'unique-jti-2' });
+    const first = await req.post('/challenge').send({ challengeToken: token });
+    expect(first.status).toBe(200);
+
+    const replay = await req.post('/challenge').send({ challengeToken: token });
+    expect(replay.status).toBe(401);
+    expect(replay.body.message).toBe('Challenge token has already been used');
+  });
+
+  it('rejects when the admin no longer exists or is disabled', async () => {
+    vi.mocked(SiteAdmin.findById).mockResolvedValue(null);
+
+    const token = signChallenge({ sub: 'ghost', jti: 'unique-jti-3' });
+    const res = await request(makeChallengeApp())
+      .post('/challenge')
+      .send({ challengeToken: token });
+    expect(res.status).toBe(401);
+    expect(res.body.message).toBe('Admin not found or disabled');
+  });
+
+  it('claims the jti atomically via Redis SET NX when Redis is ready', async () => {
+    // Simulate a live Redis: SET NX returns 'OK' the first time and undefined
+    // on a duplicate key, so the replay guard is atomic even pre-TTL expiry.
+    const claimedKeys = new Set();
+    const fakeRedis = {
+      status: 'ready',
+      set: vi.fn(async (key, _value, _mode, seconds, nx) => {
+        if (nx === 'NX' && claimedKeys.has(key)) return undefined;
+        claimedKeys.add(key);
+        return 'OK';
+      }),
+    };
+    vi.mocked(redisConfig.getRedis).mockReturnValue(fakeRedis);
+    const admin = { _id: 'a1', isActive: true, email: 'admin@test.com' };
+    vi.mocked(SiteAdmin.findById).mockResolvedValue(admin);
+    const req = request(makeChallengeApp());
+
+    const token = signChallenge({ sub: 'a1', jti: 'redis-jti-1' });
+    const first = await req.post('/challenge').send({ challengeToken: token });
+    expect(first.status).toBe(200);
+
+    const replay = await req.post('/challenge').send({ challengeToken: token });
+    expect(replay.status).toBe(401);
+    expect(replay.body.message).toBe('Challenge token has already been used');
+    expect(fakeRedis.set).toHaveBeenCalledWith(
+      expect.stringContaining('2fa:challenge:used:redis-jti-1'),
+      '1',
+      'EX',
+      300,
+      'NX',
+    );
+  });
+});
 
 describe('2FA Enforcement Middleware', () => {
   let consoleWarnSpy;

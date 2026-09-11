@@ -66,7 +66,24 @@ describe("POST /api/auth/login", () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data.user.name).toBe("Dr Test");
-    expect(res.headers["set-cookie"]).toBeDefined();
+    const cookies = res.headers["set-cookie"] ?? [];
+    expect(cookies).toBeDefined();
+
+    // Session cookies must be HttpOnly (not readable by JS), scoped to the
+    // whole site, and SameSite-protected against cross-site CSRF.
+    const access = cookies.find((c) => c.startsWith("access_token="));
+    const refresh = cookies.find((c) => c.startsWith("refresh_token="));
+    expect(access).toContain("HttpOnly");
+    expect(refresh).toContain("HttpOnly");
+    expect(access).toContain("Path=/");
+    expect(refresh).toContain("Path=/");
+    expect(access).toMatch(/SameSite=(Lax|None)/);
+    expect(refresh).toMatch(/SameSite=(Lax|None)/);
+
+    // The CSRF double-submit cookie is issued alongside the session cookies.
+    const csrf = cookies.find((c) => c.startsWith("_csrf="));
+    expect(csrf).toBeDefined();
+    expect(csrf).toContain("SameSite=Strict");
   });
 
   it("rejects invalid credentials with 401", async () => {
@@ -183,6 +200,13 @@ describe("POST /api/auth/logout", () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data.message).toBe("Logged out");
+
+    // Stale session cookies must actually be expired client-side.
+    const cookies = res.headers["set-cookie"] ?? [];
+    const access = cookies.find((c) => c.startsWith("access_token="));
+    const refresh = cookies.find((c) => c.startsWith("refresh_token="));
+    expect(access).toContain("Expires=Thu, 01 Jan 1970");
+    expect(refresh).toContain("Expires=Thu, 01 Jan 1970");
   });
 });
 
@@ -205,6 +229,11 @@ describe("POST /api/auth/refresh", () => {
       .set("Cookie", `refresh_token=${token}`);
     expect(res.status).toBe(200);
     expect(res.body.data.message).toBe("Token refreshed");
-    expect(res.headers["set-cookie"]).toBeDefined();
+    const cookies = res.headers["set-cookie"] ?? [];
+    expect(cookies).toBeDefined();
+    const access = cookies.find((c) => c.startsWith("access_token="));
+    const refresh = cookies.find((c) => c.startsWith("refresh_token="));
+    expect(access).toContain("HttpOnly");
+    expect(refresh).toContain("HttpOnly");
   });
 });

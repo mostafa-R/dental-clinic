@@ -10,7 +10,7 @@ const whatsappSettingSchema = new mongoose.Schema({
   enabled: { type: Boolean, default: false },
   provider: {
     type: String,
-    enum: ['whatsapp_web', 'cloud_api', 'twilio'],
+    enum: ['whatsapp_web', 'cloud_api'],
     default: 'whatsapp_web',
   },
   config: {
@@ -31,6 +31,9 @@ const whatsappSettingSchema = new mongoose.Schema({
     installmentReminder: { type: Boolean, default: false },
     // Send a reschedule suggestion when a patient is marked no-show (BR-PT-04).
     noShowReminder: { type: Boolean, default: false },
+    // Live-queue patient notifications: joined / position / near-turn / turn-now
+    // (PRD §6.2) and the post-visit summary. Independent switch per clinic.
+    queueNotifications: { type: Boolean, default: false },
   },
   status: {
     type: String,

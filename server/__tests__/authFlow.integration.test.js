@@ -14,8 +14,6 @@ vi.mock("../modules/auth/auth.service.js", () => ({
   getUserWithTenantInfo: vi.fn(),
 }));
 
-vi.mock("../middleware/auth.js", () => ({ protect: vi.fn() }));
-
 vi.mock("../modules/users/user.model.js", () => {
   class MockUser {}
   MockUser.findById = vi.fn();
@@ -30,7 +28,6 @@ import * as authService from "../modules/auth/auth.service.js";
 import { csrfProtection } from "../middleware/csrf.js";
 import { protect } from "../middleware/auth.js";
 import User from "../modules/users/user.model.js";
-import ApiError from "../utils/ApiError.js";
 import {
   ACCESS_COOKIE,
   REFRESH_COOKIE,
@@ -39,6 +36,39 @@ import {
   signRefreshToken,
   verifyAccessToken,
 } from "../utils/jwt.js";
+
+// The real `protect` (middleware/auth.js) is exercised from here on — no mock.
+// It reads a Mongoose user-doc (branch/tenant populated, toObject() for
+// req.user) and enforces an in-memory per-user rate limit in tests, so the
+// doc below only needs a tenant-less, branch-less, active user.
+function mockUserDoc(overrides = {}) {
+  const base = {
+    _id: "u1",
+    isActive: true,
+    branch: null,
+    tenant: null,
+    tokenVersion: 0,
+    _doc: { tenant: null },
+  };
+  const doc = { ...base, ...overrides };
+  doc.toObject = () => {
+    const { _doc: _ignored, toObject: _toObject, ...rest } = doc;
+    return rest;
+  };
+  const query = {
+    populate: () => query,
+    then: (resolve) => resolve(doc),
+  };
+  return { doc, query };
+}
+
+function mockFindById(docOrFactory) {
+  if (typeof docOrFactory === "function") {
+    vi.mocked(User.findById).mockImplementation(() => mockUserDoc(docOrFactory()).query);
+  } else {
+    vi.mocked(User.findById).mockReturnValue(mockUserDoc(docOrFactory).query);
+  }
+}
 
 function makeApp() {
   const app = express();
@@ -73,23 +103,17 @@ async function makeRealUser(overrides = {}) {
 }
 
 describe("Auth feature — full flow", () => {
+  // NOTE: the REAL protect middleware (middleware/auth.js) is used now. The
+  // mocked user.model feeds it the docs it needs; token signing/verifying,
+  // CSRF, cookies, tokenVersion revocation and error handling are all real.
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(protect).mockImplementation(async (req, _res, next) => {
-      const token = req.cookies?.[ACCESS_COOKIE];
-      if (!token) return next(ApiError.unauthorized("Not authenticated"));
-      let decoded;
-      try {
-        decoded = verifyAccessToken(token);
-      } catch {
-        return next(ApiError.unauthorized("Invalid or expired access token"));
-      }
-      req.user = { _id: decoded.sub, tokenVersion: decoded.tokenVersion, tenant: null };
-      const user = await User.findById(decoded.sub);
-      if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== user.tokenVersion) {
-        return next(ApiError.unauthorized("Token revoked"));
-      }
-      return next();
+    vi.mocked(authService.getUserWithTenantInfo).mockResolvedValue({
+      _id: "u1",
+      name: "Dr Test",
+      roleId: null,
+      branch: null,
+      tenant: null,
     });
   });
 
@@ -111,21 +135,26 @@ describe("Auth feature — full flow", () => {
   });
 
   it("PROTECTED GET: a valid access token passes; a revoked one is rejected", async () => {
-    const realUser = await makeRealUser();
-    const access = signAccessToken(realUser);
+    const access = signAccessToken({ _id: "u1", tokenVersion: 0, roleId: null, branch: null });
 
-    vi.mocked(User.findById).mockResolvedValue({ tokenVersion: 0 });
+    mockFindById({ tokenVersion: 0 });
     const okRes = await request(makeApp())
       .get("/api/auth/me")
       .set("Cookie", `${ACCESS_COOKIE}=${access}`);
     expect(okRes.status).toBe(200);
 
-    vi.mocked(User.findById).mockResolvedValue({ tokenVersion: 1 });
+    mockFindById({ tokenVersion: 1 });
     const revokedRes = await request(makeApp())
       .get("/api/auth/me")
       .set("Cookie", `${ACCESS_COOKIE}=${access}`);
     expect(revokedRes.status).toBe(401);
-    expect(revokedRes.body.message).toBe("Token revoked");
+    // Real protect's revocation message (middleware/auth.js)
+    expect(revokedRes.body.message).toBe("Token revoked — please log in again");
+
+    // Token-less request hits the real protect "Not authenticated" branch.
+    const anonRes = await request(makeApp()).get("/api/auth/me");
+    expect(anonRes.status).toBe(401);
+    expect(anonRes.body.message).toBe("Not authenticated");
   });
 
   it("REFRESH: rotates the refresh token atomically via compare-and-swap", async () => {
@@ -170,13 +199,8 @@ describe("Auth feature — full flow", () => {
   });
 
   it("CSRF: allows same-origin state-changing requests", async () => {
-    const realUser = await makeRealUser();
-    const access = signAccessToken(realUser);
-    vi.mocked(protect).mockImplementation((req, _res, next) => {
-      if (!req.cookies?.[ACCESS_COOKIE]) return next(ApiError.unauthorized("Not authenticated"));
-      req.user = { _id: "u1" };
-      return next();
-    });
+    const access = signAccessToken({ _id: "u1", tokenVersion: 0, roleId: null, branch: null });
+    mockFindById({ tokenVersion: 0 });
     vi.mocked(User.findByIdAndUpdate).mockReturnValue({
       populate: vi.fn().mockReturnValue({
         populate: vi.fn().mockResolvedValue({ toSafeObject: () => ({ _id: "u1", preferences: { theme: "dark" } }) }),

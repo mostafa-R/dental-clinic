@@ -23,7 +23,8 @@ router.use(protectSite);
  *     summary: List branches
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role. Optionally filtered by tenant.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: List of branches
@@ -54,7 +55,8 @@ router.get("/", authorizeSite("super_admin", "admin", "support"), getBranches);
  *     summary: Get a branch
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role and branch access.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -92,7 +94,8 @@ router.get("/:id", authorizeSite("super_admin", "admin", "support"), requireBran
  *     summary: Create a branch
  *     description: Site realm. Requires `super_admin` or `admin` role, 2FA confirmation, and tenant access. Validates that the tenant exists.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -143,7 +146,8 @@ router.post(
  *     summary: Update a branch
  *     description: Site realm. Requires `super_admin` or `admin` role, 2FA confirmation, and branch access. Validates the branch belongs to the tenant (if specified).
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -200,7 +204,8 @@ router.put(
  *     summary: Delete a branch
  *     description: Site realm. Requires `super_admin` role, 2FA confirmation, and branch access.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id

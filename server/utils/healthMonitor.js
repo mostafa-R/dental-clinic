@@ -1,8 +1,10 @@
+import fs from 'node:fs';
 import mongoose from 'mongoose';
 import { getRedisInfo } from '../config/redis.js';
 import { getPerfStats } from './perfMonitor.js';
 import { getDbStats } from './dbMonitor.js';
 import { getErrorMonitoringStats } from './errorMonitor.js';
+import { getClusterMetrics } from './redisMetrics.js';
 
 /**
  * Comprehensive health monitoring system
@@ -28,8 +30,8 @@ export async function getSystemHealth() {
   checks.push(memoryHealth);
   if (memoryHealth.status === 'unhealthy') criticalFailures++;
   
-  // 4. Disk Space Check (simulated - in production would check actual disk)
-  const diskHealth = checkDiskSpace();
+  // 4. Disk Space Check
+  const diskHealth = await checkDiskSpace();
   checks.push(diskHealth);
   if (diskHealth.status === 'unhealthy') criticalFailures++;
   
@@ -188,22 +190,57 @@ function checkMemory() {
 }
 
 /**
- * Disk space check (simulated for demo)
+ * Disk space check using the OS filesystem stats for a real mount point.
+ * Uses Node's built-in fs.statfs (Node >= 18.15). The check is best-effort:
+ * on failure it reports a degraded disk component rather than crashing.
  */
-function checkDiskSpace() {
-  // In production, you would use a library like `check-disk-space`
-  // For now, we'll simulate a healthy disk
-  return {
-    component: 'disk',
-    status: 'healthy',
-    details: {
-      free: 'Simulated - 50GB',
-      total: 'Simulated - 100GB',
-      usedPercent: '50%',
-      warning: 'In production, implement actual disk space checking'
-    },
-    timestamp: new Date().toISOString()
-  };
+const DISK_DEGRADED_PERCENT = 85; // warn when more than 85% of the volume is in use
+const DISK_UNHEALTHY_PERCENT = 95; // critical when more than 95% is in use
+
+async function checkDiskSpace() {
+  const target = process.env.MONITOR_DISK_PATH || process.cwd();
+
+  try {
+    const stats = await fs.promises.statfs(target);
+
+    // Total and available blocks; bavail (not bfree) is the space available
+    // to the current user, which is the correct number to report.
+    const total = BigInt(stats.blocks) * BigInt(stats.bsize);
+    const free = BigInt(stats.bavail) * BigInt(stats.bsize);
+    const used = total - free;
+    const usedPercent = total > 0 ? Number((used * 100n) / total) : 0;
+
+    let status = 'healthy';
+    if (usedPercent > DISK_UNHEALTHY_PERCENT) {
+      status = 'unhealthy';
+    } else if (usedPercent > DISK_DEGRADED_PERCENT) {
+      status = 'degraded';
+    }
+
+    return {
+      component: 'disk',
+      status,
+      details: {
+        path: target,
+        free: formatBytes(Number(free)),
+        total: formatBytes(Number(total)),
+        used: formatBytes(Number(used)),
+        usedPercent: `${usedPercent}%`,
+      },
+      timestamp: new Date().toISOString(),
+    };
+  } catch (error) {
+    return {
+      component: 'disk',
+      status: 'degraded',
+      details: {
+        path: target,
+        error: error.message,
+        warning: 'fs.statfs is unavailable or the configured MONITOR_DISK_PATH is not a local mount point',
+      },
+      timestamp: new Date().toISOString(),
+    };
+  }
 }
 
 /**
@@ -420,12 +457,13 @@ function formatBytes(bytes) {
  * Get detailed system metrics for monitoring dashboard
  */
 export async function getSystemMetrics() {
-  const [health, perfStats, dbStats, errorStats, redisInfo] = await Promise.all([
+  const [health, perfStats, dbStats, errorStats, redisInfo, cluster] = await Promise.all([
     getSystemHealth(),
     getPerfStats(),
     getDbStats(),
     getErrorMonitoringStats(),
-    getRedisInfo()
+    getRedisInfo(),
+    getClusterMetrics(),
   ]);
   
   return {
@@ -434,6 +472,7 @@ export async function getSystemMetrics() {
     database: dbStats,
     errors: errorStats,
     redis: redisInfo,
+    cluster,
     system: {
       uptime: process.uptime(),
       memory: process.memoryUsage(),
@@ -475,6 +514,28 @@ export async function healthCheckResponse(req, res) {
       status: 'unhealthy',
       message: 'Health check failed',
       error: error.message
+    });
+  }
+}
+
+/**
+ * Public, sanitized health check for load balancers / uptime probes.
+ * Never exposes DB names, versions, pids, or internal error messages.
+ */
+export async function publicHealthResponse(_req, res) {
+  try {
+    const health = await getSystemHealth();
+    const ok = health.status !== 'unhealthy';
+    return res.status(ok ? 200 : 503).json({
+      success: ok,
+      status: ok ? 'ok' : 'degraded',
+      message: ok ? 'Service is up' : 'Service unavailable',
+    });
+  } catch (_error) {
+    return res.status(503).json({
+      success: false,
+      status: 'degraded',
+      message: 'Service unavailable',
     });
   }
 }

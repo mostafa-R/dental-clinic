@@ -58,6 +58,10 @@ export async function connectRedis() {
   }
 }
 
+export function isRedisConnected() {
+  return isConnected;
+}
+
 export async function getRedisInfo() {
   if (!redis || !isConnected) {
     return { connected: false, cacheHits, cacheMisses, hitRate: 0 };

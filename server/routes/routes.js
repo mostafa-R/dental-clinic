@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { protectSite, authorizeSite } from "../middleware/siteAuth.js";
 
 // Core application routes
 import accountRoutes from "../modules/accounting/accounting.routes.js";
@@ -45,9 +46,10 @@ import siteAdminRoutes from "../modules/site/tenant/siteAdmin.routes.js";
 import siteBranchRoutes from "../modules/site/tenant/siteBranch.routes.js";
 import siteUserRoutes from "../modules/site/tenant/siteUser.routes.js";
 import sitePerfRoutes from "./sitePerf.routes.js";
+import platformAnalyticsRoutes from "../modules/site/platformAnalytics/platformAnalytics.routes.js";
 
 // Monitoring and health utilities
-import { healthCheckResponse, metricsResponse } from "../utils/healthMonitor.js";
+import { metricsResponse, publicHealthResponse } from "../utils/healthMonitor.js";
 
 const router = Router();
 
@@ -57,40 +59,18 @@ const router = Router();
  * /api/health:
  *   get:
  *     tags: [Health]
- *     summary: Comprehensive system health check
+ *     summary: Sanitized system health check
  *     description: >
- *       Reports comprehensive system health including database connectivity, Redis status,
- *       memory usage, disk space, performance metrics, and error rates.
- *       Returns 200 when healthy, 503 when unhealthy. No authentication required.
+ *       Reports a lightweight health status (ok/degraded) without exposing
+ *       internal versions, paths, database names, or error internals.
+ *       Intended for load balancers and uptime probes. No authentication required.
  *     responses:
  *       '200':
  *         description: Service healthy
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean, example: true }
- *                 status: { type: string, enum: [healthy, degraded, unhealthy], example: 'healthy' }
- *                 message: { type: string, example: 'Service is healthy' }
- *                 health:
- *                   type: object
- *                   properties:
- *                     status: { type: string }
- *                     timestamp: { $ref: '#/components/schemas/DateTime' }
- *                     checks: { type: array }
- *                     summary:
- *                       type: object
- *                       properties:
- *                         totalChecks: { type: number }
- *                         healthy: { type: number }
- *                         degraded: { type: number }
- *                         unhealthy: { type: number }
- *                         criticalFailures: { type: number }
  *       '503':
  *         description: Service degraded or unhealthy
  */
-router.get("/health", healthCheckResponse);
+router.get("/health", publicHealthResponse);
 
 // --- System Metrics (unversioned, always at /api/metrics) ---
 /**
@@ -98,32 +78,23 @@ router.get("/health", healthCheckResponse);
  * /api/metrics:
  *   get:
  *     tags: [Health]
- *     summary: Detailed system metrics
+ *     summary: Detailed system metrics (site admin only)
  *     description: >
  *       Returns detailed system metrics including performance statistics, database query
  *       performance, error rates, Redis metrics, and system information.
- *       Requires site admin authentication.
+ *       Requires a super_admin site session.
  *     security:
  *       - bearerAuth: []
  *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: Metrics retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean, example: true }
- *                 metrics:
- *                   type: object
- *                   additionalProperties: true
  *       '401':
  *         $ref: '#/components/responses/Unauthorized'
  *       '403':
  *         $ref: '#/components/responses/Forbidden'
  */
-router.get("/metrics", metricsResponse);
+router.get("/metrics", protectSite, authorizeSite("super_admin"), metricsResponse);
 
 // --- v1 API routes ---
 const v1 = Router();
@@ -173,11 +144,32 @@ v1.use("/site/subscriptions", siteSubscriptionRoutes);
 v1.use("/site/backups", siteBackupRoutes);
 v1.use("/site/perf", sitePerfRoutes);
 v1.use("/site/audit-logs", siteAuditRoutes);
+v1.use("/site/analytics/platform", platformAnalyticsRoutes);
 
 // Mount versioned router
 router.use("/v1", v1);
 
-// Backward-compatible unversioned routes (redirect to v1)
+// --- Backward-compatible unversioned alias (DEPRECATED) ---
+// The `/api/...` prefix is the SAME v1 router mounted a second time, kept only
+// for older clients. Contract rule (audit/contract/CONTRACT_FREEZE.md §4.3):
+// new endpoints MUST be registered under /api/v1 ONLY. This middleware tags
+// alias traffic with an RFC 5789 Deprecation header and logs the first use so
+// operators can migrate legacy clients to the canonical /api/v1 prefix.
+let aliasDeprecationLogged = false;
+router.use((req, res, next) => {
+  if (req.path.startsWith("/v1") || req.path === "/health" || req.path === "/metrics") {
+    return next();
+  }
+  if (!aliasDeprecationLogged) {
+    aliasDeprecationLogged = true;
+    console.warn(
+      `[API] Deprecated unversioned alias hit: ${req.method} ${req.path}. ` +
+        "Migrate clients to /api/v1 (see audit/contract/CONTRACT_FREEZE.md).",
+    );
+  }
+  res.setHeader("Deprecation", "true");
+  next();
+});
 router.use("/", v1);
 
 export default router;

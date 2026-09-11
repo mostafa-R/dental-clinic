@@ -4,6 +4,7 @@ import { round2 } from '../../constants/accounting.js';
 import { withTransaction } from '../../core/transaction.js';
 import { publishEvent } from '../../services/eventBus.js';
 import ApiError from '../../utils/ApiError.js';
+import { restockForInvoice } from '../inventory/inventory.service.js';
 import { toObjectId } from '../../utils/branchScope.js';
 import { escapeRegex } from '../../utils/escapeRegex.js';
 import Appointment from '../appointments/appointment.model.js';
@@ -779,6 +780,25 @@ export async function voidInvoice(id, branchFilter, { reason, userId } = {}) {
       { $set: { status: 'void' } },
       { session },
     );
+
+    // Reverse any auto-deduction the plan-invoice flow applied (issue #4).
+    // A voided invoice means the treatment was cancelled / not delivered, so
+    // inventory consumed at invoice-generation time is returned to stock.
+    try {
+      await restockForInvoice({
+        branchId: invoice.branch,
+        tenantId: invoice.tenant,
+        invoiceId: invoice._id,
+        userId: userId || null,
+        session,
+      });
+    } catch (err) {
+      // Inventory reversal is best-effort and must never block voiding a
+      // financial invoice. The stock ledger keeps its audit trail.
+      console.warn(
+        `[Invoice] Inventory reversal skipped for voided invoice ${invoice.invoiceNo}: ${err.message}`,
+      );
+    }
 
     // BR-BL-05 reversal entries so the ledger stays reconciled after a void:
     //   1. Reverse the receivable that was never collected (the sale is

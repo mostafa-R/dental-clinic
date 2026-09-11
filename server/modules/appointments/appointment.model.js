@@ -113,6 +113,23 @@ const appointmentSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Live-queue tracking (PRD §6.2). `queueNumber` is a snapshot of the
+    // patient's position for today's (branch, doctor) queue, taken at booking;
+    // the current position is always derived from ordering (see queueEngine).
+    // The remaining fields dedupe patient-facing WhatsApp notifications.
+    queueNumber: { type: Number, default: null },
+    queueJoinedNotifiedAt: { type: Date, default: null },
+    lastQueueAheadNotified: { type: Number, default: null },
+    nearTurnNotifiedAt: { type: Date, default: null },
+    turnNotifiedAt: { type: Date, default: null },
+    completedSummarySentAt: { type: Date, default: null },
+    // Optional link the doctor sets when completing a visit: the follow-up
+    // appointment is rendered in the post-visit WhatsApp summary.
+    nextAppointmentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Appointment",
+      default: null,
+    },
     // Set when the patient is checked in (BR-PT-03 late-arrival detection).
     checkedInAt: {
       type: Date,

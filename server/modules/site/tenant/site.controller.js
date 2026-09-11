@@ -1,5 +1,6 @@
 import asyncHandler from '../../../utils/asyncHandler.js';
 import { sendSuccess } from '../../../utils/sendSuccess.js';
+import ApiError from '../../../utils/ApiError.js';
 import * as tenantService from './tenant.service.js';
 
 export const getTenants = asyncHandler(async (req, res) => {
@@ -21,6 +22,13 @@ export const createTenant = asyncHandler(async (req, res) => {
 });
 
 export const updateTenant = asyncHandler(async (req, res) => {
+  // H5: plan / status reassignment (which effectively grants or revokes
+  // capabilities and billing state) is super_admin only. A regular admin may
+  // edit profile fields but must never silently escalate a tenant's plan.
+  const changesBilling = req.validatedBody?.plan || req.validatedBody?.status;
+  if (changesBilling && req.siteAdmin?.role !== 'super_admin') {
+    throw ApiError.forbidden('Only super_admin can change a tenant\'s plan or status');
+  }
   const tenant = await tenantService.updateTenant(req.params.id, req.validatedBody);
   return sendSuccess(res, tenant.toObject());
 });

@@ -12,6 +12,7 @@ import { MODULES, CRUD_ACTIONS } from '../../constants/permissions.js';
 import { DEFAULT_ROLES, getDefaultRoles } from '../../constants/roles.js';
 import { getCachedRole, cacheRole, invalidateRoleCache } from '../../utils/cache.js';
 import { assertCanGrantPermissions, scopedRoleQuery } from '../../utils/permissionPolicy.js';
+import { auditTenantAction } from '../../middleware/audit.js';
 
 /**
  * جلب مصفوفة الصلاحيات الكاملة للعرض في الواجهة
@@ -247,6 +248,13 @@ export async function updateRolePermissions(req, res) {
     
     // إبطال cache جميع المستخدمين الذين لديهم هذا الدور
     await invalidateUsersWithRole(role._id);
+
+    await auditTenantAction(
+      req,
+      'role.permissions_change',
+      { type: 'role', id: role._id, name: role.name },
+      { tenant: String(role.tenant || ''), permissionCount: permissions.length },
+    );
     
     res.json({
       success: true,

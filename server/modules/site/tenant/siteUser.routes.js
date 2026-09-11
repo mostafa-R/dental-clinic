@@ -14,7 +14,8 @@ router.use(protectSite);
  *     summary: Get users for a tenant
  *     description: Site realm. Requires `super_admin` or `admin` role and tenant access.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: tenantId

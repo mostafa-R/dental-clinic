@@ -1,6 +1,35 @@
 import jwt from 'jsonwebtoken';
 import SiteAdmin from '../modules/site/admin/admin.model.js';
 import ApiError from '../utils/ApiError.js';
+import { getRedis } from '../config/redis.js';
+
+/**
+ * Challenge replay guard: a 2FA challenge token is single-use. The jti is
+ * claimed with an atomic SET NX + EX so a replayed challenge is rejected even
+ * if it is still within its 5-minute TTL. Degrades gracefully (in-memory Set)
+ * when Redis is unavailable in dev.
+ */
+const usedChallenges = new Set();
+const CHALLENGE_USED_PREFIX = '2fa:challenge:used:';
+const CHALLENGE_TTL_SECONDS = 300;
+
+async function claimChallengeJti(jti) {
+  const redis = getRedis();
+  if (redis?.status === 'ready') {
+    const claimed = await redis.set(
+      `${CHALLENGE_USED_PREFIX}${jti}`,
+      '1',
+      'EX',
+      CHALLENGE_TTL_SECONDS,
+      'NX',
+    );
+    return claimed === 'OK';
+  }
+  if (usedChallenges.has(jti)) return false;
+  usedChallenges.add(jti);
+  setTimeout(() => usedChallenges.delete(jti), CHALLENGE_TTL_SECONDS * 1000).unref?.();
+  return true;
+}
 
 /**
  * Middleware to verify 2FA challenge token and complete login.
@@ -22,6 +51,10 @@ export async function require2faChallenge(req, _res, next) {
 
     if (decoded.type !== '2fa_challenge') {
       throw ApiError.unauthorized('Invalid token type');
+    }
+
+    if (!decoded.jti || !(await claimChallengeJti(decoded.jti))) {
+      throw ApiError.unauthorized('Challenge token has already been used');
     }
 
     const admin = await SiteAdmin.findById(decoded.sub);

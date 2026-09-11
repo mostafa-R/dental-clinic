@@ -18,7 +18,8 @@ router.use(protectSite);
  *     summary: Get tenant modules and feature flags
  *     description: Site realm. Requires `super_admin` or `admin` role.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: tenantId
@@ -59,7 +60,8 @@ router.get('/:tenantId', authorizeSite('super_admin', 'admin'), getTenantModules
  *     summary: Toggle a single module
  *     description: Site realm. Requires `super_admin` role and 2FA confirmation.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: tenantId
@@ -117,7 +119,8 @@ router.put(
  *     summary: Replace tenant modules
  *     description: Site realm. Requires `super_admin` role and 2FA confirmation. Sets the full module set at once.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: tenantId

@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">32.22% </span>
+                <span class="strong">41.48% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>29/90</span>
+                <span class='fraction'>39/94</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">26.19% </span>
+                <span class="strong">38.63% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>11/42</span>
+                <span class='fraction'>17/44</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">32.95% </span>
+                <span class="strong">42.39% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>29/88</span>
+                <span class='fraction'>39/92</span>
             </div>
         
             
@@ -265,7 +265,12 @@
 <a name='L200'></a><a href='#L200'>200</a>
 <a name='L201'></a><a href='#L201'>201</a>
 <a name='L202'></a><a href='#L202'>202</a>
-<a name='L203'></a><a href='#L203'>203</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L203'></a><a href='#L203'>203</a>
+<a name='L204'></a><a href='#L204'>204</a>
+<a name='L205'></a><a href='#L205'>205</a>
+<a name='L206'></a><a href='#L206'>206</a>
+<a name='L207'></a><a href='#L207'>207</a>
+<a name='L208'></a><a href='#L208'>208</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -314,6 +319,11 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -355,12 +365,12 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -420,12 +430,12 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -517,7 +527,12 @@ export const siteRefresh = asyncHandler(<span class="fstat-no" title="function n
 <span class="cstat-no" title="statement not covered" >    throw ApiError.unauthorized('Token has been rotated, please log in again');</span>
   }
 &nbsp;
-<span class="cstat-no" title="statement not covered" >  await siteAuthService.rotateSiteAdminToken(admin);</span>
+  const updated = <span class="cstat-no" title="statement not covered" >await siteAuthService.rotateSiteAdminToken(admin, decoded);</span>
+<span class="cstat-no" title="statement not covered" >  if (!updated) {</span>
+<span class="cstat-no" title="statement not covered" >    clearAuthCookies(res, 'site');</span>
+<span class="cstat-no" title="statement not covered" >    throw ApiError.unauthorized('Token has been rotated, please log in again');</span>
+  }
+<span class="cstat-no" title="statement not covered" >  admin.tokenVersion = updated.tokenVersion;</span>
   // Carry the original 2FA challenge timestamp forward across refreshes so the
   // freshness gate in require2fa still applies to long-lived sessions.
   const verified = <span class="cstat-no" title="statement not covered" >decoded.twoFactorVerified === true &amp;&amp; typeof decoded.twoFactorVerifiedAt === 'number';</span>
@@ -556,13 +571,13 @@ export const initiateRecovery = asyncHandler(async (req, res) =&gt; {
 &nbsp;
   // Rate limiting check using Redis (max 5 attempts per hour per IP)
   const redis = getRedis();
-  <span class="missing-if-branch" title="if path not taken" >I</span>if (redis) {
-    const rateLimitKey = <span class="cstat-no" title="statement not covered" >`recovery:ratelimit:${clientIp}`;</span>
-    const attempts = <span class="cstat-no" title="statement not covered" >await redis.incr(rateLimitKey);</span>
-<span class="cstat-no" title="statement not covered" >    if (attempts === 1) {</span>
-<span class="cstat-no" title="statement not covered" >      await redis.expire(rateLimitKey, 3600); </span>// 1 hour window
+  <span class="missing-if-branch" title="else path not taken" >E</span>if (redis) {
+    const rateLimitKey = `recovery:ratelimit:${clientIp}`;
+    const attempts = await redis.incr(rateLimitKey);
+    if (attempts === 1) {
+      await redis.expire(rateLimitKey, 3600); // 1 hour window
     }
-<span class="cstat-no" title="statement not covered" >    if (attempts &gt; 5) {</span>
+    <span class="missing-if-branch" title="if path not taken" >I</span>if (attempts &gt; 5) {
 <span class="cstat-no" title="statement not covered" >      logWarn('Recovery rate limited', { ip: clientIp, email, attempts });</span>
 <span class="cstat-no" title="statement not covered" >      await siteAuthService.logRecoveryAttempt({</span>
         email,
@@ -621,13 +636,13 @@ export const verifyRecoveryOtp = asyncHandler(async (req, res) =&gt; {
 &nbsp;
   // Rate limiting for OTP verification (max 10 attempts per hour)
   const redis = getRedis();
-  <span class="missing-if-branch" title="if path not taken" >I</span>if (redis) {
-    const otpRateLimitKey = <span class="cstat-no" title="statement not covered" >`recovery:otp:${clientIp}`;</span>
-    const attempts = <span class="cstat-no" title="statement not covered" >await redis.incr(otpRateLimitKey);</span>
-<span class="cstat-no" title="statement not covered" >    if (attempts === 1) {</span>
-<span class="cstat-no" title="statement not covered" >      await redis.expire(otpRateLimitKey, 3600);</span>
+  <span class="missing-if-branch" title="else path not taken" >E</span>if (redis) {
+    const otpRateLimitKey = `recovery:otp:${clientIp}`;
+    const attempts = await redis.incr(otpRateLimitKey);
+    if (attempts === 1) {
+      await redis.expire(otpRateLimitKey, 3600);
     }
-<span class="cstat-no" title="statement not covered" >    if (attempts &gt; 10) {</span>
+    <span class="missing-if-branch" title="if path not taken" >I</span>if (attempts &gt; 10) {
 <span class="cstat-no" title="statement not covered" >      logWarn('OTP verification rate limited', { ip: clientIp, email, attempts });</span>
 <span class="cstat-no" title="statement not covered" >      await siteAuthService.logRecoveryAttempt({</span>
         email,
@@ -676,7 +691,7 @@ export const verifyRecoveryOtp = asyncHandler(async (req, res) =&gt; {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-06T16:45:19.984Z
+                at 2026-09-11T17:00:57.398Z
             </div>
         <script src="../../../../prettify.js"></script>
         <script>

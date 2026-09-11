@@ -32,7 +32,7 @@ const eventBus = await import('../services/eventBus.js');
 vi.spyOn(eventBus, 'publishEvent').mockResolvedValue(undefined);
 
 describe('treatment item cancel vs concurrent invoice (single-winner safeguard)', () => {
-  const DB = 'mongodb://127.0.0.1:27017/dental_os_treatment_item_race_test';
+  const DB = process.env.TEST_MONGO_URI || 'mongodb://127.0.0.1:27017/dental_os_treatment_item_race_test';
   let Tenant, Branch, Patient, TreatmentPlan, Invoice, Counter, controller;
   let tenantId, branchId;
   let seq = 0;

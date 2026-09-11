@@ -12,8 +12,19 @@ import { logError, logInfo } from '../utils/logger.js';
  *
  * Feeds:
  *   appointment.created/completed/no_show/cancelled/confirmed
- *   patient.created · consent.signed · invoice.paid
- *   installment.overdue · inventory.low_stock
+ *   patient.created · consent.signed · consent.expired
+ *   invoice.paid · installment.overdue · inventory.low_stock
+ *
+ * DELIVERY GUARANTEES (known limitation — at-most-once):
+ *   The bus is in-process and fire-and-forget (`void publishEvent(...)`). If
+ *   the process dies between a business write (e.g. invoice.paid) and the
+ *   synchronous handler flush, in-flight events and their pending side
+ *   effects (WhatsApp/webhook) are lost. For strict at-least-once delivery,
+ *   the `events` collection (EventLog) must be promoted to an outbox: a
+ *   sweeper (à la the cron services) re-pubveshes `status: pending` rows to
+ *   the engine with idempotent deduplication on the AutomationRun action
+ *   (eventId + rule). Automations that trigger side effects should keep
+ *   cooldowns > 0 to bound duplicate messages if that sweeper is added.
  */
 const subscribers = new Map(); // type → Set<handler>
 const wildcardSubscribers = new Set(); // handlers invoked for every event

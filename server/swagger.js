@@ -883,7 +883,7 @@ export const options = {
             enabled: { type: "boolean", default: false },
             provider: {
               type: "string",
-              enum: ["whatsapp_web", "cloud_api", "twilio"],
+              enum: ["whatsapp_web", "cloud_api"],
               default: "whatsapp_web",
             },
             config: {

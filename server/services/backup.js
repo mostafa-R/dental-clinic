@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
-import { mkdir, stat, rm, readdir, rename, unlink } from "node:fs/promises";
+import { mkdir, mkdtemp, stat, rm, readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import mongoose from "mongoose";
 
@@ -8,6 +9,18 @@ import BackupLog from "../modules/site/backup/backupLog.model.js";
 import { encryptFile } from "../utils/encryption.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Backups contain the full unencrypted clinical database (PHI). Encrypting
+// them is mandatory: fail fast rather than silently writing a cleartext dump
+// to disk. BACKUP_ENCRYPTION_KEY is the AES key (see utils/encryption.js).
+function assertBackupEncryptionConfigured() {
+  if (!process.env.BACKUP_ENCRYPTION_KEY) {
+    throw new Error(
+      "Refusing to create an unencrypted backup. Set BACKUP_ENCRYPTION_KEY in .env " +
+        "(a long random secret, not JWT_SECRET) so backups are AES-256-GCM encrypted.",
+    );
+  }
+}
 
 function getBackupDir() {
   return process.env.BACKUP_DIR || path.join(__dirname, "..", "backups");
@@ -29,27 +42,42 @@ function parseDbName(uri) {
   return match ? match[1] : "dental-clinic";
 }
 
-function runMongodump(mongodumpBin, uri, archivePath) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(mongodumpBin, [
-      `--uri=${uri}`,
-      `--archive=${archivePath}`,
-      "--gzip",
-    ], {
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: 300000,
+/**
+ * Write the MONGO_URI to a temp mongodump config file (mode 0600) instead of
+ * passing it as a CLI argument. `--uri=...` shows the full connection string
+ * (including the password) in /proc/<pid>/cmdline, `ps aux`, and container
+ * inspect output. mongodump reads `uri:` from the config file.
+ */
+async function runMongodump(mongodumpBin, uri, archivePath) {
+  const configDir = await mkdtemp(path.join(tmpdir(), "mongodump-"));
+  let configFile = null;
+  try {
+    configFile = path.join(configDir, "config.yaml");
+    await writeFile(configFile, `uri: ${JSON.stringify(uri)}\n`, { mode: 0o600 });
+
+    await new Promise((resolve, reject) => {
+      const proc = spawn(mongodumpBin, [
+        `--config=${configFile}`,
+        `--archive=${archivePath}`,
+        "--gzip",
+      ], {
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 300000,
+      });
+
+      let stderr = "";
+      proc.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+
+      proc.on("close", (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(stderr || `mongodump exited with code ${code}`));
+      });
+
+      proc.on("error", (err) => reject(err));
     });
-
-    let stderr = "";
-    proc.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
-
-    proc.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(stderr || `mongodump exited with code ${code}`));
-    });
-
-    proc.on("error", (err) => reject(err));
-  });
+  } finally {
+    await rm(configDir, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 // Interlock: never run two mongodumps at once. The cron and the manual
@@ -62,6 +90,9 @@ export async function performBackup(type = "scheduled", triggeredBy = null, opti
   if (backupInProgress) {
     throw new Error("A backup is already in progress. Please try again when it finishes.");
   }
+
+  // Backups contain PHI — encryption is mandatory, not optional.
+  assertBackupEncryptionConfigured();
 
   const start = Date.now();
   const backupDir = getBackupDir();
@@ -100,25 +131,17 @@ export async function performBackup(type = "scheduled", triggeredBy = null, opti
     
     await runMongodump(mongodumpBin, uri, archivePath);
 
-    // Encrypt the backup if BACKUP_ENCRYPT=true (or a key is configured).
-    // Explicitly required: never silently save an unencrypted backup when encryption is requested.
-    const encryptionEnabled = process.env.BACKUP_ENCRYPT === 'true' || process.env.BACKUP_ENCRYPTION_KEY;
-
-    if (encryptionEnabled) {
-      if (!process.env.BACKUP_ENCRYPTION_KEY) {
-        throw new Error('BACKUP_ENCRYPT=true but BACKUP_ENCRYPTION_KEY is not set in .env');
-      }
-      try {
-        const encryptedPath = archivePath + '.enc';
-        await encryptFile(archivePath, encryptedPath);
-        await unlink(archivePath);
-        finalPath = encryptedPath;
-        encrypted = true;
-        console.log('[Backup] Backup encrypted successfully');
-      } catch (encErr) {
-        console.error('[Backup] Encryption failed:', encErr.message);
-        throw encErr;
-      }
+    // Encrypt the backup. BACKUP_ENCRYPTION_KEY is verified above so this always runs.
+    try {
+      const encryptedPath = archivePath + '.enc';
+      await encryptFile(archivePath, encryptedPath);
+      await unlink(archivePath);
+      finalPath = encryptedPath;
+      encrypted = true;
+      console.log('[Backup] Backup encrypted successfully');
+    } catch (encErr) {
+      console.error('[Backup] Encryption failed:', encErr.message);
+      throw encErr;
     }
 
     const stats = await stat(finalPath);

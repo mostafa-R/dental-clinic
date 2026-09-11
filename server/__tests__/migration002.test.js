@@ -15,6 +15,22 @@ vi.mock('../utils/logger.js', () => ({
   logError: vi.fn(),
 }));
 
+// Indexes created by migration 002. Checks are name-based: predicates like
+// `idx.key.channel === 1 && idx.key.createdAt === -1` wrongly match model-owned
+// compound indexes (e.g. branch_1_channel_1_createdAt_-1), producing false
+// positives for existence and false negatives for rollback.
+const MIGRATION_INDEX_NAMES = {
+  messages: 'channel_1_createdAt_-1',
+  invoices: 'branch_1_dueDate_1_status_1',
+  auditlogs: 'createdAt_1_ttl_90d',
+  errorlogs: 'createdAt_1_ttl_30d',
+};
+
+async function indexExists(collectionName, name) {
+  const indexes = await mongoose.connection.db.collection(collectionName).indexes();
+  return !!indexes.find((idx) => idx.name === name);
+}
+
 describe('Migration 002-add-indexes-ttl', () => {
   beforeAll(async () => {
     const testDbUri = process.env.TEST_MONGO_URI || 'mongodb://127.0.0.1:27017/dental_os_test';
@@ -29,69 +45,43 @@ describe('Migration 002-add-indexes-ttl', () => {
     await mongoose.disconnect();
   });
 
+  describe('Rollback', () => {
+    it('should remove the migration indexes when down() is executed', async () => {
+      const migration = await import('../migrations/002-add-indexes-ttl.js');
+      try {
+        await migration.down();
+
+        for (const [collection, name] of Object.entries(MIGRATION_INDEX_NAMES)) {
+          expect(await indexExists(collection, name), `index ${name} on ${collection}`).toBe(false);
+        }
+      } finally {
+        // Restore state so the following suites can assert on a migrated DB.
+        await migration.up();
+      }
+    });
+  });
+
   describe('Index creation', () => {
     it('should create messages channel+createdAt index', async () => {
-      const db = mongoose.connection.db;
-      const messagesCollection = db.collection('messages');
-
-      // Get indexes
-      const indexes = await messagesCollection.indexes();
-      
-      // Check if channel+createdAt index exists
-      const channelIndex = indexes.find(
-        (idx) => idx.key.channel === 1 && idx.key.createdAt === -1
-      );
-
-      // Note: This test assumes migration has been run
-      // In a real test environment, you would run the migration first
-      if (channelIndex) {
-        expect(channelIndex.name).toBeDefined();
-      }
+      expect(await indexExists('messages', MIGRATION_INDEX_NAMES.messages)).toBe(true);
     });
 
     it('should create invoices branch+dueDate+status index', async () => {
-      const db = mongoose.connection.db;
-      const invoicesCollection = db.collection('invoices');
-
-      const indexes = await invoicesCollection.indexes();
-      
-      const branchDueDateStatusIndex = indexes.find(
-        (idx) => idx.key.branch === 1 && idx.key.dueDate === 1 && idx.key.status === 1
-      );
-
-      if (branchDueDateStatusIndex) {
-        expect(branchDueDateStatusIndex.name).toBeDefined();
-      }
+      expect(await indexExists('invoices', MIGRATION_INDEX_NAMES.invoices)).toBe(true);
     });
 
     it('should create auditlogs TTL index with 90 days', async () => {
-      const db = mongoose.connection.db;
-      const auditLogsCollection = db.collection('auditlogs');
-
-      const indexes = await auditLogsCollection.indexes();
-      
-      const ttlIndex = indexes.find(
-        (idx) => idx.key.createdAt === 1 && idx.expireAfterSeconds
-      );
-
-      if (ttlIndex) {
-        expect(ttlIndex.expireAfterSeconds).toBe(7776000); // 90 days in seconds
-      }
+      const indexes = await mongoose.connection.db.collection('auditlogs').indexes();
+      const ttlIndex = indexes.find((idx) => idx.name === MIGRATION_INDEX_NAMES.auditlogs);
+      expect(ttlIndex).toBeDefined();
+      expect(ttlIndex.expireAfterSeconds).toBe(7776000); // 90 days in seconds
     });
 
     it('should create errorlogs TTL index with 30 days', async () => {
-      const db = mongoose.connection.db;
-      const errorLogsCollection = db.collection('errorlogs');
-
-      const indexes = await errorLogsCollection.indexes();
-      
-      const ttlIndex = indexes.find(
-        (idx) => idx.key.createdAt === 1 && idx.expireAfterSeconds
-      );
-
-      if (ttlIndex) {
-        expect(ttlIndex.expireAfterSeconds).toBe(2592000); // 30 days in seconds
-      }
+      const indexes = await mongoose.connection.db.collection('errorlogs').indexes();
+      const ttlIndex = indexes.find((idx) => idx.name === MIGRATION_INDEX_NAMES.errorlogs);
+      expect(ttlIndex).toBeDefined();
+      expect(ttlIndex.expireAfterSeconds).toBe(2592000); // 30 days in seconds
     });
   });
 
@@ -120,30 +110,65 @@ describe('Migration 002-add-indexes-ttl', () => {
   });
 
   describe('Index query patterns', () => {
-    it('should support channel pagination query', async () => {
-      // This pattern would benefit from the new index:
-      // db.messages.find({ channel: 'general' }).sort({ createdAt: -1 }).limit(50)
-      const query = { channel: 'general' };
-      const sort = { createdAt: -1 };
-      
-      // The index { channel: 1, createdAt: -1 } supports this query pattern
-      expect(query.channel).toBeDefined();
-      expect(sort.createdAt).toBe(-1);
+    function findIxscanIndexName(plan) {
+      if (!plan) return '';
+      if (plan.stage === 'IXSCAN' && plan.indexName) return plan.indexName;
+      if (plan.inputStage) return findIxscanIndexName(plan.inputStage);
+      if (Array.isArray(plan.inputStages)) {
+        for (const s of plan.inputStages) {
+          const name = findIxscanIndexName(s);
+          if (name) return name;
+        }
+      }
+      return '';
+    }
+
+    it('should use an index for channel pagination query', async () => {
+      const db = mongoose.connection.db;
+      const messagesCollection = db.collection('messages');
+      await messagesCollection.insertOne({ channel: 'general', createdAt: new Date(), text: 'test' });
+
+      try {
+        const explain = await messagesCollection.find({ channel: 'general' })
+          .sort({ createdAt: -1 })
+          .limit(1)
+          .explain('executionStats');
+
+        // The exact { channel: 1, createdAt: -1 } index existence is asserted
+        // in "Index creation". Here we prove the query is index-assisted
+        // (an IXSCAN plan, not a collection scan).
+        expect(findIxscanIndexName(explain.queryPlanner?.winningPlan)).not.toBe('');
+      } finally {
+        await messagesCollection.deleteMany({ channel: 'general', text: 'test' });
+      }
     });
 
-    it('should support aging report query', async () => {
-      // This pattern would benefit from the new index:
-      // db.invoices.find({ branch: ObjectId('...'), status: { $in: ['unpaid', 'partial'] }, dueDate: { $lt: new Date() } })
-      const query = { 
-        branch: new mongoose.Types.ObjectId(),
-        status: { $in: ['unpaid', 'partial'] },
-        dueDate: { $lt: new Date() }
-      };
-      
-      // The index { branch: 1, dueDate: 1, status: 1 } supports this query
-      expect(query.branch).toBeDefined();
-      expect(query.dueDate).toBeDefined();
-      expect(query.status).toBeDefined();
+    it('should use an index for aging report query', async () => {
+      const db = mongoose.connection.db;
+      const invoicesCollection = db.collection('invoices');
+      const uniqueBranch = new mongoose.Types.ObjectId();
+      await invoicesCollection.insertOne({
+        branch: uniqueBranch,
+        status: 'unpaid',
+        dueDate: new Date(),
+        tenant: new mongoose.Types.ObjectId(),
+      });
+
+      try {
+        const explain = await invoicesCollection.find({
+          branch: uniqueBranch,
+          status: { $in: ['unpaid', 'partial'] },
+          dueDate: { $lt: new Date() },
+        }).explain('executionStats');
+
+        // The migration's exact { branch, dueDate, status } index existence is
+        // asserted in "Index creation"; the planner may legitimately prefer the
+        // model's { branch, status } index, so here we only assert the query is
+        // index-assisted (IXSCAN, not a collection scan).
+        expect(findIxscanIndexName(explain.queryPlanner?.winningPlan)).not.toBe('');
+      } finally {
+        await invoicesCollection.deleteMany({ branch: uniqueBranch });
+      }
     });
   });
 });

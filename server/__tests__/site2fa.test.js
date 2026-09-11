@@ -49,6 +49,7 @@ import SiteAdmin from "../modules/site/admin/admin.model.js";
 import * as siteAuthService from "../modules/site/auth/siteAuth.service.js";
 import siteAuthRouter from "../modules/site/auth/siteAuth.routes.js";
 import ApiError from "../utils/ApiError.js";
+import * as redisConfig from "../config/redis.js";
 
 function makeSiteApp() {
   const app = express();
@@ -151,6 +152,110 @@ describe("site2fa.service — verify2faLogin", () => {
     const ok = await verify2faLogin("a1", { backupCode: code });
     expect(ok).toBe(true);
     expect(admin.twoFactorBackupCodes).toHaveLength(0);
+  });
+});
+
+describe("site2fa.service — account lockout (H8, Redis-backed)", () => {
+  // The real throttle lives in redis (2fa:fail:*, 2fa:lock:*). Feed the service
+  // a tiny in-memory Redis implementation so the 5-attempt lock is REAL code.
+  function makeFakeRedis() {
+    const store = new Map();
+    const ready = {
+      status: "ready",
+      async ttl(key) {
+        const entry = store.get(key);
+        if (!entry) return -2;
+        const left = Math.ceil((entry.exp - Date.now()) / 1000);
+        return left > 0 ? left : -2;
+      },
+      async incr(key) {
+        const entry = store.get(key) || { value: 0, exp: Infinity };
+        entry.value += 1;
+        store.set(key, entry);
+        return entry.value;
+      },
+      async expire(key, seconds) {
+        const entry = store.get(key);
+        if (entry) entry.exp = Date.now() + seconds * 1000;
+      },
+      async del(...keys) {
+        keys.forEach((k) => store.delete(k));
+      },
+      async set(key, value, mode, seconds) {
+        store.set(key, {
+          value,
+          exp: mode === "EX" ? Date.now() + seconds * 1000 : Infinity,
+        });
+      },
+    };
+    return ready;
+  }
+
+  const SECRET = "R2HRESMJW3Y27SOTBG3BLL2DV7FMNQGM";
+
+  function stubAdmin() {
+    const admin = {
+      _id: "a1",
+      twoFactorEnabled: true,
+      twoFactorSecret: SECRET,
+      twoFactorBackupCodes: [],
+      save: vi.fn().mockImplementation(function () {
+        return Promise.resolve(this);
+      }),
+    };
+    vi.mocked(SiteAdmin.findById).mockReturnValue({ select: vi.fn().mockResolvedValue(admin) });
+    return admin;
+  }
+
+  beforeEach(() => {
+    vi.mocked(SiteAdmin.findById).mockReset();
+    vi.mocked(redisConfig.getRedis).mockReturnValue(makeFakeRedis());
+  });
+
+  it("locks the account after 5 failed attempts and rejects the 6th with 429", async () => {
+    stubAdmin();
+    const attempts = [];
+    for (let i = 0; i < 5; i++) {
+      try {
+        await verify2faLogin("a1", { token: "000000" });
+      } catch (err) {
+        attempts.push(err.statusCode);
+      }
+    }
+    expect(attempts).toEqual([401, 401, 401, 401, 401]);
+
+    await expect(verify2faLogin("a1", { token: "000000" })).rejects.toMatchObject({
+      statusCode: 429,
+      message: expect.stringContaining("Too many 2FA attempts"),
+    });
+  });
+
+  it("resets the failure counter on a successful TOTP login", async () => {
+    stubAdmin();
+
+    for (let i = 0; i < 3; i++) {
+      await expect(verify2faLogin("a1", { token: "000000" })).rejects.toMatchObject({ statusCode: 401 });
+    }
+
+    // A successful login resets the counter before it can reach the 5-attempt lock.
+    const code = await totp.generate({ secret: SECRET });
+    await expect(verify2faLogin("a1", { token: code })).resolves.toBe(true);
+
+    // The counter restarted at 1 — a 401, not a 429.
+    await expect(verify2faLogin("a1", { token: "000000" })).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  it("locks the account when backup-code brute forcing is attempted", async () => {
+    stubAdmin();
+    for (let i = 0; i < 5; i++) {
+      await expect(verify2faLogin("a1", { backupCode: "AAAA0000" })).rejects.toMatchObject({
+        statusCode: 401,
+      });
+    }
+    await expect(verify2faLogin("a1", { backupCode: "AAAA0000" })).rejects.toMatchObject({
+      statusCode: 429,
+      message: expect.stringContaining("Too many 2FA attempts"),
+    });
   });
 });
 

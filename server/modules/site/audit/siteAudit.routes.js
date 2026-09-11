@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { protectSite, authorizeSite } from '../../../middleware/siteAuth.js';
 import { validate } from '../../../middleware/validate.js';
 import { z } from 'zod';
-import { getAuditLogs, getAuditActions } from './siteAudit.controller.js';
+import { getAuditLogs, getAuditActions, verifyAuditLogs } from './siteAudit.controller.js';
 
 const router = Router();
 
@@ -27,7 +27,8 @@ const auditQuerySchema = z.object({
  *     summary: List audit logs
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role. Supports filtering by action, admin, target, and date range.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - $ref: '#/components/parameters/PaginationPage'
  *       - $ref: '#/components/parameters/PaginationLimit'
@@ -82,7 +83,8 @@ router.get('/', authorizeSite('super_admin', 'admin', 'support'), validate(audit
  *     summary: List distinct audit actions
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role. Useful for building filter dropdowns.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: Distinct actions
@@ -104,5 +106,37 @@ router.get('/', authorizeSite('super_admin', 'admin', 'support'), validate(audit
  *         $ref: '#/components/responses/Forbidden'
  */
 router.get('/actions', authorizeSite('super_admin', 'admin', 'support'), getAuditActions);
+
+/**
+ * @swagger
+ * /api/v1/site/audit-logs/verify:
+ *   get:
+ *     tags: [Site Audit]
+ *     summary: Verify the audit hash-chain integrity
+ *     description: Site realm. Requires `super_admin` role. Recomputes every
+ *       entry's HMAC and verifies prev/next linkage, reporting the first
+ *       tampered, inserted, or deleted record.
+ *     security:
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
+ *     responses:
+ *       '200':
+ *         description: Chain verification result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     valid: { type: boolean }
+ *                     errors:
+ *                       type: array
+ *                       items: { type: string }
+ *                     checked: { type: number }
+ */
+router.get('/verify', authorizeSite('super_admin'), verifyAuditLogs);
 
 export default router;

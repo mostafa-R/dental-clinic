@@ -36,6 +36,26 @@ const CHAT_CHANNELS = ['doctors', 'accounting', 'general'];
 const IP_CONNECTION_LIMIT = 20;
 const connectionsByIp = new Map();
 
+// Whether to trust a configured reverse proxy hop when deriving the client IP
+// for the connection cap. Mirrors the Express `app.set('trust proxy', 1)`
+// used elsewhere; when disabled, the raw socket address (the proxy's IP) is
+// used, which lets a single clinic exceed the cap and be throttled together.
+const TRUST_PROXY = process.env.TRUST_PROXY === 'true' || process.env.NODE_ENV === 'production';
+
+function realClientIp(socket) {
+  if (TRUST_PROXY) {
+    const req = socket.request;
+    const forwarded = req?.headers?.['x-forwarded-for'];
+    if (forwarded) {
+      const first = String(forwarded).split(',')[0].trim();
+      if (first) return first;
+    }
+    const realIp = req?.headers?.['x-real-ip'];
+    if (realIp) return realIp;
+  }
+  return socket.handshake?.address || 'unknown';
+}
+
 export function initSocket(httpServer) {
   io = new Server(httpServer, {
     cors: {
@@ -47,7 +67,7 @@ export function initSocket(httpServer) {
   });
 
   io.use((socket, next) => {
-    const ip = socket.handshake.address || 'unknown';
+    const ip = realClientIp(socket);
     if ((connectionsByIp.get(ip) || 0) >= IP_CONNECTION_LIMIT) {
       return next(new Error(`Too many concurrent connections from this IP`));
     }
@@ -138,7 +158,7 @@ export function initSocket(httpServer) {
   });
 
   io.on('connection', (socket) => {
-    const ip = socket.handshake.address || 'unknown';
+    const ip = realClientIp(socket);
     connectionsByIp.set(ip, (connectionsByIp.get(ip) || 0) + 1);
     socket.on('disconnect', () => {
       const n = connectionsByIp.get(ip) || 0;
@@ -275,16 +295,23 @@ export function emitToTenantQueue(tenantId, event, payload) {
  * For DMs: emits to the sender's and recipient's personal rooms.
  * For channels: emits to the channel room.
  */
-export function emitToChat({ recipient, channel, senderId, tenantId, event, payload }) {
+export function emitToChat({ recipient, channel, senderId, tenantId, branchId, event, payload }) {
   if (!io) return;
   const rooms = new Set();
   if (recipient) {
     if (senderId) rooms.add(userRoom(senderId));
     rooms.add(userRoom(recipient));
   } else if (channel) {
-    // Channel messages must be scoped to a tenant to prevent cross-tenant leakage
-    if (!tenantId) return;
-    rooms.add(chatChannelRoom(tenantId, channel));
+    // Channel messages are scoped to a tenant to prevent cross-tenant leakage.
+    // When the sender is a tenant-less platform admin (rare), fall back to the
+    // branch room so the persisted message is still delivered in real time.
+    if (tenantId) {
+      rooms.add(chatChannelRoom(tenantId, channel));
+    } else if (branchId) {
+      rooms.add(branchRoom(branchId));
+    } else {
+      return;
+    }
   }
   rooms.forEach((room) => {
     if (!room) return;

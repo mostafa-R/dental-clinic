@@ -30,6 +30,11 @@ vi.mock("../utils/cache.js", () => ({ invalidatePermission: vi.fn() }));
 
 vi.mock("../socket/index.js", () => ({ emitToBranch: vi.fn() }));
 
+vi.mock("../middleware/audit.js", () => ({
+  audit: vi.fn(() => (_req, _res, next) => next()),
+  auditTenantAction: vi.fn(),
+}));
+
 import { updateUser } from "../modules/users/user.controller.js";
 import User from "../modules/users/user.model.js";
 

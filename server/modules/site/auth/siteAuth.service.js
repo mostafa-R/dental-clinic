@@ -39,8 +39,10 @@ export async function authenticateSiteAdmin(email, password) {
 }
 
 export function create2faChallenge(adminId) {
+  // H8: unique jti makes the challenge single-use. If it is ever replayed the
+  // middleware detects the consumed jti and rejects (see require2fa.js).
   return jwt.sign(
-    { sub: adminId.toString(), type: '2fa_challenge' },
+    { sub: adminId.toString(), type: '2fa_challenge', jti: crypto.randomUUID() },
     process.env.JWT_2FA_SECRET || process.env.JWT_SECRET,
     { expiresIn: '5m' },
   );
@@ -285,17 +287,19 @@ Time: ${new Date().toISOString()}
  */
 export async function logRecoveryAttempt({ email, ip, userAgent, success, reason }) {
   try {
-    const { default: AuditLog } = await import('../audit/auditLog.model.js');
+    const { appendAuditLog } = await import('../../../utils/auditChain.js');
     const SiteAdmin = (await import('../admin/admin.model.js')).default;
 
     // Find the admin to get their details
     const admin = await SiteAdmin.findOne({ email: email.toLowerCase() });
 
-    await AuditLog.create({
+    await appendAuditLog({
       admin: admin?._id || null,
+      tenantActor: null,
+      scope: 'site',
       adminEmail: email,
       adminRole: admin?.role || 'unknown',
-      action: success ? '2fa.enable' : '2fa.disable', // Using closest action from enum
+      action: 'auth.recovery_attempt',
       target: {
         type: 'admin',
         id: admin?._id || null,

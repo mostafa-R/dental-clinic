@@ -6,6 +6,11 @@ import ApiError from '../../utils/ApiError.js';
 import { escapeRegex } from '../../utils/escapeRegex.js';
 import { emitItemAlerts } from '../../services/inventoryCron.js';
 
+// Sane upper bound for a single item's quantity. Protects against an
+// unbounded `adjustment` inflating stock far beyond any real physical
+// quantity and against corrupted data (issue #7).
+const MAX_ITEM_QUANTITY = 1_000_000;
+
 export async function listItems(branchFilter, { search, category, lowStock, page, limit }) {
   const filter = { ...branchFilter, isActive: true };
 
@@ -25,14 +30,15 @@ export async function listItems(branchFilter, { search, category, lowStock, page
     InventoryItem.countDocuments(filter),
   ]);
 
-  const lowStockCount = await InventoryItem.countDocuments({
-    ...branchFilter,
-    isActive: true,
-    $expr: { $lte: ['$quantity', '$reorderPoint'] },
-  });
+  // Stats reflect the SAME filter as the list (search, category, lowStock),
+  // so the numbers shown match the rows the user actually sees (issue #9).
+  const lowStockMatch = lowStock === 'true'
+    ? { $expr: { $lte: ['$quantity', '$reorderPoint'] } }
+    : {};
+  const lowStockCount = await InventoryItem.countDocuments({ ...filter, ...lowStockMatch });
 
   const stockValueResult = await InventoryItem.aggregate([
-    { $match: { ...branchFilter, isActive: true } },
+    { $match: filter },
     { $group: { _id: null, total: { $sum: { $multiply: ['$quantity', '$costPerUnit'] } } } },
   ]);
   const totalStockValue = stockValueResult[0]?.total || 0;
@@ -48,7 +54,9 @@ export async function getItem(id, branchFilter) {
   if (!mongoose.isValidObjectId(id)) {
     throw ApiError.badRequest('Invalid item id');
   }
-  const item = await InventoryItem.findOne({ _id: id, ...branchFilter });
+  // Soft-deleted (inactive) items are excluded so a GET never surfaces a
+  // deleted record while the list hides it (issue #10).
+  const item = await InventoryItem.findOne({ _id: id, ...branchFilter, isActive: true });
   if (!item) {
     throw ApiError.notFound('Inventory item not found');
   }
@@ -56,6 +64,28 @@ export async function getItem(id, branchFilter) {
 }
 
 export async function createItem({ tenant, branch, data, userId }) {
+  // Enforce SKU uniqueness within a branch (issue #6/#11) so duplicate
+  // materials don't silently accumulate and confuse search/stock. The unique
+  // partial index also guards against a race; this check returns a clean
+  // conflict instead of a 11000 error.
+  if (data.sku) {
+    const existing = await InventoryItem.findOne({
+      branch: toObjectId(branch),
+      sku: data.sku,
+    }).select('_id');
+    if (existing) {
+      throw ApiError.conflict(`An item with SKU "${data.sku}" already exists in this branch`);
+    }
+  }
+
+  const opening = Number(data.quantity) || 0;
+  if (opening > MAX_ITEM_QUANTITY) {
+    throw ApiError.badRequest(
+      `Quantity cannot exceed ${MAX_ITEM_QUANTITY} units`,
+      { quantity: 'exceeds maximum allowed' },
+    );
+  }
+
   const item = await InventoryItem.create({
     branch,
     tenant,
@@ -63,7 +93,7 @@ export async function createItem({ tenant, branch, data, userId }) {
     sku: data.sku || '',
     category: data.category || 'other',
     unit: data.unit || 'unit',
-    quantity: data.quantity || 0,
+    quantity: opening,
     reorderPoint: data.reorderPoint ?? 5,
     costPerUnit: data.costPerUnit || 0,
     expiryDate: data.expiryDate ? new Date(data.expiryDate) : null,
@@ -100,6 +130,18 @@ export async function updateItem(id, branchFilter, data) {
     if (update[key] === undefined) delete update[key];
   }
 
+  // Enforce SKU uniqueness on edit too (issue #11).
+  if (update.sku) {
+    const existing = await InventoryItem.findOne({
+      branch: toObjectId(branchFilter.branch),
+      sku: update.sku,
+      _id: { $ne: id },
+    }).select('_id');
+    if (existing) {
+      throw ApiError.conflict(`An item with SKU "${update.sku}" already exists in this branch`);
+    }
+  }
+
   const item = await InventoryItem.findOneAndUpdate(
     { _id: id, ...branchFilter },
     { $set: update },
@@ -130,6 +172,7 @@ export async function adjustStock(id, branchFilter, { type, quantity, reason, re
   if (!mongoose.isValidObjectId(id)) {
     throw ApiError.badRequest('Invalid item id');
   }
+  const baseFilter = { _id: id, ...branchFilter, isActive: true };
 
   let delta;
   switch (type) {
@@ -151,7 +194,7 @@ export async function adjustStock(id, branchFilter, { type, quantity, reason, re
   // Atomic decrement with guard: only succeeds if stock >= removal amount.
   if (delta < 0) {
     const item = await InventoryItem.findOneAndUpdate(
-      { _id: id, ...branchFilter, quantity: { $gte: Math.abs(delta) } },
+      { ...baseFilter, quantity: { $gte: Math.abs(delta) } },
       {
         $inc: { quantity: delta },
         $push: {
@@ -173,9 +216,19 @@ export async function adjustStock(id, branchFilter, { type, quantity, reason, re
     return item;
   }
 
-  // For increments (stock_in, initial, positive adjustment) no guard needed.
+  // For increments (stock_in, initial, positive adjustment) no guard needed on
+  // the lower bound, but cap the resulting quantity so stock can't be inflated
+  // past a sane physical maximum (issue #7).
+  const existing = await InventoryItem.findOne(baseFilter).select('quantity');
+  if (existing && (Number(existing.quantity) || 0) + delta > MAX_ITEM_QUANTITY) {
+    throw ApiError.badRequest(
+      `Quantity cannot exceed ${MAX_ITEM_QUANTITY} units`,
+      { quantity: 'exceeds maximum allowed' },
+    );
+  }
+
   const item = await InventoryItem.findOneAndUpdate(
-    { _id: id, ...branchFilter },
+    baseFilter,
     {
       $inc: { quantity: delta },
       $push: {
@@ -198,21 +251,36 @@ export async function adjustStock(id, branchFilter, { type, quantity, reason, re
 }
 
 /**
- * Internal helper: when a treatment item is marked completed, auto-deduct
- * stock from the matching inventory category. Called by the treatment-plan
- * service's generateInvoice flow.
+ * Internal helper: when a treatment item is billed, auto-deduct stock for the
+ * procedure. Deduction is resolved from the PROCEDURE NAME (issue #3), not the
+ * tooth state. It never throws on insufficient stock — the shortfall is
+ * returned so the caller can bill anyway and surface the stock-out (issue #2).
+ *
+ * The `reference` on each ledger entry carries the invoice id
+ * (`invoice:<invoiceId>:<procedureName>`) so a later void/refund can reverse
+ * the deduction (issue #4).
+ *
+ * The returned `updatedItems` are the post-decrement documents, so the caller
+ * can emit alerts AFTER the surrounding transaction commits (issue #1/#5).
  */
-export async function deductForProcedure(branchId, tenantId, toothState, procedureName, userId, session) {
-  const { PROCEDURE_DEDUCTION_MAP } = await import('../../constants/inventory.js');
-  const ApiError = (await import('../../utils/ApiError.js')).default;
+export async function deductForProcedure({
+  branchId,
+  tenantId,
+  toothState,
+  procedureName,
+  userId,
+  session,
+  invoiceId,
+}) {
+  const { resolveProcedureDeduction } = await import('../../constants/inventory.js');
 
-  const category = PROCEDURE_DEDUCTION_MAP[toothState];
-  if (!category) return [];
+  const candidates = resolveProcedureDeduction(procedureName, toothState);
+  const target = candidates[0];
 
   const query = {
     branch: toObjectId(branchId),
     tenant: tenantId ? toObjectId(tenantId) : null,
-    category,
+    category: target.category,
     quantity: { $gt: 0 },
   };
   const items = session
@@ -220,7 +288,9 @@ export async function deductForProcedure(branchId, tenantId, toothState, procedu
     : await InventoryItem.find(query).sort('expiryDate');
 
   const deductions = [];
-  let toDeduct = 1;
+  const updatedItems = [];
+  let toDeduct = target.quantity;
+  const referenceBase = invoiceId ? `invoice:${String(invoiceId)}` : `procedure:${procedureName || 'unknown'}`;
 
   for (const item of items) {
     if (toDeduct <= 0) break;
@@ -238,8 +308,8 @@ export async function deductForProcedure(branchId, tenantId, toothState, procedu
           transactions: {
             type: 'stock_out',
             quantity: -take,
-            reason: `Auto-deduction: ${procedureName}`,
-            reference: `procedure:${toothState}`,
+            reason: `Auto-deduction: ${procedureName || 'procedure'}`,
+            reference: `${referenceBase}:${procedureName || 'unknown'}`,
             recordedBy: userId,
           },
         },
@@ -247,22 +317,117 @@ export async function deductForProcedure(branchId, tenantId, toothState, procedu
       opts,
     );
     if (updated) {
-      deductions.push({ item: item.name, deducted: take });
+      deductions.push({ item: updated.name, itemId: updated._id, deducted: take });
+      updatedItems.push(updated);
       toDeduct -= take;
     }
   }
 
-  if (toDeduct > 0) {
-    console.warn(`[Inventory] Insufficient stock for procedure ${procedureName}: ${toDeduct} units short`);
-    throw ApiError.conflict(`Insufficient inventory to complete procedure: ${procedureName}`);
+  // If the primary category had no stock, try the fallback category. Without
+  // it a filling might consume nothing when only consumables are in stock.
+  if (toDeduct > 0 && candidates.length > 1) {
+    const fbTarget = candidates[1];
+    const fbItems = session
+      ? await InventoryItem.find({
+          branch: toObjectId(branchId),
+          tenant: tenantId ? toObjectId(tenantId) : null,
+          category: fbTarget.category,
+          quantity: { $gt: 0 },
+        }).sort('expiryDate').session(session)
+      : await InventoryItem.find({
+          branch: toObjectId(branchId),
+          tenant: tenantId ? toObjectId(tenantId) : null,
+          category: fbTarget.category,
+          quantity: { $gt: 0 },
+        }).sort('expiryDate');
+
+    for (const item of fbItems) {
+      if (toDeduct <= 0) break;
+      const take = Math.min(item.quantity, toDeduct);
+      const opts = { returnDocument: "after" };
+      if (session) opts.session = session;
+
+      const updated = await InventoryItem.findOneAndUpdate(
+        { _id: item._id, quantity: { $gte: take } },
+        {
+          $inc: { quantity: -take },
+          $push: {
+            transactions: {
+              type: 'stock_out',
+              quantity: -take,
+              reason: `Auto-deduction (fallback): ${procedureName || 'procedure'}`,
+              reference: `${referenceBase}:${procedureName || 'unknown'}`,
+              recordedBy: userId,
+            },
+          },
+        },
+        opts,
+      );
+      if (updated) {
+        deductions.push({ item: updated.name, itemId: updated._id, deducted: take });
+        updatedItems.push(updated);
+        toDeduct -= take;
+      }
+    }
   }
 
-  // PRD §6.8: raise stock.low / stock.expiring alerts after auto-deductions
-  // cross a threshold. Emissions happen outside the transaction's critical
-  // path and degrade silently when no socket server is attached.
+  return {
+    deductions,
+    updatedItems,
+    shortfall: toDeduct > 0 ? toDeduct : 0,
+  };
+}
+
+/**
+ * Reverse a procedure's auto-deduction when its invoice is voided or refunded.
+ * Re-stocks the items that were deducted for that invoice by looking up the
+ * `reference` entries created by deductForProcedure. Returns the number of
+ * ledger reversals applied (used for logging only).
+ */
+export async function restockForInvoice({ branchId, tenantId, invoiceId, userId, session, procedureName }) {
+  const refPrefix = `invoice:${String(invoiceId)}`;
+  const term = procedureName ? `${refPrefix}:${procedureName}` : refPrefix;
+
+  const items = session
+    ? await InventoryItem.find({
+        branch: toObjectId(branchId),
+        tenant: tenantId ? toObjectId(tenantId) : null,
+        'transactions.type': 'stock_out',
+        'transactions.reference': { $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:` },
+      }).session(session)
+    : await InventoryItem.find({
+        branch: toObjectId(branchId),
+        tenant: tenantId ? toObjectId(tenantId) : null,
+        'transactions.type': 'stock_out',
+        'transactions.reference': { $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:` },
+      });
+
+  let reversals = 0;
   for (const item of items) {
-    emitItemAlerts(item);
-  }
+    const deducted = (item.transactions || [])
+      .filter((t) => t.type === 'stock_out' && t.reference && t.reference.startsWith(`${refPrefix}:`))
+      .reduce((sum, t) => sum + Math.abs(Number(t.quantity) || 0), 0);
+    if (deducted <= 0) continue;
 
-  return deductions;
+    const opts = { returnDocument: "after" };
+    if (session) opts.session = session;
+    await InventoryItem.findOneAndUpdate(
+      { _id: item._id },
+      {
+        $inc: { quantity: deducted },
+        $push: {
+          transactions: {
+            type: 'stock_in',
+            quantity: deducted,
+            reason: `Reversal of voided/refunded invoice ${invoiceId}`,
+            reference: `${refPrefix}:reversal`,
+            recordedBy: userId,
+          },
+        },
+      },
+      opts,
+    );
+    reversals += 1;
+  }
+  return reversals;
 }

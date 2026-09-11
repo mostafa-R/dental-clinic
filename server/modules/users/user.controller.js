@@ -13,6 +13,7 @@ import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 import { invalidatePermission } from '../../utils/cache.js';
 import { emitToBranch } from '../../socket/index.js';
+import { auditTenantAction } from '../../middleware/audit.js';
 
 const POPULATE = [
   { path: 'branch', select: 'name address phone isActive' },
@@ -99,7 +100,8 @@ export const createUser = asyncHandler(async (req, res) => {
   }
 
   let user;
-  if (data.isDoctor && tenant) {
+  const isDoctorRole = ['doctor', 'assistant'].includes(roleDoc.key);
+  if (isDoctorRole && tenant) {
     const tenantDoc = await Tenant.findById(tenant).select('settings');
     const maxDoctors = tenantDoc?.settings?.maxDoctors ?? 999;
 
@@ -293,6 +295,30 @@ export const updateUser = asyncHandler(async (req, res) => {
     }
   }
 
+  const previousRoleId = user.roleId ? String(user.roleId) : null;
+
+  // H6: maxDoctors cap is role-based (doctor/assistant keys). Ensure an update
+  // assigning a doctor role cannot bypass the per-tenant cap that createUser
+  // enforces — promote/demote must respect the same limit.
+  if (data.roleId && tenant) {
+    const targetRoleDoc = await Role.findById(data.roleId).select('key');
+    const targetIsDoctorRole = targetRoleDoc && ['doctor', 'assistant'].includes(targetRoleDoc.key);
+    const userWasDoctorRole = user.populated('roleId')
+      ? ['doctor', 'assistant'].includes(String(user.roleId?.key || ''))
+      : false;
+    const isNewDoctorAssignment = targetIsDoctorRole && !userWasDoctorRole;
+    if (isNewDoctorAssignment) {
+      const tenantDoc = await Tenant.findById(tenant).select('settings');
+      const maxDoctors = tenantDoc?.settings?.maxDoctors ?? 999;
+      const doctorCount = await User.countDocuments({ tenant, isActive: true, roleId: { $in: (await Role.find({ tenant, key: { $in: ['doctor', 'assistant'] } }).select('_id').lean()).map((r) => r._id) } });
+      if (doctorCount >= maxDoctors) {
+        throw ApiError.conflict(
+          `Your plan allows a maximum of ${maxDoctors} doctors. Upgrade your plan to add more.`,
+        );
+      }
+    }
+  }
+
   if (data.name !== undefined) user.name = data.name;
   if (data.email !== undefined) user.email = data.email;
   if (data.phone !== undefined) user.phone = data.phone;
@@ -314,6 +340,26 @@ export const updateUser = asyncHandler(async (req, res) => {
   // Invalidate cached permissions for this user so next request picks up the new role
   if (data.roleId !== undefined) {
     await invalidatePermission(String(user._id), user.roleId ? String(user.roleId) : '');
+  }
+
+  // H4: audit sensitive tenant-realm changes (role / password).
+  const tenantActor = String(user.tenant || '');
+  const nextRoleId = user.roleId ? String(user.roleId) : null;
+  if (data.roleId !== undefined && nextRoleId !== previousRoleId) {
+    await auditTenantAction(
+      req,
+      'user.role_change',
+      { type: 'user', id: user._id, name: user.name },
+      { tenant: tenantActor, fromRole: previousRoleId, toRole: nextRoleId },
+    );
+  }
+  if (data.password) {
+    await auditTenantAction(
+      req,
+      'user.password_reset',
+      { type: 'user', id: user._id, name: user.name },
+      { tenant: tenantActor },
+    );
   }
 
   emitToBranch(String(user.branch?._id ?? user.branch), 'user:updated', { user: user.toSafeObject() });
@@ -338,6 +384,12 @@ export const deleteUser = asyncHandler(async (req, res) => {
   }
   user.isActive = false;
   await user.save();
+  await auditTenantAction(
+    req,
+    'user.deactivate',
+    { type: 'user', id: user._id, name: user.name },
+    { tenant: String(user.tenant || '') },
+  );
   emitToBranch(String(user.branch), 'user:deleted', { _id: user._id });
   return sendSuccess(res, { message: 'User deactivated' });
 });
@@ -361,6 +413,12 @@ export const toggleUserActive = asyncHandler(async (req, res) => {
   user.isActive = !user.isActive;
   await user.save();
   await user.populate(POPULATE);
+  await auditTenantAction(
+    req,
+    user.isActive ? 'user.activate' : 'user.deactivate',
+    { type: 'user', id: user._id, name: user.name },
+    { tenant: String(user.tenant || '') },
+  );
   emitToBranch(String(user.branch?._id ?? user.branch), 'user:toggled', { user: user.toSafeObject() });
   return sendSuccess(res, { user: user.toSafeObject() });
 });

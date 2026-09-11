@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">11.11% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>9/9</span>
+                <span class='fraction'>1/9</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">66.66% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>4/6</span>
+                <span class='fraction'>0/6</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>1/1</span>
+                <span class='fraction'>0/1</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">11.11% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>9/9</span>
+                <span class='fraction'>1/9</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line high'></div>
+    <div class='status-line low'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -99,22 +99,18 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -122,7 +118,11 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -131,18 +131,18 @@
 import { sendSuccess } from "../../../utils/sendSuccess.js";
 import User from "../../users/user.model.js";
 &nbsp;
-export const getUsersByTenant = asyncHandler(async (req, res) =&gt; {
-  const { tenantId } = req.params;
-  const { page = 1, limit = 50 } = req.query;
-  const pageNum = Math.max(1, parseInt(page, 10) || <span class="branch-1 cbranch-no" title="branch not covered" >1)</span>;
-  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || <span class="branch-1 cbranch-no" title="branch not covered" >50)</span>);
-  const skip = (pageNum - 1) * limitNum;
+export const getUsersByTenant = asyncHandler(<span class="fstat-no" title="function not covered" >async </span>(req, res) =&gt; {
+  const { tenantId } = <span class="cstat-no" title="statement not covered" >req.params;</span>
+  const { page = <span class="branch-0 cbranch-no" title="branch not covered" >1,</span> limit = <span class="branch-0 cbranch-no" title="branch not covered" >50 </span>} = <span class="cstat-no" title="statement not covered" >req.query;</span>
+  const pageNum = <span class="cstat-no" title="statement not covered" >Math.max(1, parseInt(page, 10) || 1);</span>
+  const limitNum = <span class="cstat-no" title="statement not covered" >Math.min(100, Math.max(1, parseInt(limit, 10) || 50));</span>
+  const skip = <span class="cstat-no" title="statement not covered" >(pageNum - 1) * limitNum;</span>
 &nbsp;
   // Tenant is already validated by requireTenantAccess middleware
   // and available as req.targetTenant
-  const filter = { tenant: tenantId, isActive: true };
+  const filter = <span class="cstat-no" title="statement not covered" >{ tenant: tenantId, isActive: true };</span>
 &nbsp;
-  const [users, total] = await Promise.all([
+  const [users, total] = <span class="cstat-no" title="statement not covered" >await Promise.all([</span>
     User.find(filter)
       .select('name email roleId branch isActive')
       .populate('branch', 'name')
@@ -154,7 +154,7 @@ export const getUsersByTenant = asyncHandler(async (req, res) =&gt; {
     User.countDocuments(filter),
   ]);
 &nbsp;
-  return sendSuccess(res, {
+<span class="cstat-no" title="statement not covered" >  return sendSuccess(res, {</span>
     users,
     pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
   });
@@ -166,7 +166,7 @@ export const getUsersByTenant = asyncHandler(async (req, res) =&gt; {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-06T16:45:19.984Z
+                at 2026-09-11T17:00:57.398Z
             </div>
         <script src="../../../../prettify.js"></script>
         <script>

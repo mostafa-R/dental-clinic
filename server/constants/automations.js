@@ -21,9 +21,14 @@ export const TRIGGER_TYPES = [
   { key: 'appointment.no_show', label: 'Patient no-show' },
   { key: 'patient.created', label: 'New patient registered' },
   { key: 'consent.signed', label: 'Consent signed (e-signature)' },
+  { key: 'consent.expired', label: 'Consent expired (not answered)' },
   { key: 'invoice.paid', label: 'Invoice settled' },
   { key: 'installment.overdue', label: 'Installment overdue' },
   { key: 'inventory.low_stock', label: 'Low stock (reorder point)' },
+  { key: 'queue.joined', label: 'Patient joined the queue' },
+  { key: 'queue.position_changed', label: 'Queue position changed' },
+  { key: 'queue.near_turn', label: 'Queue near turn' },
+  { key: 'queue.turn_now', label: 'Queue turn now' },
 ];
 
 export const TRIGGER_KEYS = TRIGGER_TYPES.map((t) => t.key);
@@ -117,6 +122,105 @@ export const DEFAULT_TEMPLATES = [
       },
     ],
     cooldownMinutes: 60,
+  },
+  {
+    key: 'queue-joined',
+    name: 'Queue joined (WhatsApp)',
+    description: 'Tell the patient their queue number after a same-day confirmed booking.',
+    trigger: { type: 'queue.joined' },
+    conditions: [],
+    actions: [
+      {
+        type: 'send_whatsapp',
+        config: {
+          to: '{{patient.phone}}',
+          message: [
+            'تم تأكيد حجزك اليوم ✅',
+            '',
+            `مرحباً {{patient.firstName}}،`,
+            'موعدك اليوم في عيادتنا مع د. {{doctor.name}}.',
+            '',
+            `🔢 رقمك في الدور: {{queueNumber}}`,
+            `👥 يوجد أمامك حاليًا: {{patientsAhead}} مريض/مرضى`,
+            '',
+            'سنخبرك عند اقتراب دورك 🦷',
+          ].join('\n'),
+        },
+      },
+    ],
+    cooldownMinutes: 0,
+  },
+  {
+    key: 'queue-position',
+    name: 'Queue position update (WhatsApp)',
+    description: 'Quick position milestones as the queue moves.',
+    trigger: { type: 'queue.position_changed' },
+    conditions: [],
+    actions: [
+      {
+        type: 'send_whatsapp',
+        config: {
+          to: '{{patient.phone}}',
+          message: [
+            'تحديث الدور 🦷',
+            '',
+            `مرحباً {{patient.firstName}}،`,
+            `أصبح عدد المرضى أمامك: {{patientsAhead}}.`,
+            '',
+            'الرجاء الاستعداد للحضور لما يصل دورك.',
+          ].join('\n'),
+        },
+      },
+    ],
+    cooldownMinutes: 0,
+  },
+  {
+    key: 'queue-near-turn',
+    name: 'Queue near turn (WhatsApp)',
+    description: 'Warn the patient the turn is approaching (≤ 3 ahead, short wait).',
+    trigger: { type: 'queue.near_turn' },
+    conditions: [],
+    actions: [
+      {
+        type: 'send_whatsapp',
+        config: {
+          to: '{{patient.phone}}',
+          message: [
+            'دورك اقترب 🦷',
+            '',
+            `مرحباً {{patient.firstName}}،`,
+            `وقت الانتظار المتوقع حوالي {{estimatedWaitMinutes}} دقيقة.`,
+            `يوجد أمامك حاليًا: {{patientsAhead}}.`,
+            '',
+            'الرجاء الاقتراب من العيادة إن أمكن 🌟',
+          ].join('\n'),
+        },
+      },
+    ],
+    cooldownMinutes: 0,
+  },
+  {
+    key: 'queue-turn-now',
+    name: 'Queue turn now (WhatsApp)',
+    description: 'Call the patient to the doctor room.',
+    trigger: { type: 'queue.turn_now' },
+    conditions: [],
+    actions: [
+      {
+        type: 'send_whatsapp',
+        config: {
+          to: '{{patient.phone}}',
+          message: [
+            'حان دورك الآن 🦷',
+            '',
+            `مرحباً {{patient.firstName}}،`,
+            'برجاء التوجه إلى غرفة د. {{doctor.name}} الآن.',
+            'شكرًا لانتظارك ❤️',
+          ].join('\n'),
+        },
+      },
+    ],
+    cooldownMinutes: 0,
   },
   {
     key: 'installment-reminder',

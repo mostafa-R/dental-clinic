@@ -11,10 +11,23 @@ const conditionSchema = z.object({
   value: z.unknown().optional(),
 });
 
-const actionSchema = z.object({
-  type: z.enum(ACTION_TYPES),
-  config: z.record(z.unknown()).default({}),
-});
+const actionSchema = z
+  .object({
+    type: z.enum(ACTION_TYPES),
+    config: z.record(z.unknown()).default({}),
+  })
+  .superRefine((action, ctx) => {
+    if (action.type === 'webhook') {
+      const url = action.config?.url;
+      if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['config', 'url'],
+          message: 'Webhook URL must be an absolute http(s) URL',
+        });
+      }
+    }
+  });
 
 const listQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -26,6 +39,10 @@ const listQuerySchema = z.object({
 export const createAutomationSchema = z.object({
   name: z.string().min(1, 'Name is required').max(120),
   description: z.string().max(500).optional(),
+  // Platform (system admin) users with no tenant context may target a clinic
+  // explicitly. Clinic users are always scoped by currentTenant() and the
+  // controller ignores this field for them.
+  tenant: objectId.optional(),
   branch: objectId.optional(),
   enabled: z.boolean().default(true),
   trigger: z.object({
@@ -73,5 +90,13 @@ export const listRunsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   automation: objectId.optional(),
 });
+
+/**
+ * Body for `POST /automations/install-templates`. Validated so the
+ * `tenant` override a platform admin may send is never an arbitrary string.
+ */
+export const installTemplatesSchema = z.object({
+  tenant: objectId.optional(),
+}).default({});
 
 export { listQuerySchema, dateOrEmpty };

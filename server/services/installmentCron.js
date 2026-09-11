@@ -7,11 +7,25 @@ import { publishEvent } from '../services/eventBus.js';
 import { withTransaction } from '../core/transaction.js';
 import { round2 } from '../constants/accounting.js';
 import { sendWhatsAppMessage } from './whatsapp.js';
+import { tryAcquireCronLock, releaseCronLock } from './cronLock.js';
+import { isAutomationTemplateEnabled } from './automationEngine.js';
 
 const BATCH_SIZE = 200;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
+// Single-instance guard for the daily 02:00 tick. TTL is long enough that a
+// heavy pass (many tenants/plans) is not stolen mid-run, but short enough to
+// free the lock if a worker crashes.
+const CRON_LOCK_KEY = 'installment_cron';
+const CRON_LOCK_TTL_MS = 8 * 60 * 60 * 1000;
+
 async function markOverdue() {
+  const token = await tryAcquireCronLock({
+    key: CRON_LOCK_KEY,
+    ttlMs: CRON_LOCK_TTL_MS,
+  });
+  if (!token) return; // another instance owns this tick
+
   try {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - THIRTY_DAYS_MS);
@@ -112,6 +126,8 @@ async function markOverdue() {
     await notifyOverdue(affectedPlans);
   } catch (err) {
     console.error('[InstallmentCron] Error during overdue check:', err.message);
+  } finally {
+    await releaseCronLock(CRON_LOCK_KEY, token);
   }
 }
 
@@ -159,6 +175,10 @@ async function notifyOverdue(affectedPlans) {
         .select('_id')
         .lean();
       if (!settings) continue;
+
+      // M4: if the clinic enabled the "Installment reminder" automation
+      // template, let the engine send it instead of the cron's direct message.
+      if (await isAutomationTemplateEnabled(tenantId, 'installment-reminder')) continue;
 
       const plansForTenant = affectedPlans.filter((p) => String(p.tenant) === tenantId);
       const BATCH_SIZE_MSG = 5;

@@ -1,5 +1,5 @@
 import request from "supertest";
-import app from "./app.js";
+import app from "../app.js";
 
 describe("Swagger docs", () => {
   it("serves the swagger UI HTML", async () => {
@@ -21,6 +21,15 @@ describe("Swagger docs", () => {
     expect(res.body.paths["/api/v1/auth/login"]).toBeTruthy();
     expect(res.body.paths["/api/v1/emr/attachments/{filename}/download"]).toBeTruthy();
     expect(res.body.paths["/api/v1/emr/attachments/{filename}"].delete).toBeTruthy();
+  });
+
+  it("documents the WhatsApp endpoints (YAML annotations parse cleanly)", async () => {
+    const res = await request(app).get("/api/docs.json");
+    expect(res.body.paths["/api/v1/whatsapp/settings"]).toBeTruthy();
+    expect(res.body.paths["/api/v1/whatsapp/connect"]).toBeTruthy();
+    expect(res.body.paths["/api/v1/whatsapp/qr"]).toBeTruthy();
+    expect(res.body.paths["/api/v1/whatsapp/test"]).toBeTruthy();
+    expect(res.body.paths["/api/v1/whatsapp/qr"].get).toBeTruthy();
   });
 
   it("relaxes CSP only for docs routes so the UI can load", async () => {

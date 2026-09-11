@@ -30,7 +30,6 @@ export const DEFAULT_ROLES = {
       installments: ['create', 'read'],
       consents: ['create', 'read'],
       chat: ['create', 'read'],
-      whatsapp: ['read'], // للقراءة فقط للإشعارات
     }
   },
 
@@ -125,7 +124,6 @@ export const DEFAULT_ROLES = {
       prescriptions: ['create', 'read', 'update', 'delete'],
       queue: ['create', 'read', 'update', 'delete'],
       installments: ['create', 'read', 'update', 'delete'],
-      whatsapp: ['create', 'read', 'update', 'delete'],
       users: ['create', 'read', 'update', 'delete'],
       branches: ['create', 'read', 'update', 'delete'],
       settings: ['create', 'read', 'update', 'delete'],

@@ -78,17 +78,21 @@ export function emitItemAlerts(item) {
 export async function runInventoryMaintenance() {
   try {
     // 1. Expired stock → auto stock-out (type 'expired').
+    // Keyset (cursor) pagination on _id instead of .skip(): skip-based paging
+    // is unstable when the batch mutates the collection during the run and can
+    // skip or re-visit rows (issue #12).
     const now = new Date();
     let expiredCount = 0;
-    let skip = 0;
+    let cursor = null;
 
     for (;;) {
       const items = await InventoryItem.find({
         isActive: true,
         expiryDate: { $ne: null, $lt: now },
         quantity: { $gt: 0 },
+        ...(cursor ? { _id: { $gt: cursor } } : {}),
       })
-        .skip(skip)
+        .sort('_id')
         .limit(BATCH_SIZE);
 
       if (items.length === 0) break;
@@ -141,16 +145,17 @@ export async function runInventoryMaintenance() {
         expiredCount++;
       }
 
+      cursor = items[items.length - 1]._id;
       if (items.length < BATCH_SIZE) break;
-      skip += BATCH_SIZE;
     }
 
     if (expiredCount > 0) {
       console.log(`[InventoryCron] Converted ${expiredCount} expired item(s) to stock-out`);
     }
 
-    // 2. Alerts: low stock + items approaching expiry.
-    let skipAlerts = 0;
+    // 2. Alerts: low stock + items approaching expiry. Keyset pagination on
+    // _id (issue #12).
+    let cursorAlerts = null;
     for (;;) {
       const items = await InventoryItem.find({
         isActive: true,
@@ -163,8 +168,9 @@ export async function runInventoryMaintenance() {
             },
           },
         ],
+        ...(cursorAlerts ? { _id: { $gt: cursorAlerts } } : {}),
       })
-        .skip(skipAlerts)
+        .sort('_id')
         .limit(BATCH_SIZE)
         .lean();
 
@@ -174,8 +180,8 @@ export async function runInventoryMaintenance() {
         emitItemAlerts(item);
       }
 
+      cursorAlerts = items[items.length - 1]._id;
       if (items.length < BATCH_SIZE) break;
-      skipAlerts += BATCH_SIZE;
     }
   } catch (err) {
     console.error('[InventoryCron] Error during maintenance:', err.message);

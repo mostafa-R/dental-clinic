@@ -275,4 +275,163 @@ describe('live-queue socket events never carry PHI', () => {
       }
     }
   });
+
+  describe("queue.controller live board and call-next", () => {
+    let qc;
+    let todayRange;
+    let doctor2;
+    let patient2;
+    let aptChecked1;
+    let aptChecked2;
+    let aptInProgress;
+    let aptCompleted;
+
+    beforeAll(async () => {
+      qc = await import("../modules/appointments/queue.controller.js");
+      const { zonedTodayRangeUtc } = await import("../utils/zonedDates.js");
+      todayRange = zonedTodayRangeUtc(Date.now(), "UTC");
+
+      doctor2 = await User.create({
+        tenant: tenantAId,
+        branch: branchAId,
+        name: "Doc Queue Two",
+        email: `doc-queue-2-${Date.now()}@test.com`,
+        password: "hashed-not-used",
+        roleId: new mongoose.Types.ObjectId(),
+        isDoctor: true,
+        workingHours: {
+          sunday: { notWorking: true },
+          monday: { notWorking: false, open: "09:00", close: "17:00" },
+          tuesday: { notWorking: false, open: "09:00", close: "17:00" },
+          wednesday: { notWorking: false, open: "09:00", close: "17:00" },
+          thursday: { notWorking: false, open: "09:00", close: "17:00" },
+          friday: { notWorking: false, open: "09:00", close: "17:00" },
+          saturday: { notWorking: true },
+        },
+        appointmentSettings: {},
+      });
+
+      patient2 = await Patient.create({
+        tenant: tenantAId,
+        branch: branchAId,
+        firstName: "Second",
+        lastName: "Queue",
+        phone: "+15555550202",
+        email: "queue-patient2@test.com",
+        dateOfBirth: new Date(Date.UTC(1990, 0, 1)),
+      });
+
+      const t0 = todayRange.start.getTime();
+
+      aptChecked1 = await Appointment.create({
+        tenant: tenantAId,
+        branch: branchAId,
+        doctor: doctor._id,
+        patient: patient._id,
+        chair: "Q-Chair-DoctorA",
+        start: new Date(t0 + 13 * 3600000),
+        end: new Date(t0 + 13.5 * 3600000),
+        status: "checked_in",
+      });
+
+      aptChecked2 = await Appointment.create({
+        tenant: tenantAId,
+        branch: branchAId,
+        doctor: doctor2._id,
+        patient: patient2._id,
+        chair: "Q-Chair-DoctorB",
+        start: new Date(t0 + 13.5 * 3600000),
+        end: new Date(t0 + 14 * 3600000),
+        status: "checked_in",
+      });
+
+      aptInProgress = await Appointment.create({
+        tenant: tenantAId,
+        branch: branchAId,
+        doctor: doctor._id,
+        patient: patient._id,
+        chair: "Q-Chair-InProgress",
+        start: new Date(t0 + 14 * 3600000),
+        end: new Date(t0 + 14.5 * 3600000),
+        status: "in_progress",
+      });
+
+      aptCompleted = await Appointment.create({
+        tenant: tenantAId,
+        branch: branchAId,
+        doctor: doctor._id,
+        patient: patient._id,
+        chair: "Q-Chair-Done",
+        start: new Date(t0 + 15 * 3600000),
+        end: new Date(t0 + 15.5 * 3600000),
+        status: "completed",
+      });
+    });
+
+    it("getQueue partitions appointments into waiting, inChair, and completedToday", async () => {
+      const res = makeRes();
+      await run(qc.getQueue, makeReq(), res);
+      expect(res.body.success).toBe(true);
+      const { queue } = res.body.data;
+      expect(queue.waiting.map((a) => String(a._id))).toContain(String(aptChecked1._id));
+      expect(queue.waiting.map((a) => String(a._id))).toContain(String(aptChecked2._id));
+      expect(queue.inChair.map((a) => String(a._id))).toContain(String(aptInProgress._id));
+      expect(queue.completedToday).toBeGreaterThanOrEqual(1);
+      expect(queue.updatedAt).toBeDefined();
+    });
+
+    it("getQueue strips PHI under impersonation", async () => {
+      const res = makeRes();
+      await run(qc.getQueue, makeReq({ isImpersonation: true }), res);
+      const entry = res.body.data.queue.waiting.find(
+        (a) => String(a._id) === String(aptChecked1._id),
+      );
+      expect(entry).toBeDefined();
+      expect(entry.patient.phone).toBeUndefined();
+      expect(entry.patient.email).toBeUndefined();
+    });
+
+    it("callNextPatient moves the selected doctor patient to in_progress and emits", async () => {
+      emitToBranch.mockClear();
+      emitToTenantQueue.mockClear();
+
+      const res = makeRes();
+      await run(
+        qc.callNextPatient,
+        makeReq({ validatedBody: { doctor: String(doctor2._id) } }),
+        res,
+      );
+
+      expect(res.body.success).toBe(true);
+      const apt = res.body.data.appointment;
+      expect(String(apt._id)).toBe(String(aptChecked2._id));
+      expect(apt.status).toBe("in_progress");
+      expect(apt.patient.firstName).toBe("Second");
+      expect(apt.doctor.name).toBe("Doc Queue Two");
+
+      expect(emitToBranch).toHaveBeenCalledWith(
+        expect.any(String),
+        "queue.patient.called",
+        expect.objectContaining({
+          appointment: expect.objectContaining({ status: "in_progress" }),
+        }),
+      );
+      expect(emitToTenantQueue).toHaveBeenCalledWith(
+        expect.anything(),
+        "queue.patient.called",
+        expect.anything(),
+      );
+    });
+
+    it("callNextPatient throws 404 when no patients match the doctor filter", async () => {
+      const fakeDoctorId = new mongoose.Types.ObjectId();
+      await expect(
+        run(
+          qc.callNextPatient,
+          makeReq({ validatedBody: { doctor: String(fakeDoctorId) } }),
+          makeRes(),
+        ),
+      ).rejects.toThrow(/No waiting patients/);
+    });
+  });
 });

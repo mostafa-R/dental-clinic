@@ -1,4 +1,20 @@
-import AuditLog from '../modules/site/audit/auditLog.model.js';
+import { appendAuditLog } from '../utils/auditChain.js';
+
+/**
+ * Shared audit writer. Link entries to the previous one (tamper-evident
+ * chain) and wait for the write so failures surface in the logs instead of
+ * silently dropping the record (H3).
+ */
+async function writeAudit(entry) {
+  try {
+    await appendAuditLog(entry);
+  } catch (err) {
+    console.error('[Audit] Failed to persist audit record:', err.message, {
+      action: entry.action,
+      requestId: entry.requestId,
+    });
+  }
+}
 
 /**
  * Middleware factory that logs an audit trail entry after the response is sent.
@@ -24,8 +40,10 @@ export function audit(action, targetType) {
           details.createdId = String(body.data._id);
         }
 
-        AuditLog.create({
+        void writeAudit({
           admin: req.siteAdmin._id,
+          tenantActor: null,
+          scope: 'site',
           adminEmail: req.siteAdmin.email,
           adminRole: req.siteAdmin.role,
           action,
@@ -36,7 +54,7 @@ export function audit(action, targetType) {
           requestId: req.id || null,
           ip: req.ip || req.headers?.['x-forwarded-for'] || '',
           userAgent: (req.headers?.['user-agent'] || '').substring(0, 500),
-        }).catch((err) => console.error('Audit log error:', err.message));
+        });
       }
 
       return originalJson(body);
@@ -44,4 +62,31 @@ export function audit(action, targetType) {
 
     next();
   };
+}
+
+/**
+ * Persist a tenant-realm audit event (performed by a clinic user inside their
+ * clinic): role changes, password resets, deactivation, branch deletion (H4).
+ * Call it from the controller after the operation succeeds.
+ *
+ * Usage:
+ *   await auditTenantAction(req, 'user.role_change', { type: 'user', id, name });
+ */
+export async function auditTenantAction(req, action, target, details = {}) {
+  const actor = req.user;
+  if (!actor) return;
+
+  await writeAudit({
+    admin: null,
+    tenantActor: actor._id,
+    scope: 'tenant',
+    adminEmail: '',
+    adminRole: '',
+    action,
+    target,
+    details,
+    requestId: req.id || null,
+    ip: req.ip || req.headers?.['x-forwarded-for'] || '',
+    userAgent: (req.headers?.['user-agent'] || '').substring(0, 500),
+  });
 }

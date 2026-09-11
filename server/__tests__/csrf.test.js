@@ -95,3 +95,79 @@ describe("csrfProtection (Origin/Referer check)", () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe("csrfProtection (double-submit token fallback, cookie issuance)", () => {
+  const CSRF_COOKIE = "_csrf=sometok123";
+
+  it("issues a _csrf cookie on the first session-bearing response", async () => {
+    const res = await request(makeApp())
+      .get("/ping")
+      .set("Cookie", SESSION_COOKIE);
+    expect(res.status).toBe(200);
+    const csrfCookie = res.headers["set-cookie"]?.find((c) => c.startsWith("_csrf="));
+    expect(csrfCookie).toBeDefined();
+    // Double-submit relies on the cookie being host-only + SameSite (NOT
+    // readable by a cross-origin attacker site). Assert the cookie flags.
+    expect(csrfCookie).toContain("SameSite=");
+    expect(csrfCookie).toContain("Path=/");
+  });
+
+  it("allows a no-source request when the double-submit token matches (header)", async () => {
+    const res = await request(makeApp())
+      .post("/echo")
+      .set("Cookie", `${SESSION_COOKIE}; ${CSRF_COOKIE}`)
+      .set("X-CSRF-Token", "sometok123")
+      .send({});
+    expect(res.status).toBe(200);
+  });
+
+  it("allows a no-source request when the token matches in the body (_csrf field)", async () => {
+    const res = await request(makeApp())
+      .post("/echo")
+      .set("Cookie", `${SESSION_COOKIE}; ${CSRF_COOKIE}`)
+      .send({ _csrf: "sometok123" });
+    expect(res.status).toBe(200);
+  });
+
+  it("blocks a no-source request with a mismatched double-submit token", async () => {
+    const res = await request(makeApp())
+      .post("/echo")
+      .set("Cookie", `${SESSION_COOKIE}; ${CSRF_COOKIE}`)
+      .set("X-CSRF-Token", "wrong-token")
+      .send({});
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects a foreign Origin even when a valid double-submit token is present", async () => {
+    // The Origin check stays primary — a token must not override a clearly
+    // cross-origin source (csrf.js:89-91).
+    const res = await request(makeApp())
+      .post("/echo")
+      .set("Origin", "https://evil.example")
+      .set("Cookie", `${SESSION_COOKIE}; ${CSRF_COOKIE}`)
+      .set("X-CSRF-Token", "sometok123")
+      .send({});
+    expect(res.status).toBe(403);
+  });
+
+  it("treats the request's own origin as allowed (self-origin)", async () => {
+    const res = await request(makeApp())
+      .post("/echo")
+      .set("Host", "dentalos.test")
+      .set("Origin", "http://dentalos.test")
+      .set("Cookie", SESSION_COOKIE)
+      .send({});
+    // selfOrigin = http://dentalos.test matches the Origin header.
+    expect(res.status).toBe(200);
+  });
+
+  it("treats an allowed-origin request with a Referer from the same app as allowed", async () => {
+    const res = await request(makeApp())
+      .post("/echo")
+      .set("Origin", "https://app.dentalos.example")
+      .set("Referer", "https://app.dentalos.example")
+      .set("Cookie", SESSION_COOKIE)
+      .send({});
+    expect(res.status).toBe(200);
+  });
+});

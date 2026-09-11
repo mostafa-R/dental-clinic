@@ -35,7 +35,8 @@ router.use(protectSite);
  *     summary: Get platform settings
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: Current platform settings
@@ -78,7 +79,8 @@ router.get("/", authorizeSite("super_admin", "admin", "support"), getPlatformSet
  *     summary: Update platform settings
  *     description: Site realm. Requires `super_admin` role and 2FA confirmation. Updating `allowedDomains`, `maintenanceMode`, or `autoSuspendDays` triggers immediate enforcement.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     requestBody:
  *       required: true
  *       content:

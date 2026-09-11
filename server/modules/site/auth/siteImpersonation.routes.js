@@ -18,7 +18,8 @@ router.use(protectSite);
  *     summary: Start impersonating a clinic user
  *     description: Site realm. Requires `super_admin` or `admin` role and 2FA confirmation. Switches the site session to act on behalf of the clinic user. PHI stays masked for the impersonator.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -71,7 +72,8 @@ router.post(
  *     summary: End impersonation
  *     description: Site realm. Requires `super_admin` or `admin` role. Returns to the site admin session.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: Impersonation ended
@@ -93,6 +95,8 @@ router.post(
 router.post(
   '/end',
   authorizeSite('super_admin', 'admin'),
+  require2fa,
+  validate(z.object({ impersonationToken: z.string().min(1) })),
   audit('impersonation.end', 'user'),
   endImpersonation,
 );

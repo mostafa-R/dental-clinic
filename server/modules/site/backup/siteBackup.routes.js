@@ -15,7 +15,8 @@ router.use(protectSite);
  *     summary: List backups
  *     description: Site realm. Requires `super_admin` or `admin` role.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: List of backups
@@ -46,7 +47,8 @@ router.get("/", authorizeSite("super_admin", "admin"), getBackups);
  *     summary: Get a backup
  *     description: Site realm. Requires `super_admin` or `admin` role.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -84,7 +86,8 @@ router.get("/:id", authorizeSite("super_admin", "admin"), getBackup);
  *     summary: Trigger a manual backup
  *     description: Site realm. Requires `super_admin` role and 2FA confirmation. Runs an on-demand database backup immediately.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '201':
  *         description: Backup triggered

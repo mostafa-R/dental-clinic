@@ -29,7 +29,8 @@ router.use(protectSite);
  *     summary: List tenants
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: List of tenants
@@ -60,7 +61,8 @@ router.get("/", authorizeSite("super_admin", "admin", "support"), getTenants);
  *     summary: Get tenant statistics
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -99,7 +101,8 @@ router.get(
  *     summary: Get a tenant
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -137,7 +140,8 @@ router.get("/:id", authorizeSite("super_admin", "admin", "support"), getTenant);
  *     summary: Create a tenant
  *     description: Site realm. Requires `super_admin` or `admin` role and 2FA confirmation. Provisioning a tenant creates its database, plan subscription, and initial admin.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -193,7 +197,8 @@ router.post(
  *     summary: Update a tenant
  *     description: Site realm. Requires `super_admin` or `admin` role and 2FA confirmation.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -249,7 +254,8 @@ router.put(
  *     summary: Suspend a tenant
  *     description: Site realm. Requires `super_admin` or `admin` role and 2FA confirmation. Suspended tenants block all clinic traffic.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -291,7 +297,8 @@ router.put(
  *     summary: Activate a tenant
  *     description: Site realm. Requires `super_admin` or `admin` role and 2FA confirmation.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -333,7 +340,8 @@ router.put(
  *     summary: Archive a tenant
  *     description: Site realm. Destructive. Requires `super_admin` role and 2FA confirmation.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -375,7 +383,8 @@ router.put(
  *     summary: Delete a tenant
  *     description: Site realm. Most destructive operation. Requires `super_admin` role and 2FA confirmation.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id

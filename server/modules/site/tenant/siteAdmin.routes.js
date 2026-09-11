@@ -34,7 +34,8 @@ const adminSchema = z.object({
  *     summary: List site admins
  *     description: Site realm. Requires `super_admin` or `admin` role.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: List of admins
@@ -65,7 +66,8 @@ router.get("/", authorizeSite("super_admin", "admin"), getAdmins);
  *     summary: Get a site admin
  *     description: Site realm. Requires `super_admin` or `admin` role.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -103,7 +105,8 @@ router.get("/:id", authorizeSite("super_admin", "admin"), getAdmin);
  *     summary: Create a site admin
  *     description: Site realm. Requires `super_admin` role and 2FA confirmation.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -147,7 +150,8 @@ router.post("/", authorizeSite("super_admin"), require2faSuperAdmin, validate(ad
  *     summary: Update admin permissions
  *     description: Site realm. Requires `super_admin` role and 2FA confirmation.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -194,7 +198,8 @@ router.put("/:id/permissions", authorizeSite("super_admin"), require2faSuperAdmi
  *     summary: Update a site admin
  *     description: Site realm. Requires `super_admin` role and 2FA confirmation.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -244,7 +249,8 @@ router.put("/:id", authorizeSite("super_admin"), require2faSuperAdmin, validate(
  *     summary: Delete a site admin
  *     description: Site realm. Requires `super_admin` role and 2FA confirmation.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id

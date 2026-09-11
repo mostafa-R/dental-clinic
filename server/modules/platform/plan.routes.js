@@ -41,7 +41,8 @@ const planSchema = z.object({
  *     summary: List subscription plans
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: List of plans
@@ -72,7 +73,8 @@ router.get("/", authorizeSite("super_admin", "admin", "support"), getPlans);
  *     summary: Get a plan
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -110,7 +112,8 @@ router.get("/:id", authorizeSite("super_admin", "admin", "support"), getPlan);
  *     summary: Create a plan
  *     description: Site realm. Requires `super_admin` role and 2FA confirmation.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -163,7 +166,8 @@ router.post("/", authorizeSite("super_admin"), require2faSuperAdmin, validate(pl
  *     summary: Update a plan
  *     description: Site realm. Requires `super_admin` role and 2FA confirmation.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -222,7 +226,8 @@ router.put("/:id", authorizeSite("super_admin"), require2faSuperAdmin, validate(
  *     summary: Delete a plan
  *     description: Site realm. Requires `super_admin` role and 2FA confirmation.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id

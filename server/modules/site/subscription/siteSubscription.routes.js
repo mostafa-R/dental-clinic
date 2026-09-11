@@ -23,7 +23,8 @@ router.use(protectSite);
  *     summary: List subscriptions
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: List of subscriptions
@@ -58,7 +59,8 @@ router.get(
  *     summary: Get subscription revenue statistics
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: Revenue statistics
@@ -88,7 +90,8 @@ router.get(
  *     summary: Update a subscription
  *     description: Site realm. Requires `super_admin` or `admin` role and 2FA confirmation.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -130,7 +133,7 @@ router.get(
  */
 router.put(
   '/:id',
-  authorizeSite('super_admin', 'admin'),
+  authorizeSite('super_admin'),
   require2fa,
   validate(subscriptionSchema),
   updateSubscription
@@ -144,7 +147,8 @@ router.put(
  *     summary: Record a manual subscription payment
  *     description: Site realm. Requires `super_admin` or `admin` role and 2FA confirmation. Records an offline payment against the tenant's subscription.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: tenantId

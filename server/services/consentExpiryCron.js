@@ -21,7 +21,7 @@ async function expirePendingConsents() {
       expiresAt: { $ne: null, $lte: now },
       isActive: true,
     })
-      .select('_id tenant branch')
+      .select('_id tenant branch patient type title')
       .skip(processed)
       .limit(BATCH_SIZE)
       .lean();
@@ -45,7 +45,12 @@ async function expirePendingConsents() {
         type: 'consent.expired',
         tenant: c.tenant,
         branch: c.branch,
-        data: { consentId: String(c._id) },
+        data: {
+          consentId: String(c._id),
+          patientId: c.patient ? String(c.patient) : null,
+          type: c.type || '',
+          title: c.title || '',
+        },
       });
     }
   }

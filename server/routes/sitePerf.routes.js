@@ -16,7 +16,8 @@ router.use(protectSite);
  *     summary: Get in-process performance statistics
  *     description: Site realm. Requires `super_admin` or `admin` role. Returns request counts, average response times, and error counts tracked by the in-process perf monitor.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: Performance statistics
@@ -50,7 +51,8 @@ router.get("/", authorizeSite("super_admin", "admin"), (_req, res) => {
  *     summary: Reset performance statistics
  *     description: Site realm. Requires `super_admin` role. Clears the in-process perf counters.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: Statistics reset

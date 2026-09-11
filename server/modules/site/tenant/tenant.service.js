@@ -33,6 +33,7 @@ import Branch from '../../users/branch.model.js';
 import Role from '../../users/role.model.js';
 import User from '../../users/user.model.js';
 import WhatsappSetting from '../../whatsapp/whatsappSetting.model.js';
+import { disposeWhatsAppForTenant } from '../../../services/whatsapp.js';
 import Subscription from './subscription.model.js';
 import Tenant from './tenant.model.js';
 import { DEFAULT_ROLES } from '../../../constants/roles.js';
@@ -251,11 +252,11 @@ export async function createTenant({ name, email, phone, plan, status, address, 
     return { tenant, clinicAdmin };
   });
 
-  const tenantObj = tenant.toObject();
-  // NOTE: the admin login credentials are intentionally NOT returned. The
-  // caller supplies `adminPassword` themselves (required at the validator
-  // level), so echoing the password back here would only land it in response
-  // bodies and access logs in plaintext.
+  const { encryption: _enc, ...tenantObj } = tenant.toObject();
+  // NOTE: the admin login credentials and encryption.key are intentionally NOT
+  // returned. The adminPassword is supplied by the caller, and the encryption key
+  // must never leave the server (it is the per-tenant AES key used to encrypt
+  // all clinical PHI / attachment files).
   return {
     ...tenantObj,
     branchesCount: 1,
@@ -359,6 +360,10 @@ export async function deleteTenant(id) {
   const attachments = await MedicalAttachment.find({ tenant: id })
     .select('filename')
     .lean();
+
+  // Destroy any live WhatsApp client BEFORE the DB wipe so the tenant cannot
+  // keep an active pairing/sending session in memory after deletion.
+  await disposeWhatsAppForTenant(id);
 
   // All tenant-scoped collections are wiped in a single MongoDB transaction so a
   // mid-delete failure rolls back everything and never leaves orphaned PHI.

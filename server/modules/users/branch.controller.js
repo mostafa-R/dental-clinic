@@ -9,6 +9,7 @@ import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 import ApiError from '../../utils/ApiError.js';
 import { emitToBranch } from '../../socket/index.js';
+import { auditTenantAction } from '../../middleware/audit.js';
 
 export const listBranches = asyncHandler(async (req, res) => {
   const filter = {};
@@ -121,6 +122,13 @@ export const deleteBranch = asyncHandler(async (req, res) => {
       { session },
     );
   });
+
+  await auditTenantAction(
+    req,
+    'branch.delete',
+    { type: 'branch', id: branch._id, name: branch.name },
+    { tenant: String(branch.tenant || '') },
+  );
 
   emitToBranch(String(id), 'branch:deleted', { _id: id });
   return sendSuccess(res, { message: 'Branch deleted' });

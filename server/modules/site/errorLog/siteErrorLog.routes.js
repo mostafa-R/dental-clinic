@@ -14,7 +14,8 @@ router.use(protectSite);
  *     summary: List error logs
  *     description: Site realm. Requires `super_admin` or `admin` role.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: List of error logs
@@ -45,7 +46,8 @@ router.get('/', authorizeSite('super_admin', 'admin'), getErrorLogs);
  *     summary: Get error log statistics
  *     description: Site realm. Requires `super_admin` or `admin` role.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: Error log statistics
@@ -71,7 +73,8 @@ router.get('/stats', authorizeSite('super_admin', 'admin'), getErrorLogStats);
  *     summary: Resolve an error log
  *     description: Site realm. Requires `super_admin` or `admin` role. Marks the error log as resolved.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id

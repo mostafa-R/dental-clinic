@@ -19,8 +19,12 @@ vi.mock("../core/transaction.js", () => ({
   }),
 }));
 
+vi.mock("../services/inventoryCron.js", () => ({
+  emitItemAlerts: vi.fn(() => {}),
+}));
+
 vi.mock("../modules/inventory/inventory.service.js", () => ({
-  deductForProcedure: vi.fn(async () => []),
+  deductForProcedure: vi.fn(async () => ({ deductions: [], updatedItems: [], shortfall: 0 })),
 }));
 
 import mongoose from "mongoose";
@@ -96,14 +100,17 @@ describe("generateInvoiceFromPlan — transactional invoice + item linking (ISSU
     expect(fillingItem.invoice).toBe(invoice._id);
     // ...and persisted via plan.save inside the same transaction.
     expect(plan.save).toHaveBeenCalledWith(expect.objectContaining({ session: { mock: true } }));
-    // Inventory deduction joins the same session.
+    // Inventory deduction joins the same session, keyed on the procedure name
+    // and carrying the invoice id for later reversal.
     expect(deductForProcedure).toHaveBeenCalledWith(
-      patient.branch,
-      patient.tenant,
-      "",
-      "Filling",
-      "u1",
-      expect.objectContaining({ mock: true }),
+      expect.objectContaining({
+        branchId: patient.branch,
+        tenantId: patient.tenant,
+        procedureName: "Filling",
+        userId: "u1",
+        invoiceId: invoice._id,
+        session: expect.objectContaining({ mock: true }),
+      }),
     );
     expect(result.invoice).toBe(invoice);
   });

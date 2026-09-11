@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">20% </span>
+                <span class="strong">50% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>2/10</span>
+                <span class='fraction'>5/10</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">30% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/10</span>
+                <span class='fraction'>3/10</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/1</span>
+                <span class='fraction'>1/1</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">20% </span>
+                <span class="strong">50% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>2/10</span>
+                <span class='fraction'>5/10</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line low'></div>
+    <div class='status-line medium'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -123,14 +123,12 @@
 <a name='L58'></a><a href='#L58'>58</a>
 <a name='L59'></a><a href='#L59'>59</a>
 <a name='L60'></a><a href='#L60'>60</a>
-<a name='L61'></a><a href='#L61'>61</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L61'></a><a href='#L61'>61</a>
+<a name='L62'></a><a href='#L62'>62</a>
+<a name='L63'></a><a href='#L63'>63</a>
+<a name='L64'></a><a href='#L64'>64</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">9x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -166,12 +164,20 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">9x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -195,7 +201,7 @@ const whatsappSettingSchema = new mongoose.Schema({
   enabled: { type: Boolean, default: false },
   provider: {
     type: String,
-    enum: ['whatsapp_web', 'cloud_api', 'twilio'],
+    enum: ['whatsapp_web', 'cloud_api'],
     default: 'whatsapp_web',
   },
   config: {
@@ -216,6 +222,9 @@ const whatsappSettingSchema = new mongoose.Schema({
     installmentReminder: { type: Boolean, default: false },
     // Send a reschedule suggestion when a patient is marked no-show (BR-PT-04).
     noShowReminder: { type: Boolean, default: false },
+    // Live-queue patient notifications: joined / position / near-turn / turn-now
+    // (PRD §6.2) and the post-visit summary. Independent switch per clinic.
+    queueNotifications: { type: Boolean, default: false },
   },
   status: {
     type: String,
@@ -226,12 +235,12 @@ const whatsappSettingSchema = new mongoose.Schema({
   qrCode: { type: String, default: '', select: false },
 }, { timestamps: true });
 &nbsp;
-whatsappSettingSchema.pre('validate', function <span class="fstat-no" title="function not covered" >validateConfig(</span>) {
-<span class="cstat-no" title="statement not covered" >  if (this.enabled) {</span>
-<span class="cstat-no" title="statement not covered" >    if (!this.config?.phoneNumber) {</span>
+whatsappSettingSchema.pre('validate', function validateConfig() {
+  <span class="missing-if-branch" title="else path not taken" >E</span>if (this.enabled) {
+    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.config?.phoneNumber) {
 <span class="cstat-no" title="statement not covered" >      this.invalidate('config.phoneNumber', 'Phone number is required when WhatsApp is enabled');</span>
     }
-<span class="cstat-no" title="statement not covered" >    if (this.provider === 'cloud_api') {</span>
+    <span class="missing-if-branch" title="if path not taken" >I</span>if (this.provider === 'cloud_api') {
 <span class="cstat-no" title="statement not covered" >      if (!this.config?.accessToken) {</span>
 <span class="cstat-no" title="statement not covered" >        this.invalidate('config.accessToken', 'Access token is required for Cloud API provider');</span>
       }
@@ -250,7 +259,7 @@ export default mongoose.model('WhatsAppSetting', whatsappSettingSchema);
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-06T16:45:19.984Z
+                at 2026-09-11T17:00:57.398Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

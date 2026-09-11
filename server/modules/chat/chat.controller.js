@@ -18,6 +18,7 @@ export const sendChatMessage = asyncHandler(async (req, res) => {
   emitToChat({
     recipient, senderId: req.user._id, channel,
     tenantId: tenant ? String(tenant) : null,
+    branchId: String(branch._id ?? branch),
     event: 'chat:message', payload: { ...message, sender },
   });
   return sendSuccess(res, { message }, 201);
@@ -39,7 +40,7 @@ export const markMessagesRead = asyncHandler(async (req, res) => {
   if (!branch) throw ApiError.forbidden('Your account is not assigned to a branch');
 
   const tenant = currentTenant(req);
-  const senders = await chatService.markRead(branch, req.user._id, req.validatedBody.messageIds);
+  const { updated, senders } = await chatService.markRead(branch, req.user._id, req.validatedBody.messageIds);
   senders.forEach((senderId) => {
     emitToChat({
       recipient: senderId, tenantId: tenant ? String(tenant) : null,
@@ -47,7 +48,7 @@ export const markMessagesRead = asyncHandler(async (req, res) => {
       payload: { messageIds: req.validatedBody.messageIds, readerId: req.user._id },
     });
   });
-  return sendSuccess(res, { updated: req.validatedBody.messageIds.length });
+  return sendSuccess(res, { updated });
 });
 
 export const getUnreadCounts = asyncHandler(async (req, res) => {

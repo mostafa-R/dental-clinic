@@ -259,7 +259,7 @@
 Mongo + Socket Events → Event Bus Queue → Feature Store (مجمّع لكل مستأجر/مريض)
                                         → Prediction Services → Action Engine (Bots/Cron)
 ```
-- ✅ **Event Bus (في الذاكرة)** يلتقط حدث (موعد منشأ/مكتمل/ملغي/No-show، مريض جديد، موافقة موقّعة، دفعة/فاتورة، قسط متأخر، مخزون منخفض) → **Event Log** (30 يوم) + يغذي محرك الأتمتة (`services/eventBus.js`).
+- أول بناء: **Event Bus** يلتقط حدث (موعد منشأ/مكتمل، قسط، فاتورة، مخزون منخفض) → يغذي الخدمات.
 
 ### 12.2 خدمات الذكاء (بأولوية)
 | الخدمة | الأولوية | الملاحظات |
@@ -275,9 +275,9 @@ Mongo + Socket Events → Event Bus Queue → Feature Store (مجمّع لكل �
 
 ### 12.3 الأتمتة
 - ✅ Cron Jobs قائمة (أقساط، تعليق اشتراكات، نسخ احتياطي).
-- ✅ **قواعد/اشتراكات أحداث:** محرك `Trigger → Condition → Action` داخلي (Subscription على أحداث النظام) في `services/automationEngine.js` — نطاق فرع، تهدئة (cooldown)، Dry-run/اختبار `/test`، سجل تشغيل `automationRuns`، أذونات `automations`.
-- 🟡 **محرر No-Code** فوق المحرك (H2): المحرك + REST جاهزان؛ المحرر البصري مؤجّل.
-- ✅ قوالب جاهزة (تُثبَّت معطّلة افتراضياً لتجنّب تكرار كرونات WhatsApp): مكافحة No-show، Survey بعد زيارة، Reorder ذكي عند انخفاض المخزون، Recall — في `constants/automations.js`.
+- 🟡 **قواعد/اشتراكات أحداث:** داخلية أولًا (Subscription على أحداث النظام) → محرك `Trigger → Condition → Action`.
+- ❌ **محرر No-Code** فوق المحرك (H2): Trigger (موعد أُكمل/قسط تأخر) + Condition (فرع/نوع علاج) + Action (رسالة/مهمة/طلب شراء).
+- 🟡 قوالب جاهزة: مكافحة No-show، Survey بعد زيارة، Reorder ذكي عند انخفاض المخزون، Recall.
 
 ---
 
@@ -351,9 +351,9 @@ Mongo + Socket Events → Event Bus Queue → Feature Store (مجمّع لكل �
 | Stripe Billing + Onboarding Wizard (v3) | ❌ | 🔴 | §13 |
 | No-show Prediction (v3/Medplum) | ❌ | 🟠 | §12 |
 | Recall Engine (v3) | ❌ | 🟠 | §12 |
-| توقيع إلكتروني + موافقة مريض (v3) | ✅ (Backend) | 🟠 Portfolio/عرض وموافقة | §9.2 |
-| محرك أتمتة + قوالب (v3/Medplum) | ✅ (Backend) | 🟠 محرر No-Code بصري | §12.3 |
-| اشتقاقات/بنبدات أحداث → Event Bus (Medplum) | ✅ | 🟠 موفّر أحداث خارجي/Webhook | §12.1 |
+| توقيع إلكتروني + موافقة مريض (v3) | 🟡 | 🟠 | §9.2 |
+| محرك أتمتة + قوالب (v3/Medplum) | 🟡 | 🟠 | §12.3 |
+| اشتقاقات/بنبدات أحداث → Event Bus (Medplum) | ❌ | 🟠 | §12.1 |
 | تسوية مصرفية تلقائية (v3) | ❌ | 🔴 | H2 |
 | تأمين Claims Workbench FHIR (v3/Medplum) | ❌ | 🔴 | H2 |
 | BNPL (v3) | ❌ | 🔴 | H2 بعقد خارجي |
@@ -595,7 +595,7 @@ erDiagram
 | المجموعة | الوظيفة والحدود | فهارس/علاقات حيوية |
 |---|---|---|
 | `patients` | ملف موحّد: معرّف تسلسلي، اسم كامل، رقم وطني، تواصل، سجل طبي، تأمين، حالة، `mergedInto` للدمج | `(tenantId, patientId)` فريد · `(tenantId, branchId, phone)` فريد · `(tenantId, nationalId)` فريد جزئي · فهرس نصي (اسم/هاتف) |
-| `consents` | موافقات بسياق: نوع (علاج/تصوير/تخدير/مالية/عامة/تواصل إلكتروني)، إصدار، E-sign بتوقيع زمني + هاش HMAC تمبّر-يفيدنس، انتهاء؛ **تُجمَّد بعد التوقيع** (withdraw فقط يحفظ السجل) | `(patientId, type, version)` جزئي على النشط |
+| `consents` | موافقات بسياق: نوع (علاج/تصوير/الكترونية)، إصدار، توقيع (طابع زمني/مرفق E-sign)، انتهاء | `(patientId, type, version)` |
 | `attachments` | مرفقات مشفّرة (صور/أشعة/مستندات/توقيعات) + `accessClass: phi` | `(patientId, kind, createdAt)` |
 | `suppliers` | موردون للمخزون (دفتر مرجعي) | `(tenantId, name)` فريد |
 
@@ -660,7 +660,7 @@ erDiagram
 | المجموعة | الوظيفة والحدود | ملاحظات |
 |---|---|---|
 | `integrations` | إعدادات تكامل (WhatsApp Cloud، بوابات دفع، تقاويم) + Webhooks | عبر واجهة مجرّدة (ADR-5) |
-| `events` | **Event Log** (موعد أُكمل/قسط تأخر/فاتورة/مخزون منخفض) يغذّي Event Bus | `(tenantId, type, createdAt)` — **مُنفَّذ** (TTL 30 يوم، واجهة عقود الأحداث §12.1) |
+| `events` | **Event Log** (موعد أُكمل/قسط تأخر/فاتورة/مخزون منخفض) يغذّي Event Bus | `(tenantId, type, createdAt)` — واجهة عقود الأحداث (§12.1) |
 | `aiPredictions` | مخرجات النماذج + درجة ثقة + قرار إنساني | Human-in-the-loop إلزامي (G3) |
 | `aiFeedback` | ملاحظات المستخدم على التنبؤ/الاقتراح | يغذّي التحسين |
 | `backups` / `errorLogs` | سجلات نسخ واسترداد + أخطاء/Quarantine | موجود؛ يُوسَّع (RPO 15m) |

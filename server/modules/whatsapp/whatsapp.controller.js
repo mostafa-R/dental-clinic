@@ -62,7 +62,10 @@ export const status = asyncHandler(async (req, res) => {
 
 export const testMessage = asyncHandler(async (req, res) => {
   const tenant = currentTenant(req);
+  const tenantKey = String(tenant);
   const { to, message } = req.validatedBody;
+
+  throttleTestSends(tenantKey);
 
   const settings = await WhatsAppSetting.findOne({ tenant }).select('+qrCode');
   if (settings?.status === 'connecting') {
@@ -72,3 +75,24 @@ export const testMessage = asyncHandler(async (req, res) => {
   await sendWhatsAppMessage(tenant, to, message);
   return sendSuccess(res, { sent: true, to, message });
 });
+
+// Per-tenant abuse guard on the free-form "send to any number" test endpoint:
+// a clinic user with settings:update must not be able to blast arbitrary
+// numbers at the clinic's expense. The log is in-memory by design (a restart
+// resets it, which is fine for throttling).
+const TEST_SEND_MAX = 5;
+const TEST_SEND_WINDOW_MS = 60 * 60 * 1000;
+const testSendLog = new Map();
+
+function throttleTestSends(tenantKey) {
+  const now = Date.now();
+  const cutoff = now - TEST_SEND_WINDOW_MS;
+  const recent = (testSendLog.get(tenantKey) || []).filter((ts) => ts > cutoff);
+  if (recent.length >= TEST_SEND_MAX) {
+    throw ApiError.tooManyRequests(
+      `Test message limit reached (${TEST_SEND_MAX} per hour). Contact support if you need more.`,
+    );
+  }
+  recent.push(now);
+  testSendLog.set(tenantKey, recent);
+}

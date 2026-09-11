@@ -1,435 +1,313 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import express from 'express';
+import mongoose from 'mongoose';
 
-// Mock the monitoring utilities
-vi.mock('../utils/healthMonitor.js', () => ({
-  healthCheckResponse: vi.fn((req, res) => {
-    res.status(200).json({
-      success: true,
-      status: 'healthy',
-      message: 'Service is healthy',
-      health: {
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        checks: [
-          {
-            component: 'database',
-            status: 'healthy',
-            details: { connectionState: 'connected', responseTime: '10ms' }
-          },
-          {
-            component: 'redis',
-            status: 'healthy',
-            details: { connected: true, responseTime: '5ms' }
-          }
-        ],
-        summary: {
-          totalChecks: 2,
-          healthy: 2,
-          degraded: 0,
-          unhealthy: 0,
-          criticalFailures: 0
-        }
-      }
-    });
-  }),
-  
-  metricsResponse: vi.fn((req, res) => {
-    // Check authentication for metrics
-    if (!req.headers.authorization && !req.cookies?.site_access) {
-      return res.status(401).json({ success: false, message: 'Not authenticated' });
-    }
-    
-    res.status(200).json({
-      success: true,
-      metrics: {
-        health: { status: 'healthy' },
-        performance: {
-          routesUnder200ms: 10,
-          totalRoutes: 10,
-          globalAvgMs: 50,
-          prdTargetMet: true
-        },
-        database: {
-          queries: [],
-          summary: {
-            totalQueries: 100,
-            slowQueryPercentage: 5,
-            monitoringEnabled: true
-          }
-        },
-        timestamp: new Date().toISOString()
-      }
-    });
-  }),
-  
-  getSystemHealth: vi.fn().mockResolvedValue({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    checks: [],
-    summary: {
-      totalChecks: 5,
-      healthy: 5,
-      degraded: 0,
-      unhealthy: 0,
-      criticalFailures: 0
-    }
-  }),
-  
-  getSystemMetrics: vi.fn().mockResolvedValue({
-    health: { status: 'healthy' },
-    performance: {},
-    database: {},
-    errors: {},
-    redis: {},
-    system: {},
-    timestamp: new Date().toISOString()
-  })
+// The REAL monitoring stack is exercised here (healthMonitor / perfMonitor /
+// dbMonitor aggregation, status derivation and response shaping). Only the
+// environment-leaf dependencies are stubbed so results are deterministic:
+//   - getRedisInfo (no Redis server required)
+//   - isRedisConnected / getRedis (shared-metrics exporter unplugs cleanly)
+//   - getErrorMonitoringStats (in-memory error monitor has no fixtures)
+// This is NOT a mock-tautology: the code under test is the real middleware.
+vi.mock('../config/redis.js', () => ({
+  getRedisInfo: vi.fn(),
+  isRedisConnected: vi.fn(() => false),
+  getRedis: vi.fn(() => null),
 }));
+vi.mock('../utils/errorMonitor.js', () => ({ getErrorMonitoringStats: vi.fn() }));
 
-// Mock database monitoring
-vi.mock('../utils/dbMonitor.js', () => ({
-  setupDbMonitoring: vi.fn(),
-  getDbStats: vi.fn().mockReturnValue({
-    queries: [],
-    summary: {
-      totalQueries: 100,
-      totalSlowQueries: 5,
-      overallAvgDuration: 25,
-      slowQueryPercentage: 5,
-      slowQueryThreshold: 100,
-      monitoringEnabled: true
-    }
-  }),
-  dbStatsHeader: vi.fn((req, res, next) => {
-    if (req.headers['x-debug-db'] === 'true') {
-      res.setHeader('X-DB-Stats', '{"totalQueries":100,"slowQueryPercentage":5}');
-    }
-    next();
-  })
-}));
+import * as redisConfig from '../config/redis.js';
+import * as errorMonitor from '../utils/errorMonitor.js';
+import {
+  getSystemHealth,
+  healthCheckResponse,
+  publicHealthResponse,
+  metricsResponse,
+} from '../utils/healthMonitor.js';
+import { perfMiddleware, getPerfStats, resetPerfStats } from '../utils/perfMonitor.js';
+import { dbStatsHeader, getDbStats, resetDbStats } from '../utils/dbMonitor.js';
 
-// Mock performance monitoring
-vi.mock('../utils/perfMonitor.js', () => ({
-  getPerfStats: vi.fn().mockReturnValue({
-    routes: [],
-    totals: {
-      totalRequests: 1000,
-      totalErrors: 10,
-      totalRoutes: 15
-    },
-    globalAvgMs: 45,
-    routesUnder200ms: 15,
-    routesOver200ms: 0,
-    prdTargetMet: true
-  }),
-  perfMiddleware: vi.fn((req, res, next) => {
-    const start = process.hrtime.bigint();
-    const originalEnd = res.end.bind(res);
-    
-    res.end = function(...args) {
-      const durationNs = Number(process.hrtime.bigint() - start);
-      const durationMs = Math.round(durationNs / 1e6 * 10) / 10;
-      res.setHeader('X-Response-Time-MS', String(durationMs));
-      return originalEnd(...args);
-    };
-    
-    next();
-  })
-}));
+const healthyErrorStats = {
+  errors: [],
+  summary: { totalErrors: 0, activeAlerts: 0, uniqueErrorTypes: 0, monitoringEnabled: true },
+};
 
-// Import the mocked utilities
-import { healthCheckResponse, metricsResponse } from '../utils/healthMonitor.js';
-import { perfMiddleware } from '../utils/perfMonitor.js';
-import { dbStatsHeader } from '../utils/dbMonitor.js';
+const healthyRedisInfo = {
+  connected: true,
+  usedMemory: '1.00M',
+  totalConnections: 1,
+  uptime: 60,
+  cacheHits: 0,
+  cacheMisses: 0,
+  hitRate: 0,
+};
 
 describe('Performance Monitoring System', () => {
   let app;
-  
+
+  beforeAll(async () => {
+    const testDbUri = process.env.TEST_MONGO_URI || 'mongodb://127.0.0.1:27017/dental_os_test';
+    if (mongoose.connection.readyState !== 1) {
+      await mongoose.connect(testDbUri);
+    }
+  });
+
+  afterAll(async () => {
+    await mongoose.disconnect();
+  });
+
   beforeEach(() => {
     app = express();
     app.use(express.json());
-    vi.clearAllMocks();
+    vi.mocked(redisConfig.getRedisInfo).mockResolvedValue(healthyRedisInfo);
+    vi.mocked(errorMonitor.getErrorMonitoringStats).mockReturnValue(healthyErrorStats);
+    resetPerfStats();
+    resetDbStats();
   });
-  
+
   describe('Health Check Endpoint', () => {
-    it('should return health status without authentication', async () => {
+    it('reports healthy with full detail when every component is healthy', async () => {
       app.get('/health', healthCheckResponse);
-      
+
       const response = await request(app).get('/health');
-      
+
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.status).toBe('healthy');
       expect(response.body.health).toBeDefined();
-      expect(response.body.health.status).toBe('healthy');
       expect(response.body.health.checks).toBeInstanceOf(Array);
+
+      // The database check is REAL — it pings the connected test DB.
+      const dbCheck = response.body.health.checks.find((c) => c.component === 'database');
+      expect(dbCheck).toBeDefined();
+      expect(dbCheck.status).toBe('healthy');
     });
-    
-    it('should respond quickly (< 100ms)', async () => {
-      app.get('/health', healthCheckResponse);
-      
-      const startTime = Date.now();
+
+    it('exposes a sanitized public health payload (no internals)', async () => {
+      app.get('/health', publicHealthResponse);
+
       const response = await request(app).get('/health');
-      const duration = Date.now() - startTime;
-      
+
       expect(response.status).toBe(200);
-      expect(duration).toBeLessThan(100); // Should respond in under 100ms
-    });
-    
-    it('should handle concurrent health checks', async () => {
-      app.get('/health', healthCheckResponse);
-      
-      const concurrentRequests = 10;
-      const promises = [];
-      
-      for (let i = 0; i < concurrentRequests; i++) {
-        promises.push(request(app).get('/health'));
-      }
-      
-      const responses = await Promise.all(promises);
-      
-      // All requests should succeed
-      responses.forEach(response => {
-        expect(response.status).toBe(200);
-        expect(response.body.success).toBe(true);
+      expect(response.body).toEqual({
+        success: true,
+        status: 'ok',
+        message: 'Service is up',
       });
+      // Never leaks DB names, versions, pids, or internal error text.
+      expect(JSON.stringify(response.body)).not.toMatch(/database|mongoose|pid|error/i);
+    });
+
+    it('aggregates all critical component checks with a summary', async () => {
+      const health = await getSystemHealth();
+
+      const components = health.checks.map((c) => c.component);
+      expect(components).toEqual(
+        expect.arrayContaining(['database', 'redis', 'memory', 'disk', 'performance', 'error_monitoring']),
+      );
+      expect(health.summary.totalChecks).toBe(health.checks.length);
+      expect(health.summary.healthy + health.summary.degraded + health.summary.unhealthy).toBe(
+        health.checks.length,
+      );
+      expect(health.summary.criticalFailures).toBeGreaterThanOrEqual(0);
     });
   });
-  
+
   describe('Metrics Endpoint', () => {
-    it('should require authentication', async () => {
+    it('serves real aggregated metrics (auth is enforced at the route layer)', async () => {
+      // routes.js mounts metricsResponse behind protectSite + authorizeSite —
+      // see routes/routes.js:97. Here we verify the real payload shape.
       app.get('/metrics', metricsResponse);
-      
+
       const response = await request(app).get('/metrics');
-      
-      expect(response.status).toBe(401);
-      expect(response.body.success).toBe(false);
-      expect(response.body.message).toContain('Not authenticated');
-    });
-    
-    it('should return metrics with authentication', async () => {
-      app.get('/metrics', metricsResponse);
-      
-      const response = await request(app)
-        .get('/metrics')
-        .set('Authorization', 'Bearer test-token');
-      
+
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.metrics).toBeDefined();
+      for (const key of ['health', 'performance', 'database', 'errors', 'redis', 'system']) {
+        expect(response.body.metrics[key]).toBeDefined();
+      }
       expect(response.body.metrics.health.status).toBe('healthy');
+      expect(response.body.metrics.database.summary.monitoringEnabled).toBe(true);
     });
-    
-    it('should include performance metrics', async () => {
+
+    it('reflects routes tracked by the perf middleware', async () => {
+      app.use(perfMiddleware);
+      app.get('/api/fast', (_req, res) => res.json({ ok: true }));
       app.get('/metrics', metricsResponse);
-      
-      const response = await request(app)
-        .get('/metrics')
-        .set('Authorization', 'Bearer test-token');
-      
-      expect(response.body.metrics.performance).toBeDefined();
-      expect(response.body.metrics.performance.routesUnder200ms).toBe(10);
-      expect(response.body.metrics.performance.totalRoutes).toBe(10);
-      expect(response.body.metrics.performance.prdTargetMet).toBe(true);
+
+      await request(app).get('/api/fast');
+
+      const response = await request(app).get('/metrics');
+      expect(response.status).toBe(200);
+      const routes = response.body.metrics.performance.routes;
+      expect(routes.some((r) => r.route === 'GET /api/fast' && r.count === 1)).toBe(true);
     });
   });
-  
+
   describe('Performance Middleware', () => {
-    it('should add response time header', async () => {
+    it('adds a response-time header and records real route stats', async () => {
       app.use(perfMiddleware);
-      app.get('/test', (req, res) => {
-        res.json({ message: 'test' });
-      });
-      
-      const response = await request(app).get('/test');
-      
+      app.get('/fast', (_req, res) => res.json({ speed: 'fast' }));
+
+      const response = await request(app).get('/fast');
+
       expect(response.headers['x-response-time-ms']).toBeDefined();
-      const responseTime = parseFloat(response.headers['x-response-time-ms']);
-      expect(responseTime).toBeGreaterThan(0);
-      expect(responseTime).toBeLessThan(100); // Should be fast for simple endpoint
+      expect(Number(response.headers['x-response-time-ms'])).toBeGreaterThan(0);
+
+      const stats = getPerfStats();
+      const route = stats.routes.find((r) => r.route === 'GET /fast');
+      expect(route).toBeDefined();
+      expect(route.count).toBe(1);
+      expect(route.errors).toBe(0);
     });
-    
-    it('should track different route performance', async () => {
+
+    it('measures a slow route as slower than a fast one', async () => {
       app.use(perfMiddleware);
-      
-      // Fast endpoint
-      app.get('/fast', (req, res) => {
-        res.json({ speed: 'fast' });
-      });
-      
-      // Simulated slow endpoint
-      app.get('/slow', (req, res) => {
-        setTimeout(() => {
-          res.json({ speed: 'slow' });
-        }, 50);
-      });
-      
+      app.get('/fast', (_req, res) => res.json({ speed: 'fast' }));
+      app.get('/slow', (_req, res) => setTimeout(() => res.json({ speed: 'slow' }), 50));
+
       const fastResponse = await request(app).get('/fast');
       const slowResponse = await request(app).get('/slow');
-      
-      const fastTime = parseFloat(fastResponse.headers['x-response-time-ms']);
-      const slowTime = parseFloat(slowResponse.headers['x-response-time-ms']);
-      
+
+      const fastTime = Number(fastResponse.headers['x-response-time-ms']);
+      const slowTime = Number(slowResponse.headers['x-response-time-ms']);
       expect(fastTime).toBeLessThan(slowTime);
-      expect(slowTime).toBeGreaterThan(50); // Should reflect the 50ms delay
+      expect(slowTime).toBeGreaterThanOrEqual(49);
+    });
+
+    it('counts error responses per route', async () => {
+      app.use(perfMiddleware);
+      app.get('/boom', (_req, res) => res.status(500).json({ error: 'x' }));
+
+      await request(app).get('/boom');
+
+      const route = getPerfStats().routes.find((r) => r.route === 'GET /boom');
+      expect(route).toBeDefined();
+      expect(route.errors).toBe(1);
+    });
+
+    it('reports prdTargetMet when every tracked route is under 200ms', async () => {
+      app.use(perfMiddleware);
+      app.get('/fast-route', (_req, res) => res.json({ ok: true }));
+
+      await request(app).get('/fast-route');
+
+      const stats = getPerfStats();
+      expect(stats.totals.totalRoutes).toBe(1);
+      expect(stats.routesUnder200ms).toBe(1);
+      expect(stats.prdTargetMet).toBe(true);
     });
   });
-  
+
   describe('Database Monitoring', () => {
-    it('should add DB stats header when debug flag is set', async () => {
+    it('adds a DB stats header when the debug flag is set', async () => {
       app.use(dbStatsHeader);
-      app.get('/test', (req, res) => {
-        res.json({ message: 'test' });
-      });
-      
-      const response = await request(app)
-        .get('/test')
-        .set('X-Debug-DB', 'true');
-      
+      app.get('/test', (_req, res) => res.json({ message: 'test' }));
+
+      const response = await request(app).get('/test').set('X-Debug-DB', 'true');
+
       expect(response.headers['x-db-stats']).toBeDefined();
       const stats = JSON.parse(response.headers['x-db-stats']);
-      expect(stats.totalQueries).toBe(100);
-      expect(stats.slowQueryPercentage).toBe(5);
+      expect(stats.totalQueries).toBe(getDbStats().summary.totalQueries);
+      expect(stats.slowQueryPercentage).toBe(getDbStats().summary.slowQueryPercentage);
     });
-    
-    it('should not add DB stats header without debug flag', async () => {
+
+    it('omits the DB stats header without the debug flag', async () => {
       app.use(dbStatsHeader);
-      app.get('/test', (req, res) => {
-        res.json({ message: 'test' });
-      });
-      
+      app.get('/test', (_req, res) => res.json({ message: 'test' }));
+
       const response = await request(app).get('/test');
-      
+
       expect(response.headers['x-db-stats']).toBeUndefined();
     });
   });
-  
-  describe('Integration: All monitoring together', () => {
-    it('should work together without conflicts', async () => {
-      // Setup app with all monitoring middleware
+
+  describe('Integration: all monitoring together', () => {
+    it('combines perf + db + health middleware without conflicts', async () => {
       app.use(perfMiddleware);
       app.use(dbStatsHeader);
-      
-      // Add health endpoint
       app.get('/health', healthCheckResponse);
-      
-      // Add a test endpoint
-      app.get('/api/test', (req, res) => {
-        res.json({ success: true, data: 'test data' });
-      });
-      
-      // Test 1: Health endpoint should have performance headers
-      const healthResponse = await request(app).get('/health');
-      
-      expect(healthResponse.status).toBe(200);
-      expect(healthResponse.headers['x-response-time-ms']).toBeDefined();
-      expect(healthResponse.body.success).toBe(true);
-      
-      // Test 2: Regular endpoint with debug DB flag
-      const testResponse = await request(app)
-        .get('/api/test')
-        .set('X-Debug-DB', 'true');
-      
-      expect(testResponse.status).toBe(200);
-      expect(testResponse.headers['x-response-time-ms']).toBeDefined();
-      expect(testResponse.headers['x-db-stats']).toBeDefined();
-      expect(testResponse.body.success).toBe(true);
-      
-      // Test 3: Regular endpoint without debug DB flag
-      const testResponse2 = await request(app).get('/api/test');
-      
-      expect(testResponse2.status).toBe(200);
-      expect(testResponse2.headers['x-response-time-ms']).toBeDefined();
-      expect(testResponse2.headers['x-db-stats']).toBeUndefined();
+      app.get('/api/test', (_req, res) => res.json({ success: true, data: 'x' }));
+
+      const health = await request(app).get('/health');
+      expect(health.status).toBe(200);
+      expect(health.headers['x-response-time-ms']).toBeDefined();
+
+      const withDb = await request(app).get('/api/test').set('X-Debug-DB', 'true');
+      expect(withDb.status).toBe(200);
+      expect(withDb.headers['x-response-time-ms']).toBeDefined();
+      expect(withDb.headers['x-db-stats']).toBeDefined();
+
+      const plain = await request(app).get('/api/test');
+      expect(plain.status).toBe(200);
+      expect(plain.headers['x-db-stats']).toBeUndefined();
+      expect(plain.headers['x-response-time-ms']).toBeDefined();
     });
-    
-    it('should maintain performance under load', async () => {
+
+    it('tracks every concurrent response and stays correct over 20 requests', async () => {
       app.use(perfMiddleware);
-      app.get('/load-test', (req, res) => {
-        res.json({ request: req.query.id });
-      });
-      
-      const concurrentRequests = 20;
-      const startTime = Date.now();
-      const promises = [];
-      
-      for (let i = 0; i < concurrentRequests; i++) {
-        promises.push(
-          request(app)
-            .get('/load-test')
-            .query({ id: i })
-        );
-      }
-      
-      const responses = await Promise.all(promises);
-      const totalDuration = Date.now() - startTime;
-      
-      // All requests should succeed
+      app.get('/load-test', (req, res) => res.json({ request: req.query.id }));
+
+      const responses = await Promise.all(
+        Array.from({ length: 20 }, (_v, i) =>
+          request(app).get('/load-test').query({ id: i }),
+        ),
+      );
+
       responses.forEach((response, i) => {
         expect(response.status).toBe(200);
         expect(response.body.request).toBe(String(i));
         expect(response.headers['x-response-time-ms']).toBeDefined();
       });
-      
-      // Average response time should be reasonable
-      const avgDuration = totalDuration / concurrentRequests;
-      console.log(`Average response time for ${concurrentRequests} concurrent requests: ${avgDuration.toFixed(2)}ms`);
-      
-      expect(avgDuration).toBeLessThan(100); // Should handle 20 concurrent requests efficiently
+
+      const route = getPerfStats().routes.find((r) => r.route === 'GET /load-test');
+      expect(route).toBeDefined();
+      expect(route.count).toBe(20);
+      expect(route.errors).toBe(0);
     });
   });
-  
-  describe('Error Handling in Monitoring', () => {
-    it('should handle errors gracefully in health check', async () => {
-      // Mock a failing health check
-      const failingHealthCheck = vi.fn((req, res) => {
-        res.status(503).json({
-          success: false,
-          status: 'unhealthy',
-          message: 'Service degraded',
-          error: 'Database connection failed'
-        });
-      });
-      
-      app.get('/health-failing', failingHealthCheck);
-      
-      const response = await request(app).get('/health-failing');
-      
-      expect(response.status).toBe(503);
-      expect(response.body.success).toBe(false);
-      expect(response.body.status).toBe('unhealthy');
+
+  describe('Error handling in monitoring', () => {
+    it('reports unhealthy (503) and sanitizes the body when a critical component fails', async () => {
+      vi.mocked(redisConfig.getRedisInfo).mockResolvedValue({ connected: false });
+
+      const health = await getSystemHealth();
+      expect(health.status).toBe('unhealthy');
+      const redisCheck = health.checks.find((c) => c.component === 'redis');
+      expect(redisCheck.status).toBe('unhealthy');
+
+      app.get('/health', healthCheckResponse);
+      app.get('/public', publicHealthResponse);
+
+      const detailed = await request(app).get('/health');
+      expect(detailed.status).toBe(503);
+      expect(detailed.body.success).toBe(false);
+      expect(detailed.body.health.summary.criticalFailures).toBeGreaterThanOrEqual(1);
+
+      const sanitized = await request(app).get('/public');
+      expect(sanitized.status).toBe(503);
+      expect(sanitized.body.success).toBe(false);
+      expect(sanitized.body).not.toHaveProperty('error');
+      expect(JSON.stringify(sanitized.body)).not.toMatch(/redis-down|internal/i);
     });
-    
-    it('should include error information in metrics when available', async () => {
-      const errorMetricsResponse = vi.fn((req, res) => {
-        res.status(200).json({
-          success: true,
-          metrics: {
-            health: { status: 'degraded' },
-            errors: {
-              summary: {
-                totalErrors: 5,
-                activeAlerts: 1,
-                monitoringEnabled: true
-              }
-            },
-            timestamp: new Date().toISOString()
-          }
-        });
+
+    it('downgrades the error_monitoring check when alerts exceed thresholds', async () => {
+      vi.mocked(errorMonitor.getErrorMonitoringStats).mockReturnValue({
+        errors: [{ errorKey: 'E_MONGO', errorRate: 2, totalCount: 10 }],
+        summary: {
+          totalErrors: 10,
+          activeAlerts: 6,
+          uniqueErrorTypes: 1,
+          monitoringEnabled: true,
+        },
       });
-      
-      app.get('/error-metrics', errorMetricsResponse);
-      
-      const response = await request(app)
-        .get('/error-metrics')
-        .set('Authorization', 'Bearer test-token');
-      
-      expect(response.status).toBe(200);
-      expect(response.body.metrics.health.status).toBe('degraded');
-      expect(response.body.metrics.errors.summary.totalErrors).toBe(5);
-      expect(response.body.metrics.errors.summary.activeAlerts).toBe(1);
+
+      const health = await getSystemHealth();
+      const errorCheck = health.checks.find((c) => c.component === 'error_monitoring');
+      expect(errorCheck.status).toBe('unhealthy');
+      expect(health.status).toBe('unhealthy');
     });
   });
 });

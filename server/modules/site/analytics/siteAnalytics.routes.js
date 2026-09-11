@@ -15,7 +15,8 @@ router.use(protectSite);
  *     summary: Get global platform statistics
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role. Aggregates tenants, users, invoices, and revenue across the platform.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: Global statistics
@@ -45,7 +46,8 @@ router.get(
  *     summary: Get growth data
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role. Returns time-series growth of tenants, users, and revenue.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: Growth data
@@ -75,7 +77,8 @@ router.get(
  *     summary: Get tenant usage
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role. Returns usage and activity for a specific tenant.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - in: path
  *         name: tenantId

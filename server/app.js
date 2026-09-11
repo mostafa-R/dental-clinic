@@ -169,8 +169,8 @@ const generalLimiter = rateLimit({
 
 app.use("/api", requestId, generalLimiter, perfMiddleware, abuseMonitor, userRateLimit({ windowMs: 60000, max: 200 }), maintenance, ipAllowlist, hostPolicy, tenantRouter, apiRouter);
 
-app.use(logError);
 app.use(notFound);
+app.use(logError);
 app.use(errorHandler);
 
 // Import and use error monitoring middleware

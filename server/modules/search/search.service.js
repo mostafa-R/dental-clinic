@@ -183,9 +183,11 @@ export async function globalSearch(branchFilter, query, can = () => true, option
         .lean(),
     );
   }
-  if (!phoneLike && can('inventory')) {
+  // Inventory search is NOT gated on `!phoneLike`: a numeric SKU or supplier
+  // phone must still be findable (issue #13).
+  if (can('inventory')) {
     textOnlyPromises.push(
-      InventoryItem.find({ ...branchFilter, $or: [{ name: regex }, { sku: regex }, { category: regex }, { supplier: regex }] })
+      InventoryItem.find({ ...branchFilter, isActive: true, $or: [{ name: regex }, { sku: regex }, { category: regex }, { supplier: regex }] })
         .select('name sku category unit quantity reorderPoint')
         .limit(5)
         .lean(),

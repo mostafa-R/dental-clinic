@@ -29,7 +29,6 @@ export const MODULES = [
   { key: 'prescriptions', label: 'Prescriptions' },
   { key: 'queue', label: 'Queue & Waitlist' },
   { key: 'installments', label: 'Installments & Payments' },
-  { key: 'whatsapp', label: 'WhatsApp Integration' },
   { key: 'platform_settings', label: 'Platform Settings' },
   { key: 'users', label: 'Staff & Users' },
   { key: 'branches', label: 'Branches' },

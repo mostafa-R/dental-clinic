@@ -5,12 +5,14 @@ import { connectDB, disconnectDB } from "./config/db.js";
 import { connectRedis, disconnectRedis } from "./config/redis.js";
 import { runMigrations } from "./migrations/runner.js";
 import { setupDbMonitoring } from "./utils/dbMonitor.js";
+import { startMetricsExport, stopMetricsExport } from "./utils/redisMetrics.js";
 import { startAbuseCron, stopAbuseCron, stopAbuseFlusher } from "./services/abuseDetection.js";
 import { startBackupCron, stopBackupCron } from "./services/backupCron.js";
 import { startInstallmentCron, stopInstallmentCron } from "./services/installmentCron.js";
 import { startInventoryCron, stopInventoryCron } from "./services/inventoryCron.js";
 import { startConsentExpiryCron, stopConsentExpiryCron } from "./services/consentExpiryCron.js";
 import { startNoShowCron, stopNoShowCron } from "./services/noShowCron.js";
+import { startQueueNotifyCron, stopQueueNotifyCron } from "./services/queueNotifyCron.js";
 import { startSuspensionCron, stopSuspensionCron } from "./services/suspensionCron.js";
 import { disconnectAllWhatsAppClients } from "./services/whatsapp.js";
 import { startWhatsAppReminderCron, stopWhatsAppReminderCron } from "./services/whatsappReminderCron.js";
@@ -57,6 +59,7 @@ async function start() {
 
   await connectRedis();
   await upgradeRateLimitStore();
+  startMetricsExport();
 
   const httpServer = http.createServer(app);
   initSocket(httpServer);
@@ -68,11 +71,18 @@ async function start() {
   startSuspensionCron();
   startAbuseCron();
   startWhatsAppReminderCron();
+  if (!process.env.BACKUP_ENCRYPTION_KEY) {
+    console.error(
+      "[Backup] WARNING: BACKUP_ENCRYPTION_KEY is not set. Backup creation is disabled " +
+        "until it is configured (backups refuse to run unencrypted).",
+    );
+  }
   startBackupCron().catch((err) => {
     console.error("[Backup-Cron] Failed to initialize:", err.message);
   });
   startInstallmentCron();
   startNoShowCron();
+  startQueueNotifyCron();
   startInventoryCron();
   startConsentExpiryCron();
 
@@ -89,10 +99,13 @@ async function start() {
     stopBackupCron();
     stopInstallmentCron();
     stopNoShowCron();
+    stopQueueNotifyCron();
     stopInventoryCron();
     stopConsentExpiryCron();
 
     await disconnectAllWhatsAppClients();
+
+    stopMetricsExport();
 
     const io = getIO();
     if (io) io.close();

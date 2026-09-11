@@ -20,6 +20,10 @@ vi.mock("../core/transaction.js", () => ({
   withTransaction: vi.fn(async (fn) => fn({})),
 }));
 
+vi.mock("../services/cronLock.js", () => ({
+  withCronLock: vi.fn(async (_key, _ttl, fn) => fn()),
+}));
+
 import PlatformSetting from "../modules/platform/platformSetting.model.js";
 import Subscription from "../modules/site/tenant/subscription.model.js";
 import Tenant from "../modules/site/tenant/tenant.model.js";

@@ -106,6 +106,40 @@ export function authorizeSite(...roles) {
 }
 
 /**
+ * Enforce a granular platform permission string (constants/sitePermissions.js).
+ *
+ * `super_admin` always passes. Every other role must hold at least one of the
+ * listed permission strings in its effective set (stored `permissions` array,
+ * falling back to the role's defaults). This is the fine-grained gate for the
+ * platform analytics endpoints — do not replace it with a global
+ * `isSystemAdmin` style override.
+ */
+export function requireSitePermission(...permissions) {
+  if (permissions.length === 0) {
+    throw new Error("requireSitePermission() requires at least one permission");
+  }
+
+  return function requireSitePermissionMiddleware(req, _res, next) {
+    if (!req.siteAdmin) {
+      return next(ApiError.unauthorized("Not authenticated"));
+    }
+
+    if (req.siteAdmin.role === "super_admin") return next();
+
+    const effective = new Set(
+      effectiveSitePermissions(req.siteAdmin.role, req.siteAdmin.permissions),
+    );
+    if (!permissions.some((p) => effective.has(p))) {
+      return next(
+        ApiError.forbidden("Your account is not authorized for this action"),
+      );
+    }
+
+    return next();
+  };
+}
+
+/**
  * Middleware to validate tenant access for site admins.
  * Ensures site admins can only access tenant-scoped data they're authorized for.
  * 

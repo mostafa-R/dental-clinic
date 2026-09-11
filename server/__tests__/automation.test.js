@@ -41,9 +41,17 @@ import automationRouter from "../modules/automation/automation.routes.js";
 import Automation from "../modules/automation/automation.model.js";
 import AutomationRun from "../modules/automation/automationRun.model.js";
 import EventLog from "../modules/automation/eventLog.model.js";
-import { getPath, renderTemplate, evaluateCondition, applyRule } from "../services/automationEngine.js";
+import {
+  getPath,
+  renderTemplate,
+  evaluateCondition,
+  applyRule,
+  invalidateAutomationCache,
+  maskContact,
+} from "../services/automationEngine.js";
 import { publishEvent } from "../services/eventBus.js";
 import { startAutomationEngine, stopAutomationEngine } from "../services/automationEngine.js";
+import { assertSafeWebhookUrl, isBlockedIp } from "../utils/webhookGuard.js";
 import { emitToBranch } from "../socket/index.js";
 import { sendWhatsAppMessage } from "../services/whatsapp.js";
 import { protect } from "../middleware/auth.js";
@@ -105,6 +113,42 @@ describe("automationEngine helpers", () => {
     expect(evaluateCondition({ field: "status", op: "in", value: ["scheduled", "confirmed"] }, ev)).toBe(true);
     expect(evaluateCondition({ field: "mission", op: "exists", value: true }, ev)).toBe(false);
   });
+
+  it("maskContact hides the middle digits", () => {
+    expect(maskContact("01012345678")).toBe("01****78");
+    expect(maskContact("a@b.com")).toBe("a@b.com");
+    expect(maskContact("01234")).toBe("01234");
+  });
+
+  it("isBlockedIp rejects private/loopback/multicast/link-local", () => {
+    expect(isBlockedIp("127.0.0.1")).toBe(true);
+    expect(isBlockedIp("10.0.0.1")).toBe(true);
+    expect(isBlockedIp("172.16.0.1")).toBe(true);
+    expect(isBlockedIp("192.168.1.1")).toBe(true);
+    expect(isBlockedIp("169.254.0.1")).toBe(true);
+    expect(isBlockedIp("100.64.0.1")).toBe(true);
+    expect(isBlockedIp("198.18.0.1")).toBe(true);
+    expect(isBlockedIp("224.0.0.1")).toBe(true);
+    expect(isBlockedIp("240.0.0.1")).toBe(true);
+    expect(isBlockedIp("::1")).toBe(true);
+    expect(isBlockedIp("::")).toBe(true);
+    expect(isBlockedIp("93.184.216.34")).toBe(false);
+    expect(isBlockedIp("8.8.8.8")).toBe(false);
+  });
+
+  it("assertSafeWebhookUrl rejects non-http schemes and private hosts", async () => {
+    await expect(assertSafeWebhookUrl("ftp://example.com")).rejects.toThrow("absolute http(s)");
+    await expect(assertSafeWebhookUrl("file:///etc/passwd")).rejects.toThrow("absolute http(s)");
+    await expect(assertSafeWebhookUrl("http://127.0.0.1/secret")).rejects.toThrow("private or internal");
+    await expect(assertSafeWebhookUrl("http://169.254.169.254/metadata")).rejects.toThrow("private or internal");
+    await expect(assertSafeWebhookUrl("http://[::1]/")).rejects.toThrow("private or internal");
+    await expect(assertSafeWebhookUrl("http://localhost/")).rejects.toThrow("private or internal");
+    await expect(
+      assertSafeWebhookUrl("https://hook.internal.example.com/wh", {
+        resolve: async () => [{ address: "127.0.0.1", family: 4 }],
+      }),
+    ).rejects.toThrow("private or internal");
+  });
 });
 
 describe("Event Bus → Automation Engine pipeline", () => {
@@ -120,6 +164,7 @@ describe("Event Bus → Automation Engine pipeline", () => {
     for (const model of MODEL_COLLECTIONS) {
       if (colls[model.collection.name]) await colls[model.collection.name].deleteMany({});
     }
+    invalidateAutomationCache();
     vi.clearAllMocks();
   });
 
@@ -228,6 +273,67 @@ describe("Event Bus → Automation Engine pipeline", () => {
     expect(vi.mocked(emitToBranch)).not.toHaveBeenCalled();
     expect(await AutomationRun.find({ automation: rule._id })).toHaveLength(0);
   });
+
+  it("webhook action POSTs a PHI-stripped payload to the configured URL", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true, type: 'basic', status: 200 });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await makeRule(
+      { trigger: { type: "appointment.created" } },
+      [{ type: "webhook", config: { url: "https://example.com/hook", headers: { "x-custom": "1" } } }],
+    );
+
+    await publishEvent(event("appointment.created", { patient: { phone: "01012345678" }, secret: "hidden" }));
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, opts] = fetchSpy.mock.calls[0];
+    expect(url).toBe("https://example.com/hook");
+    expect(opts.method).toBe("POST");
+    expect(opts.redirect).toBe("manual");
+    const body = JSON.parse(opts.body);
+    expect(body.data.patient.phone).toBeUndefined();
+    expect(body.data.secret).toBe("hidden");
+
+    vi.unstubAllGlobals();
+  });
+
+  it("dry-run validates webhook URLs against SSRF targets", async () => {
+    const rule = await makeRule(
+      { trigger: { type: "appointment.created" } },
+      [{ type: "webhook", config: { url: "http://127.0.0.1:9999/internal" } }],
+    );
+    const outcome = await applyRule(rule, event("appointment.created", {}), { dryRun: true });
+    expect(outcome.actionResults[0].status).toBe("error");
+    expect(outcome.actionResults[0].error).toMatch(/private or internal/);
+  });
+
+  it("rule cache is invalidated so newly created rules appear immediately", async () => {
+    const beforeEvent = event("appointment.created", {});
+    await publishEvent(beforeEvent);
+    expect(await AutomationRun.findOne({ triggerType: "appointment.created" })).toBeNull();
+
+    invalidateAutomationCache();
+    await makeRule();
+    await publishEvent(event("appointment.created", {}));
+    expect(await AutomationRun.findOne({ triggerType: "appointment.created", status: "success" })).not.toBeNull();
+  });
+
+  it("concurrent events cannot both pass the same cooldown", async () => {
+    const rule = await makeRule({ cooldownMinutes: 1440 });
+    invalidateAutomationCache();
+
+    const ev1 = event("appointment.created", { id: "a1" });
+    const ev2 = event("appointment.created", { id: "a2" });
+
+    const [r1, r2] = await Promise.all([publishEvent(ev1), publishEvent(ev2)]);
+
+    const runs = await AutomationRun.find({ automation: rule._id }).sort({ createdAt: 1 });
+    const successes = runs.filter((r) => r.status === "success");
+    expect(successes).toHaveLength(1);
+
+    const fresh = await Automation.findById(rule._id);
+    expect(fresh.runCount).toBe(1);
+  });
 });
 
 describe("Automation REST API", () => {
@@ -242,6 +348,7 @@ describe("Automation REST API", () => {
     for (const model of MODEL_COLLECTIONS) {
       if (colls[model.collection.name]) await colls[model.collection.name].deleteMany({});
     }
+    invalidateAutomationCache();
     vi.clearAllMocks();
     vi.mocked(getCachedRole).mockResolvedValue({
       _id: "r1",
@@ -291,14 +398,16 @@ describe("Automation REST API", () => {
   it("installs built-in templates idempotently, disabled by default", async () => {
     const first = await request(makeApp())
       .post("/api/automations/install-templates")
-      .set("Cookie", "access_token=tok");
+      .set("Cookie", "access_token=tok")
+      .send({});
     expect(first.status).toBe(200);
     expect(first.body.data.installed).toBeGreaterThan(0);
     expect(first.body.data.existing).toBe(0);
 
     const second = await request(makeApp())
       .post("/api/automations/install-templates")
-      .set("Cookie", "access_token=tok");
+      .set("Cookie", "access_token=tok")
+      .send({});
     expect(second.status).toBe(200);
     expect(second.body.data.installed).toBe(0);
     expect(second.body.data.existing).toBe(first.body.data.installed);

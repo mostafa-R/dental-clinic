@@ -22,7 +22,7 @@ Based on the PRD document, here are all the features organized by status:
 | 16 | Installments + wallet (credit/debit) + transfers | Installments |
 | 17 | Cron alerts for installment deadlines | Installments |
 | 18 | Chart of accounts + Double-entry Journal | Accounting |
-| 19 | Daily close + expenses + owner drawings | Accounting | ----------------------
+| 19 | Daily close + expenses + owner drawings | Accounting |
 | 20 | Inventory (items + Reorder Point + supply/consumption/depreciation) | Inventory |
 | 21 | Auto-discount linked to procedures | Inventory |
 | 22 | DM + channels + Read Receipts + audio notifications | Chat |

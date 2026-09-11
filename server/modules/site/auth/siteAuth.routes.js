@@ -152,7 +152,8 @@ router.post('/recover/verify', validate(recoveryVerifySchema), verifyRecoveryOtp
  *     summary: Get current site admin
  *     description: Site realm. Returns the authenticated site admin profile.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: Current admin
@@ -200,7 +201,8 @@ router.post('/refresh', siteRefresh);
  *     summary: Logout site admin
  *     description: Site realm. Clears site auth cookies.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: Logged out
@@ -227,7 +229,8 @@ router.post('/logout', protectSite, siteLogout);
  *     summary: Create a site admin
  *     description: Site realm. Requires `super_admin` role. Creates an additional site admin account.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     requestBody:
  *       required: true
  *       content:

@@ -16,6 +16,7 @@ import Branch from '../users/branch.model.js';
 import DoctorAvailability, { AVAILABILITY_TYPE } from '../users/doctorAvailability.model.js';
 import User from '../users/user.model.js';
 import Appointment, { canTransition } from './appointment.model.js';
+import { notifyQueueJoined, notifyTurnNow, notifyVisitCompleted } from '../../services/queueNotificationService.js';
 
 const POPULATE = [
   { path: 'patient', select: 'patientId firstName lastName phone' },
@@ -495,6 +496,7 @@ export const createAppointment = asyncHandler(async (req, res) => {
   await appointment.populate(POPULATE);
   emitAppointment(branch, 'appointment:created', appointment);
   publishAppointmentEvent(appointment, 'appointment.created');
+  notifyQueueJoined(appointment);
 
   return sendSuccess(res, { appointment: serializeAppointment(appointment, req) }, 201);
 });
@@ -689,6 +691,12 @@ export const transitionAppointment = asyncHandler(async (req, res) => {
   };
   const eventType = EVENT_BY_STATUS[nextStatus];
   if (eventType) publishAppointmentEvent(appointment, eventType);
+
+  // Live-queue patient notifications (PRD §6.2).
+  if (nextStatus === 'in_progress') notifyTurnNow(appointment);
+  if (nextStatus === 'completed') {
+    notifyVisitCompleted(appointment, { nextAppointmentId: req.validatedBody.nextAppointmentId });
+  }
 
   return sendSuccess(res, { appointment: serializeAppointment(appointment, req) });
 });

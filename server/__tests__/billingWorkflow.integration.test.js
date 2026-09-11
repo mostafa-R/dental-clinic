@@ -37,24 +37,30 @@ vi.mock('../socket/index.js', () => ({
 const eventBus = await import('../services/eventBus.js');
 vi.spyOn(eventBus, 'publishEvent').mockResolvedValue(undefined);
 
-let supportsTransactions = false;
+const billingDbUri = process.env.TEST_MONGO_URI
+  ? `${process.env.TEST_MONGO_URI.replace(/\/[^/]*$/, '')}/dental_os_billing_test`
+  : 'mongodb://127.0.0.1:27017/dental_os_billing_test';
+await mongoose.connect(billingDbUri);
 
-describe('Billing workflow (real DB)', () => {
+// Multi-document transactions (invoice numbering + creation atomicity) require
+// a replica set; on a standalone Mongo the whole suite is skipped and covered
+// in CI, which runs a single-node replica set.
+let supportsTransactions = false;
+try {
+  await mongoose.connection.db.admin().command({ replSetGetStatus: 1 });
+  supportsTransactions = true;
+} catch {
+  supportsTransactions = false;
+}
+
+describe.skipIf(!supportsTransactions)('Billing workflow (real DB)', () => {
   let Tenant, Branch, Patient, User, Appointment, Invoice, Wallet, Commission, JournalEntry, Counter;
   let service;
   let tenantId, branchId, patientId, doctorId, otherBranchId;
   let phoneSeq = 0;
 
   beforeAll(async () => {
-    const db = 'mongodb://127.0.0.1:27017/dental_os_billing_test';
-    await mongoose.connect(db);
-
-    try {
-      await mongoose.connection.db.admin().command({ replSetGetStatus: 1 });
-      supportsTransactions = true;
-    } catch {
-      supportsTransactions = false;
-    }
+    await mongoose.connect(billingDbUri);
 
     Tenant = (await import('../modules/site/tenant/tenant.model.js')).default;
     Branch = (await import('../modules/users/branch.model.js')).default;
@@ -116,11 +122,11 @@ describe('Billing workflow (real DB)', () => {
   const phone = () => `+1999${String(phoneSeq++).padStart(6, '0')}`;
 
   let apptOffset = 0;
-  async function makeAppointment() {
+  async function makeAppointment(forPatient = patientId) {
     apptOffset += 1;
     const start = new Date(Date.now() + apptOffset * 3600 * 1000);
     return Appointment.create({
-      tenant: tenantId, branch: branchId, patient: patientId, doctor: doctorId,
+      tenant: tenantId, branch: branchId, patient: forPatient, doctor: doctorId,
       start, end: new Date(start.getTime() + 30 * 60 * 1000), status: 'scheduled', chair: 'A1',
     });
   }
@@ -348,16 +354,21 @@ describe('Billing workflow (real DB)', () => {
 
   describe('void (voidInvoice)', () => {
     it('voids the invoice, reaches the "void" status, and voids commissions', async () => {
-      // Fund the patient's wallet so a wallet-method payment can be recorded.
+      // Dedicated patient so wallet assertions are not polluted by earlier tests.
       const { addTransaction } = await import('../modules/patients/wallet.service.js');
-      const patient = await mongoose.model('Patient').findById(patientId);
+      const newPatient = await Patient.create({
+        tenant: tenantId, branch: branchId, firstName: 'Void', lastName: 'Wallet', phone: '+1777000001',
+      });
+      const patient = await mongoose.model('Patient').findById(newPatient._id);
       await addTransaction(patient, {
         type: 'credit', amount: 200, reference: 'topup', description: 'Test top-up',
       }, doctorId);
+      const funded = await Wallet.findOne({ patient: newPatient._id });
+      expect(funded.balance).toBeCloseTo(200, 2);
 
-      const appt = await makeAppointment();
+      const appt = await makeAppointment(newPatient._id);
       const inv = await service.createInvoice({
-        data: { patient: String(patientId), appointment: String(appt._id), items: [{ description: 'VoidMe', quantity: 1, unitPrice: 60 }] },
+        data: { patient: String(newPatient._id), appointment: String(appt._id), items: [{ description: 'VoidMe', quantity: 1, unitPrice: 60 }] },
         branch: branchId, tenant: tenantId, userId: doctorId,
       });
       await service.addPayment(String(inv._id), { branch: branchId }, { amount: 60, method: 'wallet', userId: doctorId });
@@ -369,6 +380,11 @@ describe('Billing workflow (real DB)', () => {
 
       commissions = await Commission.find({ invoice: inv._id });
       expect(commissions.every((c) => c.status === 'void')).toBe(true);
+
+      // The wallet debit must be reversed: the 60 wallet payment is credited
+      // back, restoring the patient's balance to the funded amount.
+      const walletAfter = await Wallet.findOne({ patient: newPatient._id });
+      expect(walletAfter.balance).toBeCloseTo(funded.balance, 2);
 
       // Payment attempts on a void invoice are rejected
       await expect(
