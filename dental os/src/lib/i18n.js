@@ -139,8 +139,8 @@ const translations = {
     'nav.accounting': 'Accounting',
     'nav.inventory': 'Inventory',
     'nav.branches': 'Branches',
-    'nav.users': 'Users',
-    'nav.roles': 'Roles',
+    'nav.users': 'Staff',
+    'nav.roles': 'Roles & Permissions',
     'nav.wallet': 'Wallet',
     'nav.emr': 'EMR',
     'nav.settings': 'Settings',
@@ -576,9 +576,6 @@ const translations = {
     'emr.attachment.photo': 'Photo',
     'emr.attachment.document': 'Document',
 
-    'nav.accounting': 'Accounting',
-    'nav.branches': 'Branches',
-
     'accounting.title': 'Accounting & Finance',
     'accounting.subtitle': 'Track expenses, owner drawings, doctor commissions, and profitability.',
     'accounting.loading': 'Loading…',
@@ -732,9 +729,6 @@ const translations = {
     'inventory.tx.stock_out': 'Stock Out',
     'inventory.tx.adjustment': 'Adjustment',
     'inventory.tx.expired': 'Expired',
-
-    'nav.roles': 'Roles & Permissions',
-    'nav.users': 'Staff',
 
     'users.title': 'Staff',
     'users.subtitle': 'Manage clinic staff accounts and assign roles.',
@@ -1360,8 +1354,10 @@ const translations = {
     'nav.accounting': 'المحاسبة',
     'nav.inventory': 'المخزون',
     'nav.branches': 'الفروع',
-    'nav.users': 'الموظفين',
-    'nav.roles': 'الأدوار والصلاحيات',
+    'nav.users': 'المستخدمون',
+    'nav.roles': 'الأدوار',
+    'nav.wallet': 'المحفظة',
+    'nav.emr': 'السجل الطبي',
     'nav.settings': 'الإعدادات',
     "nav.chat": "المحادثة",
 
@@ -1795,14 +1791,6 @@ const translations = {
     'emr.attachment.photo': 'صورة',
     'emr.attachment.document': 'مستند',
 
-    'nav.accounting': 'المحاسبة',
-    'nav.branches': 'الفروع',
-    'nav.users': 'المستخدمون',
-    'nav.roles': 'الأدوار',
-    'nav.inventory': 'المخزون',
-    'nav.wallet': 'المحفظة',
-    'nav.emr': 'السجل الطبي',
-    'nav.chat': 'المحادثة',
     'accounting.title': 'المحاسبة والمالية',
     'accounting.subtitle': 'تتبع المصروفات ومسحوبات الملاك وعمولات الأطباء والربحية.',
     'accounting.loading': 'جارٍ التحميل…',

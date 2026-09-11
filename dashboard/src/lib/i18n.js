@@ -45,7 +45,6 @@ export const translations = {
     description: "Description",
     done: "Done",
     saveChanges: "Save Changes",
-    deleteConfirm: "Delete permanently?",
     view: "View",
     usage: "Usage",
     usageQuotas: "Usage Quotas",
@@ -399,10 +398,6 @@ export const translations = {
     settings: "الإعدادات",
     logout: "تسجيل الخروج",
 
-    // Navigation (continued)
-    backups: "النسخ الاحتياطي",
-    performance: "الأداء",
-
     // Common
     search: "بحث",
     searchPlaceholder: "بحث...",
@@ -435,7 +430,6 @@ export const translations = {
     description: "الوصف",
     done: "تم",
     saveChanges: "حفظ التغييرات",
-    deleteConfirm: "حذف بشكل دائم؟",
     view: "عرض",
     usage: "الاستخدام",
     usageQuotas: "حدود الاستخدام",
