@@ -56,7 +56,7 @@ export default function Analytics() {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={growthData.tenants || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-                <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip />
                 <Line type="monotone" dataKey="count" stroke={chartColors.stroke} strokeWidth={2} dot={{ fill: chartColors.fill }} />
@@ -76,10 +76,10 @@ export default function Analytics() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={growthData.revenue || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-                <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip formatter={(value) => formatCurrency(value, "USD", language)} />
-                <Bar dataKey="amount" fill={chartColors.fill} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="count" fill={chartColors.fill} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

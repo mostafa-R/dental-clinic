@@ -109,8 +109,8 @@ export default function Health() {
             />
             <StatCard
               title={t("mongodb", language)}
-              value={data.mongodb === "connected" ? t("connected", language) : t("disconnected", language)}
-              variant={data.mongodb === "connected" ? "success" : "danger"}
+              value={data.mongodb?.status === "connected" ? t("connected", language) : t("disconnected", language)}
+              variant={data.mongodb?.status === "connected" ? "success" : "danger"}
             />
             <StatCard
               title={t("nodeVersion", language)}

@@ -30,7 +30,7 @@ export default function SitePlans() {
     setStatus('loading');
     try {
       const result = await platformApi.listPlans();
-      setPlans(result.plans || []);
+      setPlans(Array.isArray(result) ? result : []);
       setStatus('succeeded');
     } catch (err) {
       setStatus('failed');

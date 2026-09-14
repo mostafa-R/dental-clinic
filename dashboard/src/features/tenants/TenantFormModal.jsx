@@ -214,10 +214,14 @@ export default function TenantFormModal({ isOpen, onClose, tenant }) {
         const result = await dispatch(createTenant(formData));
         if (result.error) {
           setFormErrors({ submit: result.payload || "Failed to create tenant" });
-        } else if (result.payload?.adminCredentials) {
-          setCredentials(result.payload.adminCredentials);
         } else {
-          onClose();
+          setCredentials(
+            result.payload?.adminCredentials || {
+              email: formData.email,
+              password: formData.adminPassword,
+              loginUrl: `${import.meta.env.VITE_CLINIC_URL || "http://localhost:5173"}/login`,
+            },
+          );
         }
       }
     } finally {

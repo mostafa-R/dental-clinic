@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import PageHeader from '../../components/ui/PageHeader';
+import Card from '../../components/ui/Card';
 import DataTable from '../../components/ui/DataTable';
 import Pagination from '../../components/ui/Pagination';
 import Spinner from '../../components/ui/Spinner';

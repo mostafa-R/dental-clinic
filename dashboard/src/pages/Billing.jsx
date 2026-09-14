@@ -240,8 +240,6 @@ export default function Billing() {
                     data: {
                       plan: editPlan,
                       status: editModal.status,
-                      amount: editModal.amount,
-                      currentPeriodEnd: editModal.currentPeriodEnd,
                     },
                   }));
                   setEditModal(null);
@@ -308,7 +306,7 @@ export default function Billing() {
                     tenantId: paymentModal.tenant?._id || paymentModal.tenant,
                     data: {
                       amount: Number(paymentAmount || paymentModal.amount || 0),
-                      method: paymentMethod,
+                      paymentMethod,
                     },
                   }));
                   setPaymentModal(null);
