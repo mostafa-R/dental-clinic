@@ -1,4 +1,5 @@
 import DentalChart from './dentalChart.model.js';
+import { fdiToUniversal, normalizeToothRef } from '../../constants/dental.js';
 import { emitToBranch } from '../../socket/index.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
@@ -18,6 +19,7 @@ function emitChart(branchId, chart) {
 function archiveToothState(chart, tooth, userId) {
   chart.history.push({
     number: tooth.number,
+    fdi: tooth.fdi ?? null,
     state: tooth.state,
     surfaces: tooth.surfaces?.toObject ? tooth.surfaces.toObject() : { ...tooth.surfaces },
     notes: tooth.notes,
@@ -87,16 +89,20 @@ export const updateDentalChart = asyncHandler(async (req, res) => {
   if (data.dentitionType) chart.dentitionType = data.dentitionType;
   if (data.notes !== undefined) chart.notes = data.notes;
   if (Array.isArray(data.teeth)) {
-    // Merge incoming tooth updates by number, preserving untouched teeth.
+    // Merge incoming tooth updates by code, preserving untouched teeth.
+    // S1: entries may identify the tooth by canonical `fdi` or legacy
+    // Universal `number` — both resolve to the same stored tooth.
     const byNumber = new Map(chart.teeth.map((t) => [t.number, t]));
     for (const incoming of data.teeth) {
-      if (!Number.isInteger(incoming.number) || incoming.number < 1 || incoming.number > 32) {
-        throw ApiError.badRequest(`Invalid tooth number: ${incoming.number}`);
+      const ref = normalizeToothRef({ fdi: incoming.fdi ?? null, number: incoming.number ?? null });
+      if (!ref) {
+        throw ApiError.badRequest(`Invalid tooth reference: ${incoming.fdi ?? incoming.number}`);
       }
-      const existing = byNumber.get(incoming.number);
+      const existing = byNumber.get(ref.universal);
       if (!existing) continue;
       if (!toothChangedBy(existing, incoming)) continue;
       archiveToothState(chart, existing, req.user._id);
+      existing.fdi = ref.fdi;
       if (incoming.state) existing.state = incoming.state;
       if (incoming.surfaces) Object.assign(existing.surfaces, incoming.surfaces);
       if (incoming.notes !== undefined) existing.notes = incoming.notes;
@@ -119,8 +125,18 @@ export const updateDentalChart = asyncHandler(async (req, res) => {
  */
 export const updateTooth = asyncHandler(async (req, res) => {
   const patient = await loadScopedPatient(req, req.params.patientId);
-  const number = Number(req.params.number);
-  if (!Number.isInteger(number) || number < 1 || number > 32) {
+  // S1: the path code accepts canonical FDI (e.g. 48) or legacy Universal
+  // (e.g. 32) — both address the lower-right third molar. Values 1-32 keep
+  // their legacy Universal meaning (backward compatibility: a pre-S1 client
+  // sending "16" still means Universal 16); higher valid FDI codes
+  // (33-38, 41-48) resolve as FDI. New integrations should prefer the
+  // unambiguous `fdi` body field on the bulk PATCH endpoint instead.
+  const rawParam = String(req.params.number).trim();
+  const asNumber = Number(rawParam);
+  const number = Number.isInteger(asNumber) && asNumber >= 1 && asNumber <= 32
+    ? asNumber
+    : fdiToUniversal(asNumber);
+  if (number === null || number === undefined) {
     throw ApiError.badRequest('Invalid tooth number');
   }
 

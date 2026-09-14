@@ -55,7 +55,7 @@ router.get('/', protect, checkPermission('emr', 'read'), phiRestrict, getDentalC
  *   patch:
  *     tags: [Dental Chart]
  *     summary: Update the dental chart
- *     description: Requires `emr:update`. Updates dentition type, notes, or bulk-merges teeth by number.
+  *     description: Requires `emr:update`. Updates dentition type, notes, or bulk-merges teeth by code (canonical FDI `fdi` or legacy Universal `number`; FDI wins when both are sent).
  *     security:
  *       - cookieAuth: []
  *     parameters:
@@ -77,8 +77,9 @@ router.get('/', protect, checkPermission('emr', 'read'), phiRestrict, getDentalC
  *                 maxItems: 32
  *                 items:
  *                   type: object
- *                   properties:
- *                     number: { type: integer, minimum: 1, maximum: 32 }
+  *                   properties:
+  *                     number: { type: integer, minimum: 1, maximum: 32, description: 'Legacy Universal code (1-32). Optional when fdi is sent.' }
+  *                     fdi: { type: integer, description: 'Canonical FDI code, ISO 3950 (11-18, 21-28, 31-38, 41-48). Wins over number on conflict.' }
  *                     state: { type: string, enum: [sound, caries, filled, crown, root_canal, implant, missing, bridge, extraction_scheduled, fractured] }
  *                     surfaces: { $ref: '#/components/schemas/ToothSurfaces' }
  *                     notes: { type: string, maxLength: 500 }
@@ -120,11 +121,11 @@ router.patch('/', protect, checkPermission('emr', 'update'), phiRestrict, valida
  *         name: patientId
  *         required: true
  *         schema: { $ref: '#/components/schemas/ObjectId' }
- *       - in: path
- *         name: number
- *         required: true
- *         description: Tooth number (1-32).
- *         schema: { type: integer, minimum: 1, maximum: 32 }
+  *       - in: path
+  *         name: number
+  *         required: true
+  *         description: Tooth code — legacy Universal (1-32, keeps legacy meaning) or canonical FDI (e.g. 41-48).
+  *         schema: { type: integer, minimum: 1, maximum: 48 }
  *     requestBody:
  *       required: true
  *       content:

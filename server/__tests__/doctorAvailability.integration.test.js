@@ -44,9 +44,35 @@ vi.mock('../socket/index.js', () => ({
 const DB = 'mongodb://127.0.0.1:27017/dental_os_doctor_availability_test';
 
 // Clinic open Mon–Fri 09:00–17:00 (defaults from branch.model.js).
-const MON = new Date('2026-09-14T09:00:00.000Z'); // Monday
-const MON_OPEN = new Date('2026-09-14T10:00:00.000Z');
-const SAT = new Date('2026-09-19T10:00:00.000Z'); // Saturday (clinic closed)
+//
+// Dates are computed relative to *now* — one deterministic base per test run —
+// so the suite stays green no matter when it runs. The schema defaults require
+// slots more than DEFAULT_APPT_MIN_ADVANCE (60 min) ahead and no further than
+// DEFAULT_APPT_MAX_ADVANCE (90 days) out, so the anchor Monday is pushed 7–13
+// days into the future: comfortably inside both bounds. All math is UTC (tests
+// run with TZ=UTC, see __tests__/setup.js), which also sidesteps DST and
+// midnight-boundary flakiness while preserving the Monday/Saturday/Sunday
+// weekday semantics the assertions depend on.
+const BASE_NOW_MS = Date.now();
+
+function addDaysUtc(date, days) {
+  return new Date(date.getTime() + days * 86400000);
+}
+
+function nextMondayUtc(hour, minute) {
+  const now = new Date(BASE_NOW_MS);
+  const todayAtTime = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, minute, 0, 0),
+  );
+  // Days until the next Monday (getUTCDay: Sun=0 … Sat=6), plus a full extra
+  // week so the slot is always ≥7 days ahead even if today is Monday.
+  const delta = ((8 - todayAtTime.getUTCDay()) % 7) + 7;
+  return addDaysUtc(todayAtTime, delta);
+}
+
+const MON = nextMondayUtc(9, 0); // Monday 09:00 UTC
+const MON_OPEN = nextMondayUtc(10, 0); // Monday 10:00 UTC
+const SAT = addDaysUtc(MON_OPEN, 5); // Saturday 10:00 UTC, same week (clinic closed)
 
 describe('doctor onboarding working-hours default', () => {
   let User;
@@ -91,7 +117,8 @@ describe('doctor onboarding working-hours default', () => {
       },
     });
     // Sunday is explicitly notWorking -> hard-blocked (no clinic fallback).
-    const SUN = new Date('2026-09-13T10:00:00.000Z');
+    // Derived from the anchor Monday so it is always the preceding Sunday.
+    const SUN = addDaysUtc(MON_OPEN, -1);
     expect(doc.isAvailableAt(SUN, new Date(SUN.getTime() + 30 * 60000)).available).toBe(false);
 
     // Monday is configured open, so available...

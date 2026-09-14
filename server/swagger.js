@@ -692,7 +692,8 @@ export const options = {
           type: "object",
           properties: {
             _id: { $ref: "#/components/schemas/ObjectId" },
-            tooth: { type: "integer", minimum: 1, maximum: 32, nullable: true },
+            tooth: { type: "integer", minimum: 1, maximum: 32, nullable: true, description: "Legacy Universal code" },
+            fdi: { type: "integer", nullable: true, description: "Canonical FDI code, ISO 3950 (11-18, 21-28, 31-38, 41-48)" },
             surfaces: {
               type: "array",
               items: { type: "string", enum: ["mesial", "distal", "buccal", "lingual", "occlusal"] },
@@ -760,7 +761,8 @@ export const options = {
         Tooth: {
           type: "object",
           properties: {
-            number: { type: "integer", minimum: 1, maximum: 32 },
+            number: { type: "integer", minimum: 1, maximum: 32, description: "Legacy Universal code" },
+            fdi: { type: "integer", description: "Canonical FDI code, ISO 3950 (11-18, 21-28, 31-38, 41-48)" },
             state: {
               type: "string",
               enum: [

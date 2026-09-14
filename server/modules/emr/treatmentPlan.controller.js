@@ -242,7 +242,7 @@ export const updateTreatmentItem = asyncHandler(async (req, res) => {
     }
 
     for (const key of [
-      'tooth', 'surfaces', 'procedureCode', 'procedureName', 'description',
+      'tooth', 'fdi', 'surfaces', 'procedureCode', 'procedureName', 'description',
       'estimatedCost', 'status', 'appointment', 'notes',
     ]) {
       if (data[key] !== undefined) item[key] = data[key];

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 
+import { normalizeToothRef } from '../../constants/dental.js';
 import { withTransaction } from '../../core/transaction.js';
 import { emitItemAlerts } from '../../services/inventoryCron.js';
 import ApiError from '../../utils/ApiError.js';
@@ -17,11 +18,16 @@ export const POPULATE = [
 
 export function normalizeItem(raw) {
   const item = { ...raw };
-  if (item.tooth === undefined || item.tooth === null || item.tooth === '') {
-    item.tooth = null;
+  // S1: tooth codes are stored dually — canonical `fdi` + legacy Universal
+  // `tooth`. FDI wins when both are present; a lone legacy `tooth` derives
+  // `fdi` so pre-S1 clients and documents keep working unchanged.
+  const synced = normalizeToothRef({ fdi: item.fdi ?? null, number: item.tooth ?? null });
+  if (synced) {
+    item.tooth = synced.universal;
+    item.fdi = synced.fdi;
   } else {
-    const n = Number(item.tooth);
-    item.tooth = Number.isInteger(n) && n >= 1 && n <= 32 ? n : null;
+    item.tooth = null;
+    item.fdi = null;
   }
   if (item.appointment) item.appointment = toObjectId(item.appointment);
   if (item.completedDate) item.completedDate = new Date(item.completedDate);

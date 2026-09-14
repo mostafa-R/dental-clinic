@@ -8,9 +8,21 @@ import {
   SURFACE_CONDITIONS,
   SURFACES,
   TOOTH_STATES,
+  isValidFdi,
 } from '../../constants/dental.js';
 
 const objectId = z.string().length(24, 'Invalid id');
+
+/**
+ * S1: canonical FDI tooth code (ISO 3950, permanent dentition 11-48).
+ * Optional everywhere — legacy Universal `number`/`tooth` stays accepted and
+ * is normalized server-side, so pre-S1 clients keep working unchanged.
+ */
+const fdiField = z
+  .number()
+  .int()
+  .refine(isValidFdi, { message: 'Invalid FDI tooth code (expected 11-18, 21-28, 31-38, 41-48)' })
+  .optional();
 
 const dateOrEmpty = z.string().datetime({ message: 'Invalid date' }).optional().or(z.literal(''));
 
@@ -27,7 +39,8 @@ const surfacesSchema = z
   .optional();
 
 const toothUpdateSchema = z.object({
-  number: z.number().int().min(1).max(32),
+  number: z.number().int().min(1).max(32).optional(),
+  fdi: fdiField,
   state: z.enum(TOOTH_STATES).optional(),
   surfaces: surfacesSchema,
   notes: z.string().max(500).optional(),
@@ -53,6 +66,7 @@ export const updateToothSchema = z.object({
 
 const treatmentItemSchema = z.object({
   tooth: z.number().int().min(1).max(32).nullable().optional(),
+  fdi: fdiField,
   surfaces: z.array(z.enum(SURFACES)).max(5).optional(),
   procedureCode: z.string().max(32).optional(),
   procedureName: z.string().min(1, 'Procedure name is required').max(120),
@@ -90,6 +104,7 @@ export const createTreatmentItemSchema = treatmentItemSchema;
 export const updateTreatmentItemSchema = z
   .object({
     tooth: z.number().int().min(1).max(32).nullable().optional(),
+    fdi: fdiField,
     surfaces: z.array(z.enum(SURFACES)).max(5).optional(),
     procedureCode: z.string().max(32).optional(),
     procedureName: z.string().min(1).max(120).optional(),

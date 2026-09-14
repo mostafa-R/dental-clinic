@@ -12,10 +12,18 @@ import {
 const treatmentItemSchema = new mongoose.Schema(
   {
     tooth: {
-      // Universal number 1-32, null for whole-mouth / non-tooth procedures.
+      // Legacy Universal number 1-32 (null for whole-mouth / non-tooth
+      // procedures). Canonical code is `fdi`; normalizeItem() keeps both
+      // in sync with FDI winning on conflict.
       type: Number,
       min: 1,
       max: 32,
+      default: null,
+    },
+    fdi: {
+      // Canonical FDI code (ISO 3950). Backfilled from `tooth` by
+      // migration 005; derived on every write by normalizeItem().
+      type: Number,
       default: null,
     },
     surfaces: {

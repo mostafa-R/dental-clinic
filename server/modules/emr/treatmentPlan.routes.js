@@ -293,7 +293,8 @@ router.delete('/:planId', protect, checkPermission('emr', 'delete'), phiRestrict
  *             type: object
  *             required: [procedureName]
  *             properties:
- *               tooth: { type: integer, minimum: 1, maximum: 32, nullable: true }
+  *               tooth: { type: integer, minimum: 1, maximum: 32, nullable: true, description: 'Legacy Universal code. Optional when fdi is sent.' }
+  *               fdi: { type: integer, description: 'Canonical FDI code, ISO 3950 (11-18, 21-28, 31-38, 41-48). Wins over tooth on conflict.' }
  *               surfaces:
  *                 type: array
  *                 items: { type: string, enum: [mesial, distal, buccal, lingual, occlusal] }
@@ -357,7 +358,8 @@ router.post('/:planId/items', protect, checkPermission('emr', 'create'), phiRest
  *           schema:
  *             type: object
  *             properties:
- *               tooth: { type: integer, minimum: 1, maximum: 32, nullable: true }
+  *               tooth: { type: integer, minimum: 1, maximum: 32, nullable: true, description: 'Legacy Universal code. Optional when fdi is sent.' }
+  *               fdi: { type: integer, description: 'Canonical FDI code, ISO 3950 (11-18, 21-28, 31-38, 41-48). Wins over tooth on conflict.' }
  *               surfaces:
  *                 type: array
  *                 items: { type: string, enum: [mesial, distal, buccal, lingual, occlusal] }
