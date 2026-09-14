@@ -62,7 +62,21 @@ function ToothCrown({ tooth, meta, numbering, selected, onSelect, onSurfaceClick
   };
 
   return (
-    <g className="cursor-pointer" onClick={() => onSelect(meta.universal)}>
+    <g
+      className="cursor-pointer"
+      role="button"
+      tabIndex={0}
+      aria-label={`Tooth ${meta.universal}, ${meta.name}`}
+      aria-pressed={selected}
+      onClick={() => onSelect(meta.universal)}
+      onFocus={() => onSelect(meta.universal)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect(meta.universal);
+        }
+      }}
+    >
       <rect
         x={x}
         y={y}
@@ -289,6 +303,28 @@ export default function DentalChart({ teeth, selectedNumber, onSelect, onSurface
             />
           ))}
         </svg>
+      </div>
+
+      <div className="border-t border-slate-100 pt-3 dark:border-slate-800" aria-label="Tooth selector">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Teeth</p>
+        <div className="grid grid-cols-8 gap-1 sm:grid-cols-16">
+          {[...UPPER_TEETH, ...LOWER_TEETH].map((meta) => (
+            <button
+              key={meta.universal}
+              type="button"
+              onClick={() => onSelect(meta.universal)}
+              aria-pressed={selectedNumber === meta.universal}
+              aria-label={`Tooth ${meta.universal}, ${meta.name}`}
+              className={`min-h-8 rounded-md border text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
+                selectedNumber === meta.universal
+                  ? 'border-brand bg-brand text-white'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-brand/50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+              }`}
+            >
+              {numbering === 'fdi' ? meta.fdi : numbering === 'palmer' ? meta.palmer : meta.universal}
+            </button>
+          ))}
+        </div>
       </div>
 
       <Legend t={t} />

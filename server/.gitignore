@@ -39,3 +39,8 @@ uploads/
 
 
 deploy.sh
+
+
+
+.wwebjs_cache
+.wwebjs_auth

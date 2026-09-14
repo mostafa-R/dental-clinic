@@ -21,18 +21,19 @@ export default function Pagination({ page, pages, total, pageSize = 20, onChange
           type="button"
           onClick={() => goto(page - 1)}
           disabled={page <= 1}
-          className="rounded-md border border-slate-200 px-2.5 py-1 text-sm text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-sm transition hover:border-brand/30 hover:bg-brand/5 hover:text-brand-dark disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
         >
           {prevLabel}
         </button>
-        <span className="px-2 text-sm text-slate-600 dark:text-slate-300">
-          {page} / {pages}
+        <span className="rounded-lg bg-brand-light/25 px-2.5 py-1.5 text-sm font-semibold tabular-nums text-brand dark:bg-brand/20 dark:text-brand-light">
+          {page}
         </span>
+        <span className="px-1 text-sm font-medium text-slate-400">/ {pages}</span>
         <button
           type="button"
           onClick={() => goto(page + 1)}
           disabled={page >= pages}
-          className="rounded-md border border-slate-200 px-2.5 py-1 text-sm text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-sm transition hover:border-brand/30 hover:bg-brand/5 hover:text-brand-dark disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
         >
           {nextLabel}
         </button>

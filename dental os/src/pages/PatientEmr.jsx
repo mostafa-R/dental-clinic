@@ -9,6 +9,7 @@ import TreatmentPlansTab from '../features/emr/TreatmentPlansTab';
 import PrescriptionsTab from '../features/emr/PrescriptionsTab';
 import ClinicalTimelineTab from '../features/emr/ClinicalTimelineTab';
 import WalletTab from '../features/wallet/WalletTab';
+import ClinicalContextBar from '../features/emr/ClinicalContextBar';
 import { resetWallet } from '../features/wallet/walletSlice';
 import { setEmrPatient, resetEmr } from '../features/emr/emrSlice';
 import { patientApi } from '../features/patients/patientApi';
@@ -95,6 +96,8 @@ export default function PatientEmr() {
         </div>
       </div>
 
+      {!isLoading && !error && patient && <ClinicalContextBar patient={patient} />}
+
       <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800">
         {TABS.map((tb) => (
           <button
@@ -103,7 +106,7 @@ export default function PatientEmr() {
             onClick={() => setTab(tb.key)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition ${
               tab === tb.key
-                ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                ? 'border-brand text-brand dark:border-brand-light dark:text-brand-light'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >

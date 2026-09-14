@@ -1,12 +1,12 @@
 import { Server } from 'socket.io';
 
-import Branch from '../modules/users/branch.model.js';
-import Role from '../modules/users/role.model.js';
-import Tenant from '../modules/site/tenant/tenant.model.js';
-import User from '../modules/users/user.model.js';
-import { verifyAccessToken } from '../utils/jwt.js';
 import { planIncludesModule } from '../constants/plans.js';
 import { stripPHI } from '../middleware/phiRestrict.js';
+import Tenant from '../modules/site/tenant/tenant.model.js';
+import Branch from '../modules/users/branch.model.js';
+import Role from '../modules/users/role.model.js';
+import User from '../modules/users/user.model.js';
+import { verifyAccessToken } from '../utils/jwt.js';
 
 let io = null;
 

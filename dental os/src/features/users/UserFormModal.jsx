@@ -20,6 +20,7 @@ export default function UserFormModal({ open, onClose, user }) {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('');
   const [roleId, setRoleId] = useState('');
+  const [roleChanged, setRoleChanged] = useState(false);
   const [phone, setPhone] = useState('');
   const [branch, setBranch] = useState('');
   const [isActive, setIsActive] = useState(true);
@@ -39,6 +40,7 @@ export default function UserFormModal({ open, onClose, user }) {
   useEffect(() => {
     if (!open) return;
     setCredentials(null);
+    setRoleChanged(false);
     if (user) {
       setName(user.name || '');
       setEmail(user.email || '');
@@ -77,7 +79,7 @@ export default function UserFormModal({ open, onClose, user }) {
       isDoctor,
     };
     if (password) payload.password = password;
-    if (roleId) payload.roleId = roleId;
+    if (roleId && (!user || roleChanged)) payload.roleId = roleId;
 
     try {
       if (user) {
@@ -181,12 +183,17 @@ export default function UserFormModal({ open, onClose, user }) {
               if (matched) {
                 setRoleId(matched._id);
                 setRole(matched.key || matched.name);
+                setRoleChanged(true);
               } else {
                 setRoleId('');
                 setRole(val);
+                setRoleChanged(true);
               }
             }} className={selectCls}>
               <option value="">{t('users.form.selectRole')}</option>
+              {user?.roleId?.isSystemAdmin && user.roleId?._id && (
+                <option value={user.roleId._id}>{user.roleId.name}</option>
+              )}
               {roles.filter((r) => !r.isSystemAdmin).map((r) => (
                 <option key={r._id} value={r._id}>{r.name}</option>
               ))}

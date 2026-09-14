@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
@@ -26,6 +26,7 @@ function ImpersonationBanner() {
 
 export default function AppLayout() {
   const user = useSelector((s) => s.auth.user);
+  const location = useLocation();
 
   // Apply server-stored preferences once the authenticated user is known.
   // Re-runs only when the user identity changes (login), so local toggles
@@ -45,14 +46,16 @@ export default function AppLayout() {
   }, []);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
+    <div className="flex h-screen overflow-hidden bg-canvas dark:bg-slate-950">
       <ChatGlobalListener />
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <ImpersonationBanner />
         <Topbar />
         <main className="flex-1 overflow-y-auto p-6">
-          <Outlet />
+          <div key={location.pathname} className="animate-page-in">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

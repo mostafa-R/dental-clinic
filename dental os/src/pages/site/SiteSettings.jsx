@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Spinner from '../../components/ui/Spinner';
+import PageHeader from '../../components/ui/PageHeader';
 import { platformApi } from '../../features/site/platformApi';
 import { showErrorDialog } from '../../features/ui/uiSlice';
 import { useT } from '../../lib/i18n';
 
 const inputCls =
-  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500';
+  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-brand-light';
 
 const fieldLabel = (t, key) => `site.settings.field.${key}`;
 
@@ -91,7 +93,7 @@ export default function SiteSettings() {
         name={name}
         checked={Boolean(settings?.[name])}
         onChange={onChange}
-        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600"
+        className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand dark:border-slate-600"
       />
     </div>
   );
@@ -102,10 +104,7 @@ export default function SiteSettings() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('site.settings.title')}</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('site.settings.subtitle')}</p>
-      </header>
+      <PageHeader title={t('site.settings.title')} subtitle={t('site.settings.subtitle')} />
 
       {status === 'loading' && <Spinner label={t('site.settings.loading')} />}
       {status === 'succeeded' && settings && (
@@ -162,13 +161,9 @@ export default function SiteSettings() {
           </Card>
 
           <div className="flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-            >
+            <Button type="submit" disabled={saving}>
               {saving ? t('common.saving') : t('common.saveChanges')}
-            </button>
+            </Button>
             {message && <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">{message}</span>}
           </div>
         </form>

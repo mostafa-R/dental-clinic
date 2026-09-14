@@ -46,11 +46,11 @@ function PaidIcon() {
 }
 
 const FINANCIAL_META = {
-  revenue: { icon: RevenueIcon, gradient: 'from-emerald-500 to-teal-500', ring: 'ring-emerald-500/20' },
-  expenses: { icon: ExpenseIcon, gradient: 'from-rose-500 to-pink-500', ring: 'ring-rose-500/20' },
-  profit: { icon: ProfitIcon, gradient: 'from-indigo-500 to-blue-500', ring: 'ring-indigo-500/20' },
-  pending: { icon: PendingIcon, gradient: 'from-amber-500 to-orange-500', ring: 'ring-amber-500/20' },
-  paid: { icon: PaidIcon, gradient: 'from-slate-500 to-gray-500', ring: 'ring-slate-500/20' },
+  revenue: { icon: RevenueIcon, bg: 'bg-emerald-600' },
+  expenses: { icon: ExpenseIcon, bg: 'bg-rose-500' },
+  profit: { icon: ProfitIcon, bg: 'bg-indigo-600' },
+  pending: { icon: PendingIcon, bg: 'bg-amber-500' },
+  paid: { icon: PaidIcon, bg: 'bg-slate-500' },
 };
 
 export default function FinancialSummary() {
@@ -127,7 +127,7 @@ export default function FinancialSummary() {
           return (
             <div
               key={row.key}
-              className="group relative overflow-hidden rounded-xl border border-slate-100 bg-gradient-to-br from-white to-slate-50 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:from-slate-800 dark:to-slate-900"
+              className="group rounded-xl border border-slate-100 bg-white p-4 transition-shadow duration-150 hover:shadow-md dark:border-slate-700 dark:bg-slate-800"
             >
               <div className="flex items-start justify-between">
                 <div>
@@ -138,7 +138,7 @@ export default function FinancialSummary() {
                     {formatMoney(row.value)}
                   </p>
                 </div>
-                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${meta.gradient} text-white shadow-sm ring-4 ${meta.ring} transition-transform duration-200 group-hover:scale-110`}>
+                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${meta.bg} text-white shadow-sm`}>
                   <Icon />
                 </div>
               </div>

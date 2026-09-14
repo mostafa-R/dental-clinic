@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import Card from '../../components/ui/Card';
+import Button from '../../components/ui/Button';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable from '../../components/ui/DataTable';
 import Spinner from '../../components/ui/Spinner';
 import EmptyState from '../../components/ui/EmptyState';
 import StatCard from '../../components/ui/StatCard';
+import Pagination from '../../components/ui/Pagination';
 import { platformApi } from '../../features/site/platformApi';
 import { showErrorDialog } from '../../features/ui/uiSlice';
+import { requestConfirm } from '../../features/ui/confirmDialog';
 import { useT } from '../../lib/i18n';
 import { formatTime } from '../../lib/format';
 
@@ -59,7 +63,10 @@ export default function SiteBackups() {
   }, [load]);
 
   const onTrigger = async () => {
-    if (!window.confirm(t('site.backups.triggerConfirm'))) return;
+    if (!(await requestConfirm({
+      title: t('common.confirm'),
+      message: t('site.backups.triggerConfirm'),
+    }))) return;
     setTriggering(true);
     try {
       await platformApi.triggerBackup();
@@ -77,22 +84,17 @@ export default function SiteBackups() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('site.backups.title')}</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('site.backups.subtitle')}</p>
-        </div>
-        {isSuperAdmin && (
-          <button
-            type="button"
-            onClick={onTrigger}
-            disabled={triggering}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-          >
-            {triggering ? t('site.backups.triggering') : t('site.backups.trigger')}
-          </button>
-        )}
-      </header>
+      <PageHeader
+        title={t('site.backups.title')}
+        subtitle={t('site.backups.subtitle')}
+        actions={
+          isSuperAdmin ? (
+            <Button size="sm" onClick={onTrigger} disabled={triggering}>
+              {triggering ? t('site.backups.triggering') : t('site.backups.trigger')}
+            </Button>
+          ) : undefined
+        }
+      />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label={t('site.backups.stats.total')} value={data.total ?? '—'} />
@@ -107,22 +109,31 @@ export default function SiteBackups() {
       )}
 
       {status === 'succeeded' && data.logs.length > 0 && (
-        <Card padded={false}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-500">
-                  <th className="px-4 py-3 text-left">{t('site.backups.col.time')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.backups.col.filename')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.backups.col.size')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.backups.col.type')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.backups.col.status')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.backups.col.duration')}</th>
-                  <th className="px-4 py-3 text-right">{t('site.backups.col.encrypted')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {data.logs.map((log) => (
+        <DataTable
+          columns={[
+            { label: t('site.backups.col.time') },
+            { label: t('site.backups.col.filename') },
+            { label: t('site.backups.col.size') },
+            { label: t('site.backups.col.type') },
+            { label: t('site.backups.col.status') },
+            { label: t('site.backups.col.duration') },
+            { label: t('site.backups.col.encrypted'), className: 'text-end' },
+          ]}
+          count={data.logs.length}
+          footer={
+            data.pages > 1 ? (
+              <Pagination
+                page={data.page}
+                pages={data.pages}
+                total={data.total}
+                onChange={setPage}
+                prevLabel={t('common.prev')}
+                nextLabel={t('common.next')}
+              />
+            ) : undefined
+          }
+        >
+              {data.logs.map((log) => (
                   <tr key={log._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">{formatTime(log.createdAt)}</td>
                     <td className="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-300">{log.filename}</td>
@@ -141,36 +152,7 @@ export default function SiteBackups() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {data.pages > 1 && (
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-slate-500 dark:text-slate-400">
-            {t('common.page', { page: data.page, total: data.pages })}
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage(page - 1)}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              {t('common.prev')}
-            </button>
-            <button
-              type="button"
-              disabled={page >= data.pages}
-              onClick={() => setPage(page + 1)}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              {t('common.next')}
-            </button>
-          </div>
-        </div>
+        </DataTable>
       )}
     </div>
   );

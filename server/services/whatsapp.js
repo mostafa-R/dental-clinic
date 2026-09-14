@@ -238,7 +238,7 @@ async function doConnect(tenantId, key) {
     { $set: { status: 'connecting', lastError: '' } },
   );
 
-  const { Client, LocalAuth } = await import('whatsapp-web.js');
+  const { Client, LocalAuth } = (await import('whatsapp-web.js')).default;
   const chromePath = getChromePath();
   if (!chromePath) {
     const errMsg = 'Chrome/Chromium not found. Install Chrome or set CHROME_PATH env variable.';
@@ -257,8 +257,8 @@ async function doConnect(tenantId, key) {
     puppeteer: {
       executablePath: chromePath,
       headless: true,
-      // Isolated Chrome profile per tenant — no concurrent profile-lock races.
-      userDataDir: `./.wwebjs_chrome/${key}`,
+      // Chrome profile dir is managed by LocalAuth (./.wwebjs_auth/session-<clientId>),
+      // which isolates per tenant via the per-tenant clientId.
       args: [
         '--disable-gpu',
         '--disable-dev-shm-usage',

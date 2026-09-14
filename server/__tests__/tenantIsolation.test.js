@@ -335,6 +335,49 @@ describe('Cross-Tenant Isolation', () => {
       );
     });
   });
+
+  describe('Branch working hours configuration', () => {
+    it('accepts per-day workingHours via PATCH and lets Sunday appointments pass', async () => {
+      const Branch = (await import('../modules/users/branch.model.js')).default;
+
+      const res = await request(app)
+        .patch(`/api/branches/${branchAId}`)
+        .set('Host', 'clinic-a.dentalos.app')
+        .set('Cookie', tokenCookie(userA))
+        .send({
+          workingHours: {
+            sunday: { open: '09:00', close: '17:00', closed: false },
+            saturday: { closed: true, open: null, close: null },
+          },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      const saved = res.body.data.branch;
+      expect(saved.workingHours.sunday).toMatchObject({ open: '09:00', close: '17:00', closed: false });
+      expect(saved.workingHours.saturday.closed).toBe(true);
+
+      const branch = await Branch.findById(branchAId);
+      // 2026-09-13 is a Sunday.
+      const sundayStart = new Date('2026-09-13T09:00:00.000Z');
+      const sundayEnd = new Date('2026-09-13T10:00:00.000Z');
+      expect(branch.isWithinWorkingHours(sundayStart, sundayEnd).valid).toBe(true);
+    });
+
+    it('rejects invalid working hours (open after close)', async () => {
+      const res = await request(app)
+        .patch(`/api/branches/${branchAId}`)
+        .set('Host', 'clinic-a.dentalos.app')
+        .set('Cookie', tokenCookie(userA))
+        .send({
+          workingHours: {
+            monday: { open: '18:00', close: '09:00', closed: false },
+          },
+        });
+
+      expect(res.status).toBe(400);
+    });
+  });
 });
 
 describe('Tenant Isolation Middleware', () => {

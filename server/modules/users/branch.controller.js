@@ -24,7 +24,17 @@ export const listBranches = asyncHandler(async (req, res) => {
 });
 
 export const createBranch = asyncHandler(async (req, res) => {
-  const { name, address, phone, isActive } = req.validatedBody;
+  const {
+    name,
+    address,
+    phone,
+    isActive,
+    workingHours,
+    breakStart,
+    breakEnd,
+    slotDuration,
+    bufferTime,
+  } = req.validatedBody;
   const tenant = currentTenant(req);
   if (!tenant) {
     throw ApiError.forbidden('You must belong to a tenant to create branches');
@@ -49,7 +59,18 @@ export const createBranch = asyncHandler(async (req, res) => {
     }
 
     const [created] = await Branch.create(
-      [{ tenant, name, address, phone, isActive: isActive ?? true }],
+      [{
+        tenant,
+        name,
+        address,
+        phone,
+        isActive: isActive ?? true,
+        workingHours,
+        breakStart,
+        breakEnd,
+        slotDuration,
+        bufferTime,
+      }],
       { session },
     );
     return created;
@@ -70,7 +91,17 @@ export const updateBranch = asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(id)) {
     throw ApiError.badRequest('Invalid branch id');
   }
-  const { name, address, phone, isActive } = req.validatedBody;
+  const {
+    name,
+    address,
+    phone,
+    isActive,
+    workingHours,
+    breakStart,
+    breakEnd,
+    slotDuration,
+    bufferTime,
+  } = req.validatedBody;
   const tenant = currentTenant(req);
 
   const branch = await Branch.findOne({ _id: id, ...(tenant ? { tenant } : {}) });
@@ -80,6 +111,22 @@ export const updateBranch = asyncHandler(async (req, res) => {
   if (address !== undefined) branch.address = address;
   if (phone !== undefined) branch.phone = phone;
   if (isActive !== undefined) branch.isActive = isActive;
+  if (workingHours) {
+    // Per-day merge so clinics can configure each day independently.
+    for (const [day, value] of Object.entries(workingHours)) {
+      if (value && typeof value === 'object') {
+        branch.workingHours[day] = {
+          open: value.open ?? null,
+          close: value.close ?? null,
+          closed: value.closed ?? false,
+        };
+      }
+    }
+  }
+  if (breakStart !== undefined) branch.breakStart = breakStart;
+  if (breakEnd !== undefined) branch.breakEnd = breakEnd;
+  if (slotDuration !== undefined) branch.slotDuration = slotDuration;
+  if (bufferTime !== undefined) branch.bufferTime = bufferTime;
 
   await branch.save();
 

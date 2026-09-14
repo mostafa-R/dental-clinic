@@ -1,5 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-  <path d="M2 17l10 5 10-5"/>
-  <path d="M2 12l10 5 10-5"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 60 60" fill="none" role="img" aria-label="DentoCare">
+  <g transform="translate(5 7.5)">
+    <path d="M15,10 C15,10 5,20 10,40 C12,48 20,50 25,45 C30,40 30,30 35,45 C40,50 48,48 50,40 C55,20 45,10 45,10 C45,10 30,5 15,10 Z" fill="#2E7D52" />
+    <path d="M15,35 C25,35 35,25 45,15 C45,25 35,35 25,45 C20,45 15,40 15,35 Z" fill="#A5D6A7" />
+  </g>
 </svg>

@@ -6,6 +6,7 @@ import RequirePermission from './components/RequirePermission';
 import RoleRedirect from './components/RoleRedirect';
 import SiteProtectedRoute from './features/site/SiteProtectedRoute';
 import SiteLayout from './features/site/SiteLayout';
+import Skeleton from './components/ui/Skeleton';
 
 const Login = lazy(() => import('./features/auth/Login'));
 const SiteLogin = lazy(() => import('./pages/site/SiteLogin'));
@@ -33,10 +34,27 @@ const Chat = lazy(() => import('./pages/Chat'));
 
 function RouteFallback() {
   return (
-    <div className="flex items-center justify-center p-16">
-      <div className="flex items-center gap-3 text-sm text-slate-500">
-        <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-indigo-500" />
-        Loading…
+    <div className="mx-auto w-full max-w-5xl space-y-6 p-6">
+      <div className="space-y-3">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-4 w-80" />
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
+            <Skeleton className="h-10 w-10" />
+            <Skeleton className="mt-4 h-6 w-24" />
+            <Skeleton className="mt-2 h-4 w-16" />
+          </div>
+        ))}
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="flex items-center justify-between border-b border-slate-100 py-3 last:border-0 dark:border-slate-800">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+        ))}
       </div>
     </div>
   );

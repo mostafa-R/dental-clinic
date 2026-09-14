@@ -7,6 +7,7 @@ import Spinner from '../../components/ui/Spinner';
 import ClinicalNoteFormModal from './ClinicalNoteFormModal';
 import { deleteNote, fetchNotes } from './emrSlice';
 import { showErrorDialog } from '../ui/uiSlice';
+import { requestConfirm } from '../ui/confirmDialog';
 import { useSocketEvent } from '../../lib/socket';
 import { canManageEmr } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
@@ -45,7 +46,12 @@ export default function ClinicalTimelineTab({ patientId, patient }) {
   useSocketEvent('clinical-note:deleted', refetch);
 
   const onDelete = async (noteId) => {
-    if (!window.confirm(t('emr.note.deleteConfirm'))) return;
+    const ok = await requestConfirm({
+      title: t('common.confirm'),
+      message: t('emr.note.deleteConfirm'),
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await dispatch(deleteNote({ patientId, noteId })).unwrap();
     } catch (err) {

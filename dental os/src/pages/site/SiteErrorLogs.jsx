@@ -1,6 +1,8 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import Card from '../../components/ui/Card';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable from '../../components/ui/DataTable';
+import Pagination from '../../components/ui/Pagination';
 import Spinner from '../../components/ui/Spinner';
 import EmptyState from '../../components/ui/EmptyState';
 import StatCard from '../../components/ui/StatCard';
@@ -78,10 +80,7 @@ export default function SiteErrorLogs() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('site.errors.title')}</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('site.errors.subtitle')}</p>
-      </header>
+      <PageHeader title={t('site.errors.title')} subtitle={t('site.errors.subtitle')} />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label={t('site.errors.stats.total')} value={stats?.total ?? '—'} />
@@ -125,21 +124,31 @@ export default function SiteErrorLogs() {
       )}
 
       {status === 'succeeded' && data.logs.length > 0 && (
-        <Card padded={false}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-500">
-                  <th className="px-4 py-3 text-left">{t('site.errors.col.time')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.errors.col.status')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.errors.col.request')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.errors.col.message')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.errors.col.tenant')}</th>
-                  <th className="px-4 py-3 text-right">{t('site.errors.col.actions')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {data.logs.map((log) => (
+        <DataTable
+          columns={[
+            { label: t('site.errors.col.time') },
+            { label: t('site.errors.col.status') },
+            { label: t('site.errors.col.request') },
+            { label: t('site.errors.col.message') },
+            { label: t('site.errors.col.tenant') },
+            { label: t('site.errors.col.actions'), className: 'text-end' },
+          ]}
+          count={data.logs.length}
+          footer={
+            data.pagination.pages > 1 ? (
+              <Pagination
+                page={data.pagination.page}
+                pages={data.pagination.pages}
+                total={data.pagination.total}
+                pageSize={data.pagination.limit}
+                onChange={(p) => setFilters((f) => ({ ...f, page: p }))}
+                prevLabel={t('common.prev')}
+                nextLabel={t('common.next')}
+              />
+            ) : undefined
+          }
+        >
+              {data.logs.map((log) => (
                   <Fragment key={log._id}>
                     <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
                       <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">{formatTime(log.createdAt)}</td>
@@ -193,36 +202,7 @@ export default function SiteErrorLogs() {
                     )}
                   </Fragment>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {data.pagination.pages > 1 && (
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-slate-500 dark:text-slate-400">
-            {t('common.page', { page: data.pagination.page, total: data.pagination.pages })}
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={data.pagination.page <= 1}
-              onClick={() => setFilters((f) => ({ ...f, page: f.page - 1 }))}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              {t('common.prev')}
-            </button>
-            <button
-              type="button"
-              disabled={data.pagination.page >= data.pagination.pages}
-              onClick={() => setFilters((f) => ({ ...f, page: f.page + 1 }))}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              {t('common.next')}
-            </button>
-          </div>
-        </div>
+        </DataTable>
       )}
     </div>
   );

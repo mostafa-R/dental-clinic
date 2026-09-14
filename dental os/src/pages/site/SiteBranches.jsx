@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import Card from '../../components/ui/Card';
+import Button from '../../components/ui/Button';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable from '../../components/ui/DataTable';
 import Spinner from '../../components/ui/Spinner';
 import EmptyState from '../../components/ui/EmptyState';
 import Modal from '../../components/ui/Modal';
+import Pagination from '../../components/ui/Pagination';
 import { platformApi } from '../../features/site/platformApi';
 import { showErrorDialog } from '../../features/ui/uiSlice';
+import { requestConfirm } from '../../features/ui/confirmDialog';
 import { useT } from '../../lib/i18n';
 import { formatDate } from '../../lib/format';
 
 const inputCls =
-  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500';
+  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-brand-light';
 
 export default function SiteBranches() {
   const dispatch = useDispatch();
@@ -105,7 +109,11 @@ export default function SiteBranches() {
   };
 
   const onDelete = async (branch) => {
-    if (!window.confirm(t('site.branches.deleteConfirm', { name: branch.name }))) return;
+    if (!(await requestConfirm({
+      title: t('common.confirm'),
+      message: t('site.branches.deleteConfirm', { name: branch.name }),
+      danger: true,
+    }))) return;
     try {
       await platformApi.deleteBranch(branch._id);
       await load();
@@ -116,33 +124,29 @@ export default function SiteBranches() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('site.branches.title')}</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('site.branches.subtitle')}</p>
-        </div>
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={openCreate}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-          >
-            {t('site.branches.create')}
-          </button>
-        )}
-      </header>
+      <PageHeader
+        title={t('site.branches.title')}
+        subtitle={t('site.branches.subtitle')}
+        actions={
+          isAdmin ? (
+            <Button size="sm" onClick={openCreate}>
+              {t('site.branches.create')}
+            </Button>
+          ) : undefined
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-3">
         <input
           value={filters.search}
           onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value, page: 1 }))}
           placeholder={t('site.branches.searchPlaceholder')}
-          className="w-64 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          className="w-64 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-brand-light"
         />
         <select
           value={filters.tenant}
           onChange={(e) => setFilters((f) => ({ ...f, tenant: e.target.value, page: 1 }))}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-brand-light"
         >
           <option value="">{t('site.branches.allTenants')}</option>
           {tenants.map((tenant) => (
@@ -157,21 +161,31 @@ export default function SiteBranches() {
       )}
 
       {status === 'succeeded' && data.branches.length > 0 && (
-        <Card padded={false}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-500">
-                  <th className="px-4 py-3 text-left">{t('site.branches.col.name')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.branches.col.tenant')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.branches.col.users')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.branches.col.status')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.branches.col.created')}</th>
-                  {isAdmin && <th className="px-4 py-3 text-right">{t('site.branches.col.actions')}</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {data.branches.map((branch) => (
+        <DataTable
+          columns={[
+            { label: t('site.branches.col.name') },
+            { label: t('site.branches.col.tenant') },
+            { label: t('site.branches.col.users') },
+            { label: t('site.branches.col.status') },
+            { label: t('site.branches.col.created') },
+            ...(isAdmin ? [{ label: t('site.branches.col.actions'), className: 'text-end' }] : []),
+          ]}
+          count={data.branches.length}
+          footer={
+            data.pagination.totalPages > 1 ? (
+              <Pagination
+                page={data.pagination.page}
+                pages={data.pagination.totalPages}
+                total={data.pagination.total}
+                pageSize={data.pagination.limit}
+                onChange={(p) => setFilters((f) => ({ ...f, page: p }))}
+                prevLabel={t('common.prev')}
+                nextLabel={t('common.next')}
+              />
+            ) : undefined
+          }
+        >
+              {data.branches.map((branch) => (
                   <tr key={branch._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
                     <td className="px-4 py-3">
                       <p className="font-medium text-slate-900 dark:text-white">{branch.name}</p>
@@ -209,36 +223,7 @@ export default function SiteBranches() {
                     )}
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {data.pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-slate-500 dark:text-slate-400">
-            {t('common.page', { page: data.pagination.page, total: data.pagination.totalPages })}
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={data.pagination.page <= 1}
-              onClick={() => setFilters((f) => ({ ...f, page: f.page - 1 }))}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              {t('common.prev')}
-            </button>
-            <button
-              type="button"
-              disabled={data.pagination.page >= data.pagination.totalPages}
-              onClick={() => setFilters((f) => ({ ...f, page: f.page + 1 }))}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              {t('common.next')}
-            </button>
-          </div>
-        </div>
+        </DataTable>
       )}
 
       <Modal
@@ -247,21 +232,12 @@ export default function SiteBranches() {
         title={editing ? t('site.branches.editTitle') : t('site.branches.createTitle')}
         footer={
           <>
-            <button
-              type="button"
-              onClick={() => setFormOpen(false)}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
+            <Button variant="secondary" onClick={() => setFormOpen(false)}>
               {t('common.cancel')}
-            </button>
-            <button
-              type="button"
-              onClick={onSubmit}
-              disabled={saving}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-            >
+            </Button>
+            <Button onClick={onSubmit} disabled={saving}>
               {saving ? t('common.saving') : t('common.save')}
-            </button>
+            </Button>
           </>
         }
       >
@@ -297,7 +273,7 @@ export default function SiteBranches() {
                 checked={form.isActive}
                 onChange={onChange}
                 name="isActive"
-                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600"
+                className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand dark:border-slate-600"
               />
               <label htmlFor="branchIsActive" className="text-sm text-slate-700 dark:text-slate-200">{t('common.active')}</label>
             </div>

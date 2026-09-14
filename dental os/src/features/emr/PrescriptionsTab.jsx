@@ -7,6 +7,7 @@ import Spinner from '../../components/ui/Spinner';
 import PrescriptionFormModal from './PrescriptionFormModal';
 import { deletePrescription, fetchPrescriptions } from './emrSlice';
 import { showErrorDialog } from '../ui/uiSlice';
+import { requestConfirm } from '../ui/confirmDialog';
 import { useSocketEvent } from '../../lib/socket';
 import { canManagePrescriptions } from '../../lib/roles';
 import { formatDate } from '../../lib/format';
@@ -34,7 +35,12 @@ export default function PrescriptionsTab({ patientId, patient }) {
   useSocketEvent('prescription:deleted', refetch);
 
   const onDelete = async (rxId) => {
-    if (!window.confirm(t('emr.rx.deleteConfirm'))) return;
+    const ok = await requestConfirm({
+      title: t('common.confirm'),
+      message: t('emr.rx.deleteConfirm'),
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await dispatch(deletePrescription({ patientId, rxId })).unwrap();
     } catch (err) {

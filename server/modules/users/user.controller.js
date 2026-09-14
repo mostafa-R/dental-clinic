@@ -244,10 +244,12 @@ export const updateUser = asyncHandler(async (req, res) => {
     throw ApiError.forbidden('Cannot deactivate your own account');
   }
 
-  // Prevent changing to a system admin role
+  // Prevent changing TO a system admin role. Keeping the user's own,
+  // already-assigned system admin role (e.g. clinic manager) is allowed so
+  // those staff records can still be edited for name/phone/branch/etc.
   if (data.roleId) {
     const targetRole = await Role.findById(data.roleId).select('isSystemAdmin isBuiltIn');
-    if (targetRole?.isSystemAdmin) {
+    if (targetRole?.isSystemAdmin && String(data.roleId) !== String(user.roleId || '')) {
       throw ApiError.forbidden('Cannot assign a system admin role through this endpoint');
     }
   }

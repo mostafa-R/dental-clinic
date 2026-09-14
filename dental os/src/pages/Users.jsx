@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import Card from '../components/ui/Card';
-import Spinner from '../components/ui/Spinner';
+import PageHeader from '../components/ui/PageHeader';
+import Button from '../components/ui/Button';
+import DataTable from '../components/ui/DataTable';
 import EmptyState from '../components/ui/EmptyState';
+import Spinner from '../components/ui/Spinner';
 import { fetchUsers, toggleUserActive } from '../features/users/userSlice';
-import { showErrorDialog } from '../features/ui/uiSlice';
+import { showErrorDialog, pushToast } from '../features/ui/uiSlice';
+import { requestConfirm } from '../features/ui/confirmDialog';
 import { useSocketEvent } from '../lib/socket';
 import { useT } from '../lib/i18n';
 import { canManageUsers, roleLabel } from '../lib/roles';
@@ -35,9 +38,14 @@ export default function Users() {
 
   const onToggleActive = async (user) => {
     const action = user.isActive ? 'deactivate' : 'activate';
-    if (!window.confirm(t(`users.${action}Confirm`, { name: user.name }))) return;
+    const ok = await requestConfirm({
+      title: t('common.confirm'),
+      message: t(`users.${action}Confirm`, { name: user.name }),
+    });
+    if (!ok) return;
     try {
       await dispatch(toggleUserActive(user._id)).unwrap();
+      dispatch(pushToast({ type: 'success', message: t(`users.toggled${action === 'activate' ? 'Active' : 'Inactive'}`, { name: user.name }) }));
     } catch (err) {
       dispatch(showErrorDialog(err));
     }
@@ -47,80 +55,78 @@ export default function Users() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('users.title')}</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('users.subtitle')}</p>
-        </div>
-        {canManage && (
-          <button type="button" onClick={openCreate} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400">
-            {t('users.new')}
-          </button>
-        )}
-      </header>
+      <PageHeader
+        title={t('users.title')}
+        subtitle={t('users.subtitle')}
+        actions={
+          canManage ? (
+            <Button size="sm" onClick={openCreate}>
+              {t('users.new')}
+            </Button>
+          ) : undefined
+        }
+      />
 
       {isLoading && <Spinner label={t('users.loading')} />}
       {error && !isLoading && <EmptyState title={t('users.loadFailed')} message={error?.message} />}
       {status === 'succeeded' && !error && items.length === 0 && (
-        <EmptyState title={t('users.empty')} description={t('users.emptyHint')} action={
-          canManage ? (
-            <button type="button" onClick={openCreate} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700">
-              {t('users.new')}
-            </button>
-          ) : undefined
-        } />
+        <EmptyState
+          title={t('users.empty')}
+          message={t('users.emptyHint')}
+          action={
+            canManage ? (
+              <Button size="sm" onClick={openCreate}>
+                {t('users.new')}
+              </Button>
+            ) : undefined
+          }
+        />
       )}
 
       {status === 'succeeded' && items.length > 0 && (
-        <Card padded={false}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-500">
-                  <th className="px-4 py-3 text-left">{t('users.col.name')}</th>
-                  <th className="px-4 py-3 text-left">{t('users.col.email')}</th>
-                  <th className="px-4 py-3 text-left">{t('users.col.role')}</th>
-                  <th className="px-4 py-3 text-left">{t('users.col.branch')}</th>
-                  <th className="px-4 py-3 text-left">{t('users.col.status')}</th>
-                  <th className="px-4 py-3 text-right">{t('users.col.actions')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {items.map((u) => (
-                  <tr key={u._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{u.name}</td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{u.email}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">
-                        {u.roleId?.name || roleLabel(u.role)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{u.branch?.name || '—'}</td>
-                    <td className="px-4 py-3">
-                      {u.isActive ? (
-                        <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">{t('users.active')}</span>
-                      ) : (
-                        <span className="inline-flex rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">{t('users.inactive')}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {canManage && (
-                        <div className="flex items-center justify-end gap-2">
-                          <button type="button" onClick={() => openEdit(u)} className="rounded-md px-2 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
-                            {t('common.edit')}
-                          </button>
-                          <button type="button" onClick={() => onToggleActive(u)} className="rounded-md px-2 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/15">
-                            {u.isActive ? t('common.deactivate') : t('common.activate')}
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <DataTable
+          columns={[
+            { label: t('users.col.name') },
+            { label: t('users.col.email') },
+            { label: t('users.col.role') },
+            { label: t('users.col.branch') },
+            { label: t('users.col.status') },
+            { label: t('users.col.actions'), className: 'text-end' },
+          ]}
+          count={items.length}
+        >
+          {items.map((u) => (
+            <tr key={u._id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/30">
+              <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{u.name}</td>
+              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{u.email}</td>
+              <td className="px-4 py-3">
+                <span className="inline-flex rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">
+                  {u.roleId?.name || roleLabel(u.role)}
+                </span>
+              </td>
+              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{u.branch?.name || '—'}</td>
+              <td className="px-4 py-3">
+                {u.isActive ? (
+                  <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">{t('users.active')}</span>
+                ) : (
+                  <span className="inline-flex rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">{t('users.inactive')}</span>
+                )}
+              </td>
+              <td className="px-4 py-3 text-end">
+                {canManage && (
+                  <div className="flex items-center justify-end gap-2">
+                    <Button variant="ghost" size="xs" onClick={() => openEdit(u)}>
+                      {t('common.edit')}
+                    </Button>
+                    <Button variant="danger-soft" size="xs" onClick={() => onToggleActive(u)}>
+                      {u.isActive ? t('common.deactivate') : t('common.activate')}
+                    </Button>
+                  </div>
+                )}
+              </td>
+            </tr>
+          ))}
+        </DataTable>
       )}
 
       <UserFormModal open={formOpen} onClose={closeForm} user={editing} />

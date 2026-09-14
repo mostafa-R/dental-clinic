@@ -34,6 +34,7 @@ const wa = vi.hoisted(() => {
 vi.mock("whatsapp-web.js", () => ({
   Client: wa.MockClient,
   LocalAuth: wa.MockLocalAuth,
+  default: { Client: wa.MockClient, LocalAuth: wa.MockLocalAuth },
 }));
 
 const modelState = {

@@ -1,5 +1,6 @@
 import { useSelector } from "react-redux";
 import { NavLink } from "react-router-dom";
+import DentoCareLogo from "../ui/DentoCareLogo";
 import {
   ArrowUpTrayIcon,
   BuildingOfficeIcon,
@@ -140,9 +141,11 @@ const navigation = [
 ];
 
 export default function Sidebar() {
-  const { sidebarCollapsed } = useSelector((state) => state.ui);
+  const { sidebarCollapsed, theme } = useSelector((state) => state.ui);
   const { language } = useSelector((state) => state.ui);
   const { user } = useSelector((state) => state.auth);
+
+  const logoVariant = theme === "dark" ? "light" : "brand";
 
   const visibleNav = navigation.filter(
     (item) => !item.accessKey || canUserAccess(user, item.accessKey),
@@ -173,14 +176,13 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="flex items-center h-16 px-4 border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">DO</span>
-          </div>
-          {!sidebarCollapsed && (
-            <span className="text-lg font-bold text-slate-900 dark:text-white">
-              Dental OS
-            </span>
-          )}
+          <DentoCareLogo
+            variant={logoVariant}
+            width={sidebarCollapsed ? 30 : 150}
+            height={sidebarCollapsed ? 30 : 40}
+            showText={!sidebarCollapsed}
+            className="shrink-0"
+          />
         </div>
       </div>
 

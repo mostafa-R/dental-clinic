@@ -1,5 +1,54 @@
 @import "tailwindcss";
 
+/*
+ * DentoCare brand palette — re-point Tailwind's indigo/violet/purple ramps
+ * at the DentoCare colors so existing utilities render on-brand:
+ *   green → indigo ramp ▸ Brand #2E7D52, Dark #165A3A, Light #A5D6A7
+ *   peach → violet+purple ramp ▸ Smile accent #F0A080 (CTA / wellness)
+ */
+@theme {
+  --color-indigo-50: #eaf5ee;
+  --color-indigo-100: #d2e9dc;
+  --color-indigo-200: #a5d6a7;
+  --color-indigo-300: #85c497;
+  --color-indigo-400: #5da97b;
+  --color-indigo-500: #429064;
+  --color-indigo-600: #2e7d52;
+  --color-indigo-700: #165a3a;
+  --color-indigo-800: #12472e;
+  --color-indigo-900: #0d3522;
+  --color-indigo-950: #062415;
+
+  --color-violet-50: #fdf4ee;
+  --color-violet-100: #fbe6d6;
+  --color-violet-200: #f7d2b9;
+  --color-violet-300: #f4bc9c;
+  --color-violet-400: #f2ab86;
+  --color-violet-500: #f0a080;
+  --color-violet-600: #de8357;
+  --color-violet-700: #c26a46;
+  --color-violet-800: #a25337;
+  --color-violet-900: #7f3e29;
+  --color-violet-950: #52261a;
+
+  --color-purple-50: #fdf4ee;
+  --color-purple-100: #fbe6d6;
+  --color-purple-200: #f7d2b9;
+  --color-purple-300: #f4bc9c;
+  --color-purple-400: #f2ab86;
+  --color-purple-500: #f0a080;
+  --color-purple-600: #de8357;
+  --color-purple-700: #c26a46;
+  --color-purple-800: #a25337;
+  --color-purple-900: #7f3e29;
+  --color-purple-950: #52261a;
+
+  --color-brand: #2e7d52;
+  --color-brand-dark: #165a3a;
+  --color-brand-light: #a5d6a7;
+  --color-smile: #f0a080;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

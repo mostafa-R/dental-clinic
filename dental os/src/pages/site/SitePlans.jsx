@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Spinner from '../../components/ui/Spinner';
 import EmptyState from '../../components/ui/EmptyState';
+import PageHeader from '../../components/ui/PageHeader';
 import Modal from '../../components/ui/Modal';
 import { platformApi } from '../../features/site/platformApi';
 import { showErrorDialog } from '../../features/ui/uiSlice';
+import { requestConfirm } from '../../features/ui/confirmDialog';
 import { useT } from '../../lib/i18n';
 import { formatMoney } from '../../lib/format';
 
 const inputCls =
-  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500';
+  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-brand-light';
 
 export default function SitePlans() {
   const dispatch = useDispatch();
@@ -110,7 +113,11 @@ export default function SitePlans() {
   };
 
   const onDelete = async (plan) => {
-    if (!window.confirm(t('site.plans.deleteConfirm', { name: plan.name }))) return;
+    if (!(await requestConfirm({
+      title: t('common.confirm'),
+      message: t('site.plans.deleteConfirm', { name: plan.name }),
+      danger: true,
+    }))) return;
     try {
       await platformApi.deletePlan(plan._id);
       await load();
@@ -130,21 +137,17 @@ export default function SitePlans() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('site.plans.title')}</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('site.plans.subtitle')}</p>
-        </div>
-        {isSuperAdmin && (
-          <button
-            type="button"
-            onClick={() => onOpenModal(null)}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-          >
-            {t('site.plans.create')}
-          </button>
-        )}
-      </header>
+      <PageHeader
+        title={t('site.plans.title')}
+        subtitle={t('site.plans.subtitle')}
+        actions={
+          isSuperAdmin ? (
+            <Button size="sm" onClick={() => onOpenModal(null)}>
+              {t('site.plans.create')}
+            </Button>
+          ) : undefined
+        }
+      />
 
       {status === 'loading' && <Spinner label={t('site.plans.loading')} />}
       {status === 'succeeded' && plans.length === 0 && (
@@ -180,27 +183,27 @@ export default function SitePlans() {
             </div>
             {isSuperAdmin && (
               <div className="mt-4 flex gap-2">
-                <button
-                  type="button"
+                <Button
+                  size="xs"
+                  variant="ghost"
                   onClick={() => onOpenModal(plan)}
-                  className="rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                 >
                   {t('common.edit')}
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  size="xs"
+                  variant="ghost"
                   onClick={() => onToggleActive(plan)}
-                  className="rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                 >
                   {plan.isActive ? t('site.plans.deactivate') : t('site.plans.activate')}
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  size="xs"
+                  variant="danger"
                   onClick={() => onDelete(plan)}
-                  className="rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/15"
                 >
                   {t('common.delete')}
-                </button>
+                </Button>
               </div>
             )}
           </Card>
@@ -213,21 +216,12 @@ export default function SitePlans() {
         title={editing ? t('site.plans.editTitle') : t('site.plans.createTitle')}
         footer={
           <>
-            <button
-              type="button"
-              onClick={() => setFormOpen(false)}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
+            <Button variant="secondary" onClick={() => setFormOpen(false)}>
               {t('common.cancel')}
-            </button>
-            <button
-              type="button"
-              onClick={onSubmit}
-              disabled={saving}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-            >
+            </Button>
+            <Button onClick={onSubmit} disabled={saving}>
               {saving ? t('common.saving') : t('common.save')}
-            </button>
+            </Button>
           </>
         }
       >
@@ -277,7 +271,7 @@ export default function SitePlans() {
               id="isActive"
               checked={form.isActive}
               onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
-              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600"
+              className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand dark:border-slate-600"
             />
             <label htmlFor="isActive" className="text-sm text-slate-700 dark:text-slate-200">{t('site.plans.field.isActive')}</label>
           </div>

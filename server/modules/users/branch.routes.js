@@ -63,6 +63,14 @@ router.get('/', protect, checkPermission('branches', 'read'), listBranches);
  *               address: { type: string, maxLength: 500 }
  *               phone: { type: string, maxLength: 30 }
  *               isActive: { type: boolean, default: true }
+ *               workingHours:
+ *                 type: object
+ *                 description: Per-day open/close times. A day marked closed is an off day.
+ *                 additionalProperties: { $ref: '#/components/schemas/DayHours' }
+ *               breakStart: { type: string, example: "13:00", nullable: true }
+ *               breakEnd: { type: string, example: "14:00", nullable: true }
+ *               slotDuration: { type: integer, minimum: 5, maximum: 120 }
+ *               bufferTime: { type: integer, minimum: 0, maximum: 60 }
  *     responses:
  *       '201':
  *         description: Branch created
@@ -110,6 +118,14 @@ router.post('/', protect, checkPermission('branches', 'create'), validate(create
  *               address: { type: string, maxLength: 500 }
  *               phone: { type: string, maxLength: 30 }
  *               isActive: { type: boolean }
+ *               workingHours:
+ *                 type: object
+ *                 description: Per-day open/close times. A day marked closed is an off day.
+ *                 additionalProperties: { $ref: '#/components/schemas/DayHours' }
+ *               breakStart: { type: string, example: "13:00", nullable: true }
+ *               breakEnd: { type: string, example: "14:00", nullable: true }
+ *               slotDuration: { type: integer, minimum: 5, maximum: 120 }
+ *               bufferTime: { type: integer, minimum: 0, maximum: 60 }
  *     responses:
  *       '200':
  *         description: Branch updated

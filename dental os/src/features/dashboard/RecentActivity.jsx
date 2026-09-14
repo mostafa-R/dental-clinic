@@ -25,7 +25,7 @@ export default function RecentActivity({ recentStaff }) {
                 i === 0 ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'
               }`} />
             </span>
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 text-sm font-semibold text-white shadow-sm">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-sm font-semibold text-white shadow-sm">
               {u.name?.charAt(0)?.toUpperCase() || '?'}
             </div>
             <div className="min-w-0 flex-1">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Card from '../../components/ui/Card';
@@ -238,7 +238,7 @@ export default function WalletTab({ patientId }) {
                       </span>
                     </td>
                     <td className="py-2 font-medium text-slate-900 dark:text-white">{formatMoney(tx.amount)}</td>
-                    <td className="py-2 text-slate-500 dark:text-slate-400">{tx.description || '—'}</td>
+                    <td className="py-2 text-slate-500 dark:text-slate-400">{tx.description || 'â€”'}</td>
                     <td className="py-2 text-slate-900 dark:text-white">{formatMoney(tx.balanceAfter)}</td>
                   </tr>
                 ))}
@@ -268,7 +268,7 @@ export default function WalletTab({ patientId }) {
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{plan.title}</h3>
-                    <p className="text-xs text-slate-400 dark:text-slate-500">{plan.installments?.length || 0} {t('wallet.installments')} · {t(`wallet.frequency.${plan.frequency || 'monthly'}`)}</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500">{plan.installments?.length || 0} {t('wallet.installments')} Â· {t(`wallet.frequency.${plan.frequency || 'monthly'}`)}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PLAN_STATUS_STYLES[plan.status]}`}>
@@ -345,7 +345,7 @@ export default function WalletTab({ patientId }) {
       {/* Pay Installment Modal */}
       {payingPlanId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900">
             <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">{t('wallet.pay')}</h3>
             <input type="number" step="0.01" min="0.01" required value={payAmount}
               onChange={(e) => setPayAmount(e.target.value)}
@@ -428,7 +428,7 @@ export default function WalletTab({ patientId }) {
       {/* Edit Installment Plan Modal */}
       {editingPlan && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900">
             <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">{t('wallet.editPlan')}</h3>
             <input type="text" required value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
               placeholder={t('wallet.planTitle')}
@@ -450,7 +450,7 @@ export default function WalletTab({ patientId }) {
       {/* View Created Plan Dialog */}
       {viewingPlan && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{t('wallet.planDetails')}</h3>
               <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PLAN_STATUS_STYLES[viewingPlan.status]}`}>

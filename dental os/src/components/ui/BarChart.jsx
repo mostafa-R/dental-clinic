@@ -1,9 +1,9 @@
 const BAR_COLORS = [
   { bar: 'bg-indigo-500 dark:bg-indigo-400', ring: 'ring-indigo-500/20' },
   { bar: 'bg-sky-500 dark:bg-sky-400', ring: 'ring-sky-500/20' },
-  { bar: 'bg-emerald-500 dark:bg-emerald-400', ring: 'ring-emerald-500/20' },
-  { bar: 'bg-amber-500 dark:bg-amber-400', ring: 'ring-amber-500/20' },
   { bar: 'bg-violet-500 dark:bg-violet-400', ring: 'ring-violet-500/20' },
+  { bar: 'bg-amber-500 dark:bg-amber-400', ring: 'ring-amber-500/20' },
+  { bar: 'bg-emerald-500 dark:bg-emerald-400', ring: 'ring-emerald-500/20' },
   { bar: 'bg-rose-500 dark:bg-rose-400', ring: 'ring-rose-500/20' },
   { bar: 'bg-cyan-500 dark:bg-cyan-400', ring: 'ring-cyan-500/20' },
   { bar: 'bg-pink-500 dark:bg-pink-400', ring: 'ring-pink-500/20' },

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+﻿import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { clearErrorDialog } from '../features/ui/uiSlice';
 import { useT } from '../lib/i18n';
@@ -28,7 +28,7 @@ export default function ErrorDialog() {
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="error-dialog-title"
-        className="relative z-10 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900"
+        className="relative z-10 w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900"
       >
         <div className="flex items-start gap-4">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-300">
@@ -49,7 +49,7 @@ export default function ErrorDialog() {
           <ul className="mt-4 space-y-1.5 rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
             {fields.map((f, i) => (
               <li key={i} className="flex items-start gap-2 text-sm">
-                <span className="mt-0.5 text-slate-400 dark:text-slate-500">•</span>
+                <span className="mt-0.5 text-slate-400 dark:text-slate-500">â€¢</span>
                 <span>
                   <span className="font-medium text-slate-700 dark:text-slate-200">{f.field}:</span>{' '}
                   <span className="text-slate-600 dark:text-slate-300">{f.message}</span>

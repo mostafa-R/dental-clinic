@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import Card from '../../components/ui/Card';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable from '../../components/ui/DataTable';
 import Spinner from '../../components/ui/Spinner';
 import EmptyState from '../../components/ui/EmptyState';
 import StatCard from '../../components/ui/StatCard';
 import Modal from '../../components/ui/Modal';
+import Button from '../../components/ui/Button';
 import { platformApi } from '../../features/site/platformApi';
 import { showErrorDialog } from '../../features/ui/uiSlice';
 import { useT } from '../../lib/i18n';
@@ -114,10 +116,7 @@ export default function SiteSubscriptions() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('site.subscriptions.title')}</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('site.subscriptions.subtitle')}</p>
-      </header>
+      <PageHeader title={t('site.subscriptions.title')} subtitle={t('site.subscriptions.subtitle')} />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label={t('site.subscriptions.stats.mrr')} value={`$${formatMoney(stats.mrr)}`} />
@@ -132,21 +131,18 @@ export default function SiteSubscriptions() {
       )}
 
       {status === 'succeeded' && data.subscriptions.length > 0 && (
-        <Card padded={false}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-500">
-                  <th className="px-4 py-3 text-left">{t('site.subscriptions.col.tenant')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.subscriptions.col.amount')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.subscriptions.col.cycle')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.subscriptions.col.status')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.subscriptions.col.currentPeriod')}</th>
-                  <th className="px-4 py-3 text-right">{t('site.subscriptions.col.actions')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {data.subscriptions.map((sub) => (
+        <DataTable
+          columns={[
+            { label: t('site.subscriptions.col.tenant') },
+            { label: t('site.subscriptions.col.amount') },
+            { label: t('site.subscriptions.col.cycle') },
+            { label: t('site.subscriptions.col.status') },
+            { label: t('site.subscriptions.col.currentPeriod') },
+            { label: t('site.subscriptions.col.actions'), className: 'text-end' },
+          ]}
+          count={data.subscriptions.length}
+        >
+              {data.subscriptions.map((sub) => (
                   <tr key={sub._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
                     <td className="px-4 py-3">
                       <p className="font-medium text-slate-900 dark:text-white">{sub.tenant?.name || '—'}</p>
@@ -174,7 +170,7 @@ export default function SiteSubscriptions() {
                         <button
                           type="button"
                           onClick={() => onProcessPayment(sub)}
-                          className="rounded-md px-2 py-1 text-xs font-medium text-indigo-600 transition hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-500/10"
+                          className="rounded-md px-2 py-1 text-xs font-medium text-brand transition hover:bg-brand/5 dark:text-brand-light dark:hover:bg-brand/15"
                         >
                           {t('site.subscriptions.processPayment')}
                         </button>
@@ -191,10 +187,7 @@ export default function SiteSubscriptions() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        </DataTable>
       )}
 
       <Modal
@@ -203,21 +196,12 @@ export default function SiteSubscriptions() {
         title={t('site.subscriptions.editTitle', { tenant: editing?.tenant?.name || '' })}
         footer={
           <>
-            <button
-              type="button"
-              onClick={() => setFormOpen(false)}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
+            <Button variant="secondary" onClick={() => setFormOpen(false)}>
               {t('common.cancel')}
-            </button>
-            <button
-              type="button"
-              onClick={onSubmit}
-              disabled={saving}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-            >
+            </Button>
+            <Button onClick={onSubmit} disabled={saving}>
               {saving ? t('common.saving') : t('common.save')}
-            </button>
+            </Button>
           </>
         }
       >
@@ -251,7 +235,7 @@ export default function SiteSubscriptions() {
               id="cancelAtPeriodEnd"
               checked={form.cancelAtPeriodEnd}
               onChange={(e) => setForm((f) => ({ ...f, cancelAtPeriodEnd: e.target.checked }))}
-              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600"
+              className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand dark:border-slate-600"
             />
             <label htmlFor="cancelAtPeriodEnd" className="text-sm text-slate-700 dark:text-slate-200">
               {t('site.subscriptions.field.cancelAtPeriodEnd')}
@@ -266,21 +250,12 @@ export default function SiteSubscriptions() {
         title={t('site.subscriptions.paymentTitle')}
         footer={
           <>
-            <button
-              type="button"
-              onClick={() => setPaymentTenant(null)}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
+            <Button variant="secondary" onClick={() => setPaymentTenant(null)}>
               {t('common.cancel')}
-            </button>
-            <button
-              type="button"
-              onClick={onPaymentSubmit}
-              disabled={paymentSaving}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-            >
+            </Button>
+            <Button onClick={onPaymentSubmit} disabled={paymentSaving}>
               {paymentSaving ? t('common.saving') : t('site.subscriptions.paymentSubmit')}
-            </button>
+            </Button>
           </>
         }
       >

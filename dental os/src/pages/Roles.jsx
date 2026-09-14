@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import PageHeader from '../components/ui/PageHeader';
+import DataTable from '../components/ui/DataTable';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import RoleFormModal from '../features/roles/RoleFormModal';
@@ -12,7 +15,8 @@ import {
   fetchModules,
   toggleRoleStatus,
 } from '../features/roles/rolesSlice';
-import { showErrorDialog } from '../features/ui/uiSlice';
+import { showErrorDialog, pushToast } from '../features/ui/uiSlice';
+import { requestConfirm } from '../features/ui/confirmDialog';
 import { useSocketEvent } from '../lib/socket';
 import { CRUD_ACTIONS, CRUD_SHORT, MODULES as LOCAL_MODULES } from '../features/roles/permissions';
 import { useT } from '../lib/i18n';
@@ -44,18 +48,31 @@ export default function Roles() {
   const closeForm = () => { setFormOpen(false); setEditing(null); };
 
   const onDelete = async (role) => {
-    if (!window.confirm(t('roles.deleteConfirm', { name: role.name }))) return;
+    const ok = await requestConfirm({
+      title: t('common.confirm'),
+      message: t('roles.deleteConfirm', { name: role.name }),
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await dispatch(deleteRole(role._id)).unwrap();
+      dispatch(pushToast({ type: 'success', message: t('roles.deleted') }));
     } catch (err) {
       dispatch(showErrorDialog(err));
     }
   };
 
   const onToggleStatus = async (role) => {
-    if (role.isActive && !window.confirm(t('roles.deactivateConfirm', { name: role.name }))) return;
+    if (role.isActive) {
+      const ok = await requestConfirm({
+        title: t('common.confirm'),
+        message: t('roles.deactivateConfirm', { name: role.name }),
+      });
+      if (!ok) return;
+    }
     try {
       await dispatch(toggleRoleStatus({ id: role._id, isActive: !role.isActive })).unwrap();
+      dispatch(pushToast({ type: 'success', message: t(`roles.toggled${role.isActive ? 'Inactive' : 'Active'}`) }));
     } catch (err) {
       dispatch(showErrorDialog(err));
     }
@@ -71,24 +88,22 @@ export default function Roles() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('roles.title')}</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('roles.subtitle')}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {canManage && (
-            <button type="button" onClick={() => setMatrixOpen((v) => !v)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
-              {matrixOpen ? t('roles.hideMatrix') : t('roles.viewMatrix')}
-            </button>
-          )}
-          {canManage && (
-            <button type="button" onClick={openCreate} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400">
-              {t('roles.new')}
-            </button>
-          )}
-        </div>
-      </header>
+      <PageHeader
+        title={t('roles.title')}
+        subtitle={t('roles.subtitle')}
+        actions={
+          canManage && (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setMatrixOpen((v) => !v)}>
+                {matrixOpen ? t('roles.hideMatrix') : t('roles.viewMatrix')}
+              </Button>
+              <Button size="sm" onClick={openCreate}>
+                {t('roles.new')}
+              </Button>
+            </div>
+          )
+        }
+      />
 
       {matrixOpen ? (
         <MatrixView />
@@ -148,37 +163,31 @@ export default function Roles() {
               </div>
 
               {/* Permission summary */}
-              <div className="overflow-x-auto border-t border-slate-100 dark:border-slate-800">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-50 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                      <th className="px-4 py-2 text-left">{t('roles.col.module')}</th>
+              <DataTable
+                columns={[
+                  { label: t('roles.col.module') },
+                  ...CRUD_ACTIONS.map((a) => ({ label: CRUD_SHORT[a], className: 'text-center' })),
+                ]}
+                count={MODULES.length}
+              >
+                {MODULES.map((mod) => {
+                  const actions = getPerm(role, mod.key);
+                  return (
+                    <tr key={mod.key}>
+                      <td className="px-4 py-2 text-slate-600 dark:text-slate-300">{t('mod.' + mod.key)}</td>
                       {CRUD_ACTIONS.map((a) => (
-                        <th key={a} className="px-3 py-2 text-center">{CRUD_SHORT[a]}</th>
+                        <td key={a} className="px-3 py-2 text-center">
+                          {actions.includes(a) ? (
+                            <svg className="mx-auto h-4 w-4 text-emerald-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.6l7.3-7.3a1 1 0 0 1 1.4 0z" clipRule="evenodd" /></svg>
+                          ) : (
+                            <span className="text-slate-200 dark:text-slate-700">—</span>
+                          )}
+                        </td>
                       ))}
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-                    {MODULES.map((mod) => {
-                      const actions = getPerm(role, mod.key);
-                      return (
-                        <tr key={mod.key}>
-                              <td className="px-4 py-2 text-slate-600 dark:text-slate-300">{t('mod.' + mod.key)}</td>
-                          {CRUD_ACTIONS.map((a) => (
-                            <td key={a} className="px-3 py-2 text-center">
-                              {actions.includes(a) ? (
-                                <svg className="mx-auto h-4 w-4 text-emerald-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.6l7.3-7.3a1 1 0 0 1 1.4 0z" clipRule="evenodd" /></svg>
-                              ) : (
-                                <span className="text-slate-200 dark:text-slate-700">—</span>
-                              )}
-                            </td>
-                          ))}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                  );
+                })}
+              </DataTable>
             </Card>
           ))}
         </div>

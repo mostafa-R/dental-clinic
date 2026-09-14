@@ -12,10 +12,10 @@ export default function BranchesList({ branches }) {
   return (
     <ul className="space-y-2">
       {branches.map((b) => (
-        <li key={b._id} className="group flex items-center gap-3 rounded-xl border border-transparent p-3 transition-all duration-200 hover:border-slate-100 hover:bg-slate-50 dark:hover:border-slate-800 dark:hover:bg-slate-800/50">
+        <li key={b._id} className="group flex items-center gap-3 rounded-xl border border-transparent p-3 transition-colors duration-150 hover:border-slate-100 hover:bg-slate-50 dark:hover:border-slate-800 dark:hover:bg-slate-800/50">
           <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
             b.isActive
-              ? 'bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-sm'
+              ? 'bg-indigo-600 text-white shadow-sm'
               : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
           }`}>
             <BranchIcon width={18} height={18} />

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import Card from '../../components/ui/Card';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable from '../../components/ui/DataTable';
+import Pagination from '../../components/ui/Pagination';
 import Spinner from '../../components/ui/Spinner';
 import EmptyState from '../../components/ui/EmptyState';
 import { platformApi } from '../../features/site/platformApi';
@@ -48,10 +50,7 @@ export default function SiteAuditLogs() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('site.audit.title')}</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('site.audit.subtitle')}</p>
-      </header>
+      <PageHeader title={t('site.audit.title')} subtitle={t('site.audit.subtitle')} />
 
       <Card>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
@@ -111,21 +110,31 @@ export default function SiteAuditLogs() {
       )}
 
       {status === 'succeeded' && data.logs.length > 0 && (
-        <Card padded={false}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-500">
-                  <th className="px-4 py-3 text-left">{t('site.audit.col.time')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.audit.col.admin')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.audit.col.action')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.audit.col.target')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.audit.col.details')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.audit.col.ip')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {data.logs.map((log) => (
+        <DataTable
+          columns={[
+            { label: t('site.audit.col.time') },
+            { label: t('site.audit.col.admin') },
+            { label: t('site.audit.col.action') },
+            { label: t('site.audit.col.target') },
+            { label: t('site.audit.col.details') },
+            { label: t('site.audit.col.ip') },
+          ]}
+          count={data.logs.length}
+          footer={
+            data.pagination.totalPages > 1 ? (
+              <Pagination
+                page={data.pagination.page}
+                pages={data.pagination.totalPages}
+                total={data.pagination.total}
+                pageSize={data.pagination.limit}
+                onChange={(p) => setFilters((f) => ({ ...f, page: p }))}
+                prevLabel={t('common.prev')}
+                nextLabel={t('common.next')}
+              />
+            ) : undefined
+          }
+        >
+              {data.logs.map((log) => (
                   <tr key={log._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">{formatTime(log.createdAt)}</td>
                     <td className="px-4 py-3">
@@ -149,36 +158,7 @@ export default function SiteAuditLogs() {
                     <td className="px-4 py-3 text-xs text-slate-400 dark:text-slate-500">{log.ip}</td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {data.pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-slate-500 dark:text-slate-400">
-            {t('common.page', { page: data.pagination.page, total: data.pagination.totalPages })}
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={data.pagination.page <= 1}
-              onClick={() => setFilters((f) => ({ ...f, page: f.page - 1 }))}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              {t('common.prev')}
-            </button>
-            <button
-              type="button"
-              disabled={data.pagination.page >= data.pagination.totalPages}
-              onClick={() => setFilters((f) => ({ ...f, page: f.page + 1 }))}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              {t('common.next')}
-            </button>
-          </div>
-        </div>
+        </DataTable>
       )}
     </div>
   );

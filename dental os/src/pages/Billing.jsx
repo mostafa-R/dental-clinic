@@ -21,6 +21,8 @@ import InvoicesTable from '../features/billing/InvoicesTable';
 import { INVOICE_STATUSES, statusTKey } from '../features/billing/statuses';
 import { showErrorDialog } from '../features/ui/uiSlice';
 import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import PageHeader from '../components/ui/PageHeader';
 import EmptyState from '../components/ui/EmptyState';
 import Pagination from '../components/ui/Pagination';
 import Spinner from '../components/ui/Spinner';
@@ -136,32 +138,26 @@ export default function Billing() {
   const isLoading = status === 'loading' || status === 'idle';
 
   const inputCls =
-    'rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200';
+    'rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:focus:border-brand-light';
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('billing.title')}</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('billing.subtitle')}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setAgingOpen(true)}
-          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-        >
-          {t('billing.aging.title')}
-        </button>
-        {canManage && (
-          <button
-            type="button"
-            onClick={openCreate}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-          >
-            {t('billing.new')}
-          </button>
-        )}
-      </header>
+      <PageHeader
+        title={t('billing.title')}
+        subtitle={t('billing.subtitle')}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setAgingOpen(true)}>
+              {t('billing.aging.title')}
+            </Button>
+            {canManage && (
+              <Button size="sm" onClick={openCreate}>
+                {t('billing.new')}
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       {canViewSummary && (
         summaryStatus === 'loading' && !summary ? (
@@ -202,13 +198,9 @@ export default function Billing() {
           <div className="px-5 py-16">
             <EmptyState title={t('billing.loadFailed')} message={error?.message || error} />
             <div className="mt-4 text-center">
-              <button
-                type="button"
-                onClick={() => dispatch(fetchInvoices(query))}
-                className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-              >
+              <Button size="sm" onClick={() => dispatch(fetchInvoices(query))}>
                 {t('common.tryAgain')}
-              </button>
+              </Button>
             </div>
           </div>
         )}

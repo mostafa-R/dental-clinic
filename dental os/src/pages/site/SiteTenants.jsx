@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import Card from '../../components/ui/Card';
+import Button from '../../components/ui/Button';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable from '../../components/ui/DataTable';
 import Spinner from '../../components/ui/Spinner';
 import EmptyState from '../../components/ui/EmptyState';
+import Pagination from '../../components/ui/Pagination';
 import SiteTenantModal from '../../features/site/SiteTenantModal';
 import SiteTenantStatsModal from '../../features/site/SiteTenantStatsModal';
 import { platformApi } from '../../features/site/platformApi';
 import { showErrorDialog } from '../../features/ui/uiSlice';
+import { requestConfirm } from '../../features/ui/confirmDialog';
 import { useT } from '../../lib/i18n';
 import { formatDate } from '../../lib/format';
 
@@ -58,9 +62,15 @@ export default function SiteTenants() {
     load();
   }, [load]);
 
-  const onAction = async (id, method, confirmKey, vars = {}) => {
-    if (confirmKey && !window.confirm(t(confirmKey, vars))) return;
-    setActing(id);
+const onAction = async (id, method, confirmKey, vars = {}) => {
+    if (confirmKey) {
+      const ok = await requestConfirm({
+        title: t('common.confirm'),
+        message: t(confirmKey, vars),
+        danger: /delete/i.test(confirmKey),
+      });
+      if (!ok) return;
+    }
     try {
       await platformApi[method](id);
       await load();
@@ -86,33 +96,29 @@ export default function SiteTenants() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('site.tenants.title')}</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('site.tenants.subtitle')}</p>
-        </div>
-        {canManage && (
-          <button
-            type="button"
-            onClick={openCreate}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-          >
-            {t('site.tenants.create')}
-          </button>
-        )}
-      </header>
+      <PageHeader
+        title={t('site.tenants.title')}
+        subtitle={t('site.tenants.subtitle')}
+        actions={
+          canManage ? (
+            <Button size="sm" onClick={openCreate}>
+              {t('site.tenants.create')}
+            </Button>
+          ) : undefined
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-3">
         <input
           value={filters.search}
           onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value, page: 1 }))}
           placeholder={t('site.tenants.searchPlaceholder')}
-          className="w-64 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          className="w-64 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-brand-light"
         />
         <select
           value={filters.status}
           onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value, page: 1 }))}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-brand-light"
         >
           <option value="">{t('site.tenants.allStatuses')}</option>
           {Object.keys(STATUS_BADGES).map((s) => (
@@ -122,7 +128,7 @@ export default function SiteTenants() {
         <select
           value={filters.plan}
           onChange={(e) => setFilters((f) => ({ ...f, plan: e.target.value, page: 1 }))}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-brand-light"
         >
           <option value="">{t('site.tenants.allPlans')}</option>
           <option value="starter">Starter</option>
@@ -138,21 +144,31 @@ export default function SiteTenants() {
       )}
 
       {status === 'succeeded' && data.tenants.length > 0 && (
-        <Card padded={false}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-500">
-                  <th className="px-4 py-3 text-left">{t('site.tenants.col.name')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.tenants.col.plan')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.tenants.col.status')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.tenants.col.created')}</th>
-                  <th className="px-4 py-3 text-left">{t('site.tenants.col.stats')}</th>
-                  <th className="px-4 py-3 text-right">{t('site.tenants.col.actions')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {data.tenants.map((tenant) => (
+        <DataTable
+          columns={[
+            { label: t('site.tenants.col.name') },
+            { label: t('site.tenants.col.plan') },
+            { label: t('site.tenants.col.status') },
+            { label: t('site.tenants.col.created') },
+            { label: t('site.tenants.col.stats') },
+            { label: t('site.tenants.col.actions'), className: 'text-end' },
+          ]}
+          count={data.tenants.length}
+          footer={
+            data.pagination.totalPages > 1 ? (
+              <Pagination
+                page={data.pagination.page}
+                pages={data.pagination.totalPages}
+                total={data.pagination.total}
+                pageSize={data.pagination.limit}
+                onChange={(p) => setFilters((f) => ({ ...f, page: p }))}
+                prevLabel={t('common.prev')}
+                nextLabel={t('common.next')}
+              />
+            ) : undefined
+          }
+        >
+              {data.tenants.map((tenant) => (
                   <tr key={tenant._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
                     <td className="px-4 py-3">
                       <p className="font-medium text-slate-900 dark:text-white">{tenant.name}</p>
@@ -243,36 +259,7 @@ export default function SiteTenants() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {data.pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-slate-500 dark:text-slate-400">
-            {t('common.page', { page: data.pagination.page, total: data.pagination.totalPages })}
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={data.pagination.page <= 1}
-              onClick={() => setFilters((f) => ({ ...f, page: f.page - 1 }))}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              {t('common.prev')}
-            </button>
-            <button
-              type="button"
-              disabled={data.pagination.page >= data.pagination.totalPages}
-              onClick={() => setFilters((f) => ({ ...f, page: f.page + 1 }))}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              {t('common.next')}
-            </button>
-          </div>
-        </div>
+        </DataTable>
       )}
 
       {formOpen && (

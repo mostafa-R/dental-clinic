@@ -330,6 +330,16 @@ export const options = {
           },
         },
 
+        DayHours: {
+          type: "object",
+          description: "Open/close times for a single weekday. `closed: true` marks an off day.",
+          properties: {
+            open: { type: "string", example: "09:00", nullable: true },
+            close: { type: "string", example: "17:00", nullable: true },
+            closed: { type: "boolean", default: false },
+          },
+        },
+
         /* ------------------------------------------------------------------ Patients */
         Patient: {
           type: "object",

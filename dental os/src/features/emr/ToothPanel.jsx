@@ -10,6 +10,7 @@ import {
   toothStyle,
 } from './dental';
 import { useT } from '../../lib/i18n';
+import Button from '../../components/ui/Button';
 
 const SURFACE_CONDITION_HEX = {
   sound: '#e2e8f0',
@@ -31,7 +32,7 @@ function StateButton({ state, active, onClick, label }) {
       onClick={onClick}
       className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition ${
         active
-          ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300'
+          ? 'border-brand bg-brand/10 text-brand dark:text-brand-light'
           : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
       }`}
     >
@@ -160,7 +161,7 @@ export default function ToothPanel({ tooth, onSave, saving, onCancel }) {
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('emr.tooth.surfaces')}</p>
           {affectedSurfaces.length > 0 && (
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-700 dark:text-slate-400">
-              {affectedSurfaces.length} affected
+              {t('emr.tooth.affected', { n: affectedSurfaces.length })}
             </span>
           )}
         </div>
@@ -178,12 +179,12 @@ export default function ToothPanel({ tooth, onSave, saving, onCancel }) {
           <div className="mt-2 flex flex-wrap gap-1">
             {hasCaries && (
               <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
-                {Object.values(surfaces).filter((c) => c === 'caries').length} caries
+                {t('emr.tooth.cariesCount', { n: Object.values(surfaces).filter((c) => c === 'caries').length })}
               </span>
             )}
             {hasRestorations && (
               <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">
-                {Object.values(surfaces).filter((c) => c === 'restored').length} restored
+                {t('emr.tooth.restoredCount', { n: Object.values(surfaces).filter((c) => c === 'restored').length })}
               </span>
             )}
           </div>
@@ -198,27 +199,18 @@ export default function ToothPanel({ tooth, onSave, saving, onCancel }) {
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
           maxLength={500}
-          className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-indigo-500/20"
+          className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           placeholder={t('emr.tooth.notesPlaceholder')}
         />
       </div>
 
       <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-        >
+        <Button variant="ghost" size="sm" onClick={onCancel}>
           {t('common.cancel')}
-        </button>
-        <button
-          type="button"
-          onClick={submit}
-          disabled={saving}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-        >
+        </Button>
+        <Button size="sm" onClick={submit} disabled={saving}>
           {saving ? t('common.saving') : t('common.save')}
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -2,6 +2,73 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * ── DentoCare design system ───────────────────────────────────────────
+ * Refined modern direction: calm warm neutrals + one green brand accent,
+ * with a soft peach "smile" secondary used sparingly.
+ *
+ * To keep the whole codebase consistent without rewiring every file, the
+ * Tailwind `indigo` ramp points at the DentoCare green, and `violet` /
+ * `purple` point at the peach accent. Semantic colors (emerald / sky /
+ * amber / rose) stay untouched for status meaning (success / info /
+ * warning / danger).
+ *
+ * Brand anchors from the palette file (`design/brand palate.jpg`):
+ *   deep green #0F533E · mid green #2F7A4F · mint #A3D2A4 · peach #F29D7E
+ */
+@theme {
+  --color-indigo-50: #f1f7f3;
+  --color-indigo-100: #e0ede5;
+  --color-indigo-200: #c2dccb;
+  --color-indigo-300: #98c2a9;
+  --color-indigo-400: #6aa584;
+  --color-indigo-500: #4a8c69;
+  --color-indigo-600: #2f7a4f;
+  --color-indigo-700: #1e6440;
+  --color-indigo-800: #0f533e;
+  --color-indigo-900: #0b3d2e;
+  --color-indigo-950: #06281f;
+
+  --color-violet-50: #fef4f0;
+  --color-violet-100: #fde8e0;
+  --color-violet-200: #fad0c1;
+  --color-violet-300: #f7b49e;
+  --color-violet-400: #f3a184;
+  --color-violet-500: #f29d7e;
+  --color-violet-600: #e5825f;
+  --color-violet-700: #c96a4a;
+  --color-violet-800: #a5543a;
+  --color-violet-900: #83412e;
+  --color-violet-950: #5c2a1d;
+
+  --color-purple-50: #fef4f0;
+  --color-purple-100: #fde8e0;
+  --color-purple-200: #fad0c1;
+  --color-purple-300: #f7b49e;
+  --color-purple-400: #f3a184;
+  --color-purple-500: #f29d7e;
+  --color-purple-600: #e5825f;
+  --color-purple-700: #c96a4a;
+  --color-purple-800: #a5543a;
+  --color-purple-900: #83412e;
+  --color-purple-950: #5c2a1d;
+
+  /* Brand + accent aliases used by new components. */
+  --color-brand: #2f7a4f;
+  --color-brand-dark: #0f533e;
+  --color-brand-light: #a3d2a4;
+  --color-smile: #f29d7e;
+
+  /* App canvas — warm, near-neutral off-white in light mode. */
+  --color-canvas: #f5f7f4;
+
+  /* Softer, layered shadows for a calmer elevation model. */
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.05), 0 1px 1px 0 rgb(15 23 42 / 0.03);
+  --shadow-md: 0 2px 4px -1px rgb(15 23 42 / 0.05), 0 4px 12px -2px rgb(15 23 42 / 0.08);
+  --shadow-lg: 0 4px 8px -2px rgb(15 23 42 / 0.08), 0 12px 24px -4px rgb(15 23 42 / 0.12);
+  --shadow-xl: 0 8px 16px -4px rgb(15 23 42 / 0.1), 0 24px 48px -8px rgb(15 23 42 / 0.16);
+}
+
 html,
 body,
 #root {
@@ -11,11 +78,29 @@ body,
 body {
   margin: 0;
   font-family: system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Tahoma, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   color-scheme: light;
 }
 
 .dark body {
   color-scheme: dark;
+}
+
+/*
+ * Dark mode surfaces are re-tinted to the brand's green-blacks instead of
+ * Tailwind's cool blue-greys, so dark mode stays on-theme with the DentoCare
+ * green identity. These variables override the same tokens emitted by
+ * `@theme` (the utilities reference `var(--color-slate-*)`), scoped to dark.
+ * 950 = page canvas · 900 = cards · 800 = inputs/hover fills · 700 = borders
+ */
+.dark {
+  --color-slate-600: #3f5f58;
+  --color-slate-700: #2c463d;
+  --color-slate-800: #1d2f28;
+  --color-slate-900: #14241e;
+  --color-slate-950: #0c1713;
 }
 
 /* Use a more Arabic-friendly stack when the document is in Arabic. */
@@ -27,4 +112,93 @@ html[lang='ar'] body {
 .dark input[type='date']::-webkit-calendar-picker-indicator,
 .dark input[type='datetime-local']::-webkit-calendar-picker-indicator {
   filter: invert(1);
+}
+
+/* Calm, consistent focus ring using the brand green for keyboard users. */
+:where(button, input, select, textarea, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-indigo-500);
+  outline-offset: 1px;
+}
+
+/* Remove the default spinner capsules on number inputs for a cleaner look. */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* ── Scrollbars ──────────────────────────────────────────────────────── */
+/* Slim, unobtrusive scrollbars everywhere (WebKit + Firefox). */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(15 23 42 / 0.16);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(15 23 42 / 0.3);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(15 23 42 / 0.18) transparent;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.18);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgb(255 255 255 / 0.32);
+}
+
+/* Scrollbars on dark-green surfaces (sidebar, site console sidebar). */
+.scrollbar-dark::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.22);
+}
+.scrollbar-dark::-webkit-scrollbar-thumb:hover {
+  background: rgb(255 255 255 / 0.4);
+}
+.scrollbar-dark {
+  scrollbar-color: rgb(255 255 255 / 0.22) transparent;
+}
+
+/* ── Motion ──────────────────────────────────────────────────────────── */
+/* Stop the page from bouncing/jumping when an inner modal or list scrolls. */
+html,
+body {
+  overscroll-behavior-y: none;
+}
+
+/* Toast slide-in from the top. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-toast-in {
+  animation: toast-in 180ms ease-out;
+}
+
+/* Route content fade-up on navigation (applied to the layout main). */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-page-in {
+  animation: page-in 180ms ease-out;
 }

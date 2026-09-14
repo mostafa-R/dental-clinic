@@ -12,6 +12,8 @@ import AppointmentFormModal from '../features/appointments/AppointmentFormModal'
 import CalendarView from '../features/appointments/CalendarView';
 import LiveQueue from '../features/appointments/LiveQueue';
 import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import PageHeader from '../components/ui/PageHeader';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import api from '../lib/axios';
@@ -162,28 +164,23 @@ export default function Appointments() {
   };
 
   const inputCls =
-    'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200';
+    'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:focus:border-brand-light';
 
   const hasActiveFilters = query.patient || query.doctor;
 
   return (
     <div className="space-y-4">
-      <header className="flex items-start justify-between gap-3 sm:items-center">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-white sm:text-2xl">{t('appointments.title')}</h1>
-          <p className="hidden text-sm text-slate-500 dark:text-slate-400 sm:block">{t('appointments.subtitle')}</p>
-        </div>
-        {canManage && (
-          <button
-            type="button"
-            onClick={() => openCreate(anchor)}
-            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 sm:px-4"
-          >
-            <span className="hidden sm:inline">{t('appointments.new')}</span>
-            <span className="sm:hidden">+</span>
-          </button>
-        )}
-      </header>
+      <PageHeader
+        title={t('appointments.title')}
+        subtitle={t('appointments.subtitle')}
+        actions={
+          canManage && (
+            <Button size="sm" onClick={() => openCreate(anchor)}>
+              {t('appointments.new')}
+            </Button>
+          )
+        }
+      />
 
       <div className="flex gap-1 rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900">
         <button

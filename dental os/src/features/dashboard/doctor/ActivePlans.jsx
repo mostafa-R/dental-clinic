@@ -80,10 +80,10 @@ export default function ActivePlans() {
             const pct = total > 0 ? Math.round((done / total) * 100) : 0;
             const progressColor =
               pct >= 75
-                ? "from-emerald-500 to-teal-500"
+                ? "bg-emerald-500"
                 : pct >= 40
-                  ? "from-indigo-500 to-blue-500"
-                  : "from-amber-500 to-orange-500";
+                  ? "bg-indigo-500"
+                  : "bg-amber-500";
 
             return (
               <li key={plan._id} className="group rounded-xl p-3 transition-colors duration-150 hover:bg-slate-50 dark:hover:bg-slate-800/50">
@@ -109,7 +109,7 @@ export default function ActivePlans() {
                 <div className="mt-3 flex items-center gap-3">
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                     <div
-                      className={`h-full rounded-full bg-gradient-to-r ${progressColor} transition-all duration-500`}
+                      className={`h-full rounded-full ${progressColor} transition-all duration-500`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import Card from '../../components/ui/Card';
 import Spinner from '../../components/ui/Spinner';
+import PageHeader from '../../components/ui/PageHeader';
 import { platformApi } from '../../features/site/platformApi';
 import { showErrorDialog } from '../../features/ui/uiSlice';
 import { useT } from '../../lib/i18n';
@@ -55,10 +56,7 @@ export default function PlatformDashboard() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('site.dashboard.title')}</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('site.dashboard.subtitle')}</p>
-      </header>
+      <PageHeader title={t('site.dashboard.title')} subtitle={t('site.dashboard.subtitle')} />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label={t('site.dashboard.totalTenants')} value={stats?.totalTenants ?? '—'} sub={t('site.dashboard.activeTenants', { count: stats?.activeTenants ?? 0 })} />
@@ -83,7 +81,7 @@ export default function PlatformDashboard() {
               {growth.map((p) => (
                 <div key={p.month} className="flex flex-1 flex-col items-center gap-1">
                   <div
-                    className="w-full rounded-t-md bg-gradient-to-t from-indigo-500 to-violet-500"
+                    className="w-full rounded-t-md bg-brand/80"
                     style={{ height: `${Math.max(6, (p.count / Math.max(...growth.map((x) => x.count))) * 150)}px` }}
                     title={p.count}
                   />

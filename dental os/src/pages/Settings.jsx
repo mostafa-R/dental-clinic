@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSelector } from 'react-redux';
 
 import Card from '../components/ui/Card';
+import PageHeader from '../components/ui/PageHeader';
 import { useT } from '../lib/i18n';
 import { usePreferences } from '../features/preferences/usePreferences';
 import WhatsAppSettings from '../features/settings/WhatsAppSettings';
@@ -49,16 +50,13 @@ export default function Settings() {
     [
       'flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition',
       active
-        ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-indigo-400 dark:bg-indigo-500/15 dark:text-indigo-300'
+        ? 'border-brand bg-brand/10 text-brand dark:text-brand-light'
         : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700',
     ].join(' ');
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('settings.title')}</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('settings.appearanceHint')}</p>
-      </header>
+      <PageHeader title={t('settings.title')} subtitle={t('settings.appearanceHint')} />
 
       <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800">
         {TABS.map((tb) => (
@@ -68,7 +66,7 @@ export default function Settings() {
             onClick={() => setTab(tb.key)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition ${
               tab === tb.key
-                ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                ? 'border-brand text-brand dark:border-brand-light dark:text-brand-light'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >

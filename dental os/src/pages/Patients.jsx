@@ -8,6 +8,8 @@ import PatientSearch from '../features/patients/PatientSearch';
 import PatientsTable from '../features/patients/PatientsTable';
 import DuplicatesPanel from '../features/patients/DuplicatesPanel';
 import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import PageHeader from '../components/ui/PageHeader';
 import EmptyState from '../components/ui/EmptyState';
 import Pagination from '../components/ui/Pagination';
 import Spinner from '../components/ui/Spinner';
@@ -67,30 +69,22 @@ export default function Patients() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('patients.title')}</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('patients.subtitle')}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => dispatch(openDuplicates())}
-            className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-50 dark:border-amber-500/40 dark:text-amber-400 dark:hover:bg-amber-500/10"
-          >
-            {t('patients.checkDuplicates')}
-          </button>
-          {canManage && (
-            <button
-              type="button"
-              onClick={openCreate}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-            >
-              {t('patients.new')}
-            </button>
-          )}
-        </div>
-      </header>
+      <PageHeader
+        title={t('patients.title')}
+        subtitle={t('patients.subtitle')}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => dispatch(openDuplicates())}>
+              {t('patients.checkDuplicates')}
+            </Button>
+            {canManage && (
+              <Button size="sm" onClick={openCreate}>
+                {t('patients.new')}
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       {duplicatesOpen && <DuplicatesPanel />}
 
@@ -109,13 +103,9 @@ export default function Patients() {
           <div className="px-5 py-16">
             <EmptyState title={t('patients.loadFailed')} message={error} />
             <div className="mt-4 text-center">
-              <button
-                type="button"
-                onClick={() => dispatch(fetchPatients(query))}
-                className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-              >
+              <Button size="sm" onClick={() => dispatch(fetchPatients(query))}>
                 {t('common.tryAgain')}
-              </button>
+              </Button>
             </div>
           </div>
         )}

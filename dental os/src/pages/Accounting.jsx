@@ -5,6 +5,9 @@ import {
 } from 'recharts';
 
 import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import PageHeader from '../components/ui/PageHeader';
+import DataTable from '../components/ui/DataTable';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import StatCard from '../components/ui/StatCard';
@@ -22,6 +25,7 @@ import {
   updateCommission,
 } from '../features/accounting/accountingSlice';
 import { showErrorDialog } from '../features/ui/uiSlice';
+import { requestConfirm } from '../features/ui/confirmDialog';
 import { canManageAccounting } from '../lib/roles';
 import {
   COMMISSION_STATUS_STYLES,
@@ -73,7 +77,12 @@ export default function Accounting() {
   useSocketEvent('commission:updated', refetchAll);
 
   const onDeleteExpense = async (id) => {
-    if (!window.confirm(t('accounting.expense.deleteConfirm'))) return;
+    const ok = await requestConfirm({
+      title: t('common.confirm'),
+      message: t('accounting.expense.deleteConfirm'),
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await dispatch(deleteExpense(id)).unwrap();
     } catch (err) {
@@ -82,7 +91,12 @@ export default function Accounting() {
   };
 
   const onDeleteDrawing = async (id) => {
-    if (!window.confirm(t('accounting.drawing.deleteConfirm'))) return;
+    const ok = await requestConfirm({
+      title: t('common.confirm'),
+      message: t('accounting.drawing.deleteConfirm'),
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await dispatch(deleteDrawing(id)).unwrap();
     } catch (err) {
@@ -108,7 +122,7 @@ export default function Accounting() {
   const s = summary?.summary;
   const isLoading = summaryStatus === 'loading' || summaryStatus === 'idle';
 
-  const COLORS = ['#6366f1', '#f59e0b', '#ef4444', '#22c55e', '#3b82f6', '#a855f7', '#14b8a6', '#f97316'];
+  const COLORS = ['#22c55e', '#f59e0b', '#ef4444', '#3b82f6', '#a855f7', '#14b8a6', '#f97316', '#6366f1'];
 
   const monthlyChartData = useMemo(() => {
     const raw = summary?.monthlyRevenue || [];
@@ -128,16 +142,11 @@ export default function Accounting() {
     return raw.map((r) => ({ name: t(`invoice.payment.${r.method}`), value: r.total }));
   }, [summary, t]);
 
-  const CHART_COLORS = ['#6366f1', '#f59e0b', '#ef4444', '#22c55e', '#3b82f6', '#a855f7', '#14b8a6', '#f97316'];
+  const CHART_COLORS = ['#22c55e', '#f59e0b', '#ef4444', '#3b82f6', '#a855f7', '#14b8a6', '#f97316', '#6366f1'];
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t('accounting.title')}</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('accounting.subtitle')}</p>
-        </div>
-      </header>
+      <PageHeader title={t('accounting.title')} subtitle={t('accounting.subtitle')} />
 
       <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800">
         {TABS.map((tb) => (
@@ -147,7 +156,7 @@ export default function Accounting() {
             onClick={() => setTab(tb.key)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition ${
               tab === tb.key
-                ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                ? 'border-brand text-brand dark:border-brand-light dark:text-brand-light'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
@@ -169,9 +178,9 @@ export default function Accounting() {
                 <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">{t('accounting.to')}</label>
                 <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
               </div>
-              <button type="button" onClick={applyDateFilter} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400">
+              <Button size="sm" onClick={applyDateFilter}>
                 {t('accounting.filter')}
-              </button>
+              </Button>
               {(dateFrom || dateTo) && (
                 <button type="button" onClick={() => { setDateFrom(''); setDateTo(''); dispatch(fetchSummary()); }} className="rounded-lg px-3 py-2 text-sm font-medium text-slate-500 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">
                   {t('accounting.clear')}
@@ -300,26 +309,24 @@ export default function Accounting() {
       {tab === 'expenses' && (
         <div className="space-y-4">
           {canManage && (
-            <button type="button" onClick={() => setExpenseModal(true)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400">
+            <Button size="sm" onClick={() => setExpenseModal(true)}>
               {t('accounting.expense.new')}
-            </button>
+            </Button>
           )}
           {expenses.status === 'loading' && <Spinner label={t('accounting.loading')} />}
           {expenses.status === 'succeeded' && expenses.items.length === 0 && <EmptyState title={t('accounting.expense.empty')} />}
           {expenses.status === 'succeeded' && expenses.items.length > 0 && (
-            <Card padded={false}>
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-5 py-3">{t('accounting.date')}</th>
-                    <th className="px-5 py-3">{t('accounting.expense.category')}</th>
-                    <th className="px-5 py-3">{t('accounting.expense.description')}</th>
-                    <th className="px-5 py-3">{t('accounting.amount')}</th>
-                    <th className="px-5 py-3">{t('accounting.expense.paymentMethod')}</th>
-                    {canManage && <th className="px-5 py-3 text-end">{t('patients.col.actions')}</th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+            <DataTable
+              columns={[
+                { label: t('accounting.date') },
+                { label: t('accounting.expense.category') },
+                { label: t('accounting.expense.description') },
+                { label: t('accounting.amount') },
+                { label: t('accounting.expense.paymentMethod') },
+                ...(canManage ? [{ label: t('patients.col.actions'), className: 'text-end' }] : []),
+              ]}
+              count={expenses.items.length}
+            >
                   {expenses.items.map((e) => (
                     <tr key={e._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/50">
                       <td className="px-5 py-3 text-slate-500 dark:text-slate-400">{formatDate(e.date)}</td>
@@ -336,9 +343,7 @@ export default function Accounting() {
                       )}
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </Card>
+            </DataTable>
           )}
         </div>
       )}
@@ -347,25 +352,23 @@ export default function Accounting() {
       {tab === 'drawings' && (
         <div className="space-y-4">
           {canManage && (
-            <button type="button" onClick={() => setDrawingModal(true)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400">
+            <Button size="sm" onClick={() => setDrawingModal(true)}>
               {t('accounting.drawing.new')}
-            </button>
+            </Button>
           )}
           {drawings.status === 'loading' && <Spinner label={t('accounting.loading')} />}
           {drawings.status === 'succeeded' && drawings.items.length === 0 && <EmptyState title={t('accounting.drawing.empty')} />}
           {drawings.status === 'succeeded' && drawings.items.length > 0 && (
-            <Card padded={false}>
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-5 py-3">{t('accounting.date')}</th>
-                    <th className="px-5 py-3">{t('accounting.drawing.owner')}</th>
-                    <th className="px-5 py-3">{t('accounting.expense.description')}</th>
-                    <th className="px-5 py-3">{t('accounting.amount')}</th>
-                    {canManage && <th className="px-5 py-3 text-end">{t('patients.col.actions')}</th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+            <DataTable
+              columns={[
+                { label: t('accounting.date') },
+                { label: t('accounting.drawing.owner') },
+                { label: t('accounting.expense.description') },
+                { label: t('accounting.amount') },
+                ...(canManage ? [{ label: t('patients.col.actions'), className: 'text-end' }] : []),
+              ]}
+              count={drawings.items.length}
+            >
                   {drawings.items.map((d) => (
                     <tr key={d._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/50">
                       <td className="px-5 py-3 text-slate-500 dark:text-slate-400">{formatDate(d.date)}</td>
@@ -381,9 +384,7 @@ export default function Accounting() {
                       )}
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </Card>
+            </DataTable>
           )}
         </div>
       )}
@@ -394,19 +395,17 @@ export default function Accounting() {
           {commissions.status === 'loading' && <Spinner label={t('accounting.loading')} />}
           {commissions.status === 'succeeded' && commissions.items.length === 0 && <EmptyState title={t('accounting.commission.empty')} />}
           {commissions.status === 'succeeded' && commissions.items.length > 0 && (
-            <Card padded={false}>
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-5 py-3">{t('accounting.commission.doctor')}</th>
-                    <th className="px-5 py-3">{t('accounting.commission.procedure')}</th>
-                    <th className="px-5 py-3">{t('accounting.commission.rate')}</th>
-                    <th className="px-5 py-3">{t('accounting.amount')}</th>
-                    <th className="px-5 py-3">{t('patients.col.status')}</th>
-                    {canManage && <th className="px-5 py-3 text-end">{t('patients.col.actions')}</th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+            <DataTable
+              columns={[
+                { label: t('accounting.commission.doctor') },
+                { label: t('accounting.commission.procedure') },
+                { label: t('accounting.commission.rate') },
+                { label: t('accounting.amount') },
+                { label: t('patients.col.status') },
+                ...(canManage ? [{ label: t('patients.col.actions'), className: 'text-end' }] : []),
+              ]}
+              count={commissions.items.length}
+            >
                   {commissions.items.map((c) => (
                     <tr key={c._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/50">
                       <td className="px-5 py-3 text-slate-700 dark:text-slate-200">{c.doctor?.name || '—'}</td>
@@ -429,9 +428,7 @@ export default function Accounting() {
                       )}
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </Card>
+            </DataTable>
           )}
         </div>
       )}

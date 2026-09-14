@@ -16,6 +16,7 @@ import {
 } from './emrSlice';
 import { generateInvoiceFromPlan } from '../wallet/walletSlice';
 import { showErrorDialog } from '../ui/uiSlice';
+import { requestConfirm } from '../ui/confirmDialog';
 import { useSocketEvent } from '../../lib/socket';
 import { canManageEmr } from '../../lib/roles';
 import { formatMoney } from '../../lib/format';
@@ -103,7 +104,11 @@ export default function TreatmentPlansTab({ patientId }) {
   };
 
   const onRemoveItem = async (planId, itemId) => {
-    if (!window.confirm(t('emr.plan.removeItemConfirm'))) return;
+    const ok = await requestConfirm({
+      title: t('common.confirm'),
+      message: t('emr.plan.removeItemConfirm'),
+    });
+    if (!ok) return;
     try {
       await dispatch(removePlanItem({ patientId, planId, itemId })).unwrap();
     } catch (err) {
@@ -112,7 +117,12 @@ export default function TreatmentPlansTab({ patientId }) {
   };
 
   const onArchive = async (planId) => {
-    if (!window.confirm(t('emr.plan.archiveConfirm'))) return;
+    const ok = await requestConfirm({
+      title: t('common.confirm'),
+      message: t('emr.plan.archiveConfirm'),
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await dispatch(archivePlan({ patientId, planId })).unwrap();
     } catch (err) {
