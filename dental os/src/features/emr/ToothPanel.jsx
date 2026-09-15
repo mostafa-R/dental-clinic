@@ -7,6 +7,8 @@ import {
   SURFACE_CONDITIONS,
   SURFACE_CONDITION_LABELS,
   describeTooth,
+  toothFdi,
+  toothUniversal,
   toothStyle,
 } from './dental';
 import { useT } from '../../lib/i18n';
@@ -78,7 +80,9 @@ function SurfaceRow({ surface, condition, onChange }) {
 
 export default function ToothPanel({ tooth, onSave, saving, onCancel }) {
   const { t } = useT();
-  const meta = tooth ? describeTooth(tooth.number) : null;
+  // S1b: resolve display metadata from the canonical FDI code, falling back
+  // to the legacy Universal `number` for pre-S1 responses.
+  const meta = tooth ? describeTooth(toothUniversal(tooth) ?? tooth.number) : null;
 
   const [state, setState] = useState(tooth?.state || 'sound');
   const [surfaces, setSurfaces] = useState({
@@ -130,7 +134,7 @@ export default function ToothPanel({ tooth, onSave, saving, onCancel }) {
       <div>
         <div className="flex items-baseline justify-between">
           <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
-            {t('emr.tooth.title', { n: meta.universal })}
+            {t('emr.tooth.title', { n: toothFdi(tooth) ?? meta.universal })}
           </h4>
           <span className="text-xs text-slate-400 dark:text-slate-500">{meta.name}</span>
         </div>

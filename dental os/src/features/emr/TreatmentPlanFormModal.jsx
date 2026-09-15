@@ -3,16 +3,13 @@ import { useDispatch, useSelector } from 'react-redux';
 
 import Modal from '../../components/ui/Modal';
 import { createPlan, resetFormState } from './emrSlice';
+import { FDI_TOOTH_OPTIONS } from './dental';
 import { showErrorDialog } from '../ui/uiSlice';
 import { useT } from '../../lib/i18n';
 
-const TOOTH_OPTIONS = [
-  { value: '', label: '—' },
-  ...Array.from({ length: 32 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) })),
-];
-
 function emptyItem() {
-  return { tooth: '', procedureName: '', procedureCode: '', estimatedCost: '' };
+  // S1b: tooth identity is the canonical FDI code (backend normalizes).
+  return { fdi: '', procedureName: '', procedureCode: '', estimatedCost: '' };
 }
 
 export default function TreatmentPlanFormModal({ open, patientId, onClose, preselectedTooth }) {
@@ -31,7 +28,7 @@ export default function TreatmentPlanFormModal({ open, patientId, onClose, prese
     if (open) {
       setTitle('');
       setDiagnosis('');
-      setItems([{ ...emptyItem(), tooth: preselectedTooth ? String(preselectedTooth) : '' }]);
+      setItems([{ ...emptyItem(), fdi: preselectedTooth ? String(preselectedTooth) : '' }]);
       setNextAppointment('');
       setNextAppointmentNotes('');
       dispatch(resetFormState());
@@ -48,7 +45,7 @@ export default function TreatmentPlanFormModal({ open, patientId, onClose, prese
     const cleanItems = items
       .filter((it) => it.procedureName.trim())
       .map((it) => ({
-        tooth: it.tooth ? Number(it.tooth) : null,
+        fdi: it.fdi ? Number(it.fdi) : null,
         procedureName: it.procedureName.trim(),
         procedureCode: it.procedureCode?.trim() || undefined,
         estimatedCost: it.estimatedCost === '' ? 0 : Number(it.estimatedCost),
@@ -126,8 +123,8 @@ export default function TreatmentPlanFormModal({ open, patientId, onClose, prese
           <div className="space-y-2">
             {items.map((it, idx) => (
               <div key={idx} className="grid grid-cols-12 items-center gap-2">
-                <select value={it.tooth} onChange={(e) => updateItem(idx, 'tooth', e.target.value)} className={`${inputCls} col-span-2`} aria-label={t('emr.plan.tooth')}>
-                  {TOOTH_OPTIONS.map((o) => (
+                <select value={it.fdi} onChange={(e) => updateItem(idx, 'fdi', e.target.value)} className={`${inputCls} col-span-2`} aria-label={t('emr.plan.tooth')}>
+                  {FDI_TOOTH_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>

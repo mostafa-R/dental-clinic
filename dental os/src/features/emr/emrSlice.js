@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 
 import { emrApi } from './emrApi';
+import { toothRouteCode } from './dental';
 
 function errPayload(err, fallback) {
   return err.response?.data || { message: fallback };
@@ -21,9 +22,13 @@ export const fetchChart = createAsyncThunk(
 
 export const saveTooth = createAsyncThunk(
   'emr/saveTooth',
-  async ({ patientId, number, payload }, { rejectWithValue }) => {
+  async ({ patientId, fdi, payload }, { rejectWithValue }) => {
     try {
-      return await emrApi.updateTooth(patientId, number, payload);
+      // S1b: identity travels as canonical FDI; the `:number` route param is
+      // legacy-Universal on the backend (FDI 11-32 would misroute), so the
+      // Universal code is derived centrally — never hand-built at call sites.
+      // The body payload already carries explicit `fdi` (see ChartTab).
+      return await emrApi.updateTooth(patientId, toothRouteCode({ fdi }), payload);
     } catch (err) {
       return rejectWithValue(errPayload(err, 'Failed to update tooth'));
     }

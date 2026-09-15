@@ -159,6 +159,98 @@ export function describeTooth(universal) {
 
 export const PERMANENT_TEETH = Array.from({ length: 32 }, (_, i) => describeTooth(i + 1));
 
+/* ------------------------------------------------------------------ S1b: FDI canonical codes.
+ *
+ * The backend stores FDI (ISO 3950) as the canonical tooth code and accepts
+ * legacy Universal (1-32) for backward compatibility. This module is the ONE
+ * place that converts between the systems — components must not duplicate
+ * this logic. Rules:
+ * - Internal tooth identity and every new write use FDI (`toothFdi`,
+ *   `toothChartPayload` sends `{ fdi }` with no conflicting `number`).
+ * - The single-tooth route `PATCH .../teeth/:number` stays legacy-Universal
+ *   (backend reads 1-32 as Universal; an FDI code like 11 would misroute),
+ *   so `toothRouteCode` derives Universal centrally for that one path.
+ * - Primary-dentition FDI codes (51-85) are explicitly unsupported: they
+ *   resolve to null and are never coerced into a wrong permanent tooth.
+ */
+
+export function isValidFdi(code) {
+  const n = Number(code);
+  if (!Number.isInteger(n)) return false;
+  const quadrant = Math.floor(n / 10);
+  const position = n % 10;
+  return quadrant >= 1 && quadrant <= 4 && position >= 1 && position <= 8;
+}
+
+export function universalToFdi(universal) {
+  const meta = describeTooth(universal);
+  return meta ? meta.fdi : null;
+}
+
+const FDI_TO_UNIVERSAL = new Map(PERMANENT_TEETH.map((t) => [t.fdi, t.universal]));
+
+export function fdiToUniversal(fdi) {
+  const n = Number(fdi);
+  if (!isValidFdi(n)) return null;
+  return FDI_TO_UNIVERSAL.get(n) ?? null;
+}
+
+/**
+ * Canonical FDI code for a tooth-like object from any API generation:
+ * a valid `fdi` wins; otherwise it is derived from legacy `number`/`tooth`.
+ * Returns null when neither side is usable (caller renders a fallback).
+ */
+export function toothFdi(tooth) {
+  if (!tooth) return null;
+  if (isValidFdi(tooth.fdi)) return Number(tooth.fdi);
+  return universalToFdi(tooth.number ?? tooth.tooth);
+}
+
+/**
+ * Legacy Universal code, for the `:number` route param and any other
+ * legacy-compatible path. Mirrors the backend rule (FDI wins on conflict) so
+ * the route always addresses the same tooth as the `{ fdi }` body.
+ * Returns null when unresolvable (caller must not call the API).
+ */
+export function toothUniversal(tooth) {
+  if (!tooth) return null;
+  if (isValidFdi(tooth.fdi)) return fdiToUniversal(tooth.fdi);
+  const legacy = tooth.number ?? tooth.tooth;
+  return describeTooth(legacy) ? Number(legacy) : null;
+}
+
+/**
+ * Canonical write payload for chart-tooth edits: explicit `fdi`, never a
+ * conflicting Universal `number` (the backend resolves identity from `fdi`).
+ */
+export function toothChartPayload(tooth, patch) {
+  return { fdi: toothFdi(tooth), ...(patch || {}) };
+}
+
+/**
+ * Route code for `PATCH .../dental-chart/teeth/:number`, which the backend
+ * treats as legacy Universal (FDI 11-32 overlap numerically with Universal
+ * 1-32 and would misroute). Centralized here with that warning attached.
+ */
+export function toothRouteCode(tooth) {
+  return toothUniversal(tooth);
+}
+
+/** Shared tooth dropdown options (canonical FDI values + labels). */
+export const FDI_TOOTH_OPTIONS = [
+  { value: '', label: '—' },
+  ...PERMANENT_TEETH.map((t) => ({ value: String(t.fdi), label: String(t.fdi), name: t.name })),
+];
+
+/**
+ * Display label for a plan-item/chip tooth reference: canonical FDI with the
+ * legacy `#N` affordance, or an em dash when no usable code exists.
+ */
+export function formatToothLabel(tooth) {
+  const fdi = toothFdi(tooth);
+  return fdi ? `#${fdi}` : '—';
+}
+
 export const ARCH_GROUPS = {
   upperRight: PERMANENT_TEETH.filter((t) => t.arch === 'upper' && t.side === 'right'),
   upperLeft: PERMANENT_TEETH.filter((t) => t.arch === 'upper' && t.side === 'left'),

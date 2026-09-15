@@ -24,17 +24,15 @@ import {
   PLAN_STATUS_STYLES,
   PROCEDURE_STATUS_STYLES,
   PROCEDURE_STATUSES,
+  FDI_TOOTH_OPTIONS,
+  formatToothLabel,
 } from './dental';
 import { useT } from '../../lib/i18n';
 import { PhiField } from '../../hooks/usePhi';
 
-const TOOTH_OPTIONS = [
-  { value: '', label: '—' },
-  ...Array.from({ length: 32 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) })),
-];
-
 function newItemDraft() {
-  return { tooth: '', procedureName: '', estimatedCost: '' };
+  // S1b: tooth identity is the canonical FDI code (backend normalizes).
+  return { fdi: '', procedureName: '', estimatedCost: '' };
 }
 
 export default function TreatmentPlansTab({ patientId }) {
@@ -83,7 +81,7 @@ export default function TreatmentPlansTab({ patientId }) {
           patientId,
           planId,
           payload: {
-            tooth: draft.tooth ? Number(draft.tooth) : null,
+            fdi: draft.fdi ? Number(draft.fdi) : null,
             procedureName: draft.procedureName.trim(),
             estimatedCost: draft.estimatedCost === '' ? 0 : Number(draft.estimatedCost),
           },
@@ -201,7 +199,7 @@ export default function TreatmentPlansTab({ patientId }) {
                     <div className="space-y-1 p-4">
                       {plan.items.map((item) => (
                         <div key={item._id} className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/50">
-                          <span className="w-8 text-center font-mono text-xs text-slate-400 dark:text-slate-500">{item.tooth ? `#${item.tooth}` : '—'}</span>
+                          <span className="w-8 text-center font-mono text-xs text-slate-400 dark:text-slate-500">{formatToothLabel({ fdi: item.fdi, number: item.tooth })}</span>
                           <span className="flex-1 text-sm text-slate-700 dark:text-slate-200"><PhiField>{item.procedureName}</PhiField></span>
                           <span className="text-sm font-medium text-slate-900 dark:text-white">{formatMoney(item.estimatedCost)}</span>
                           {canManage ? (
@@ -223,8 +221,8 @@ export default function TreatmentPlansTab({ patientId }) {
 
                       {canManage && plan.status !== 'archived' && (
                         <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-slate-200 p-2 dark:border-slate-700">
-                          <select value={draft.tooth} onChange={(e) => setDraft(plan._id, 'tooth', e.target.value)} className={`${inputCls} w-16`} aria-label={t('emr.plan.tooth')}>
-                            {TOOTH_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          <select value={draft.fdi} onChange={(e) => setDraft(plan._id, 'fdi', e.target.value)} className={`${inputCls} w-16`} aria-label={t('emr.plan.tooth')}>
+                            {FDI_TOOTH_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                           </select>
                           <input value={draft.procedureName} onChange={(e) => setDraft(plan._id, 'procedureName', e.target.value)} placeholder={t('emr.plan.procedureName')} className={`${inputCls} flex-1`} />
                           <input value={draft.estimatedCost} onChange={(e) => setDraft(plan._id, 'estimatedCost', e.target.value)} type="number" min="0" step="0.01" placeholder={t('emr.plan.cost')} className={`${inputCls} w-28`} />

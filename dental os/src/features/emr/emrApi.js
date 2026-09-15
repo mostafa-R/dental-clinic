@@ -7,6 +7,10 @@ export const emrApi = {
   getChart: (patientId) => api.get(`${base(patientId)}/dental-chart`).then((r) => r.data.data),
   updateChart: (patientId, payload) =>
     api.patch(`${base(patientId)}/dental-chart`, payload).then((r) => r.data.data),
+  // S1b: `number` here is the legacy-compatible `:number` route param — the
+  // backend reads 1-32 as Universal, so callers must pass the centrally
+  // derived Universal code (toothRouteCode), NOT a bare FDI code. Tooth
+  // identity itself travels unambiguously in the body as `{ fdi }`.
   updateTooth: (patientId, number, payload) =>
     api.patch(`${base(patientId)}/dental-chart/teeth/${number}`, payload).then((r) => r.data.data),
 

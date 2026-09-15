@@ -12,7 +12,7 @@ import { useSocketEvent } from '../../lib/socket';
 import { canManageEmr } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
 import { formatMoney } from '../../lib/format';
-import { PROCEDURE_STATUS_STYLES } from './dental';
+import { PROCEDURE_STATUS_STYLES, toothFdi, toothChartPayload } from './dental';
 
 export default function ChartTab({ patientId }) {
   const dispatch = useDispatch();
@@ -22,7 +22,9 @@ export default function ChartTab({ patientId }) {
   const formStatus = useSelector((s) => s.emr.formStatus);
   const canManage = canManageEmr();
 
-  const [selectedNumber, setSelectedNumber] = useState(null);
+  // S1b: tooth selection identity is the canonical FDI code. Legacy
+  // number-only API responses still resolve via toothFdi() derivation.
+  const [selectedFdi, setSelectedFdi] = useState(null);
   const [planFormOpen, setPlanFormOpen] = useState(false);
 
   const refetch = useCallback(() => {
@@ -39,30 +41,38 @@ export default function ChartTab({ patientId }) {
   useSocketEvent('treatment-plan:updated', refetch);
 
   const teeth = chart?.teeth || [];
-  const selectedTooth = selectedNumber ? teeth.find((t) => t.number === selectedNumber) : null;
+  const selectedTooth = selectedFdi ? teeth.find((t) => toothFdi(t) === selectedFdi) : null;
 
   const planItemsByTooth = useMemo(() => {
     const map = {};
     (plans.items || []).forEach((plan) => {
       (plan.items || []).forEach((item) => {
-        if (!item.tooth) return;
-        if (!map[item.tooth]) map[item.tooth] = [];
-        map[item.tooth].push({ ...item, planId: plan._id, planTitle: plan.title });
+        const fdi = toothFdi({ fdi: item.fdi, number: item.tooth });
+        if (!fdi) return;
+        if (!map[fdi]) map[fdi] = [];
+        map[fdi].push({ ...item, planId: plan._id, planTitle: plan.title });
       });
     });
     return map;
   }, [plans.items]);
 
-  const selectedToothItems = selectedNumber ? planItemsByTooth[selectedNumber] || [] : [];
+  const selectedToothItems = selectedFdi ? planItemsByTooth[selectedFdi] || [] : [];
 
   const handleSave = useCallback(async (payload) => {
     try {
-      await dispatch(saveTooth({ patientId, number: selectedNumber, payload })).unwrap();
+      // Canonical write: explicit `fdi` body, no conflicting Universal
+      // `number`. The `:number` route param stays Universal (derived
+      // centrally in emrSlice) because the backend reads 1-32 as legacy.
+      await dispatch(saveTooth({
+        patientId,
+        fdi: selectedFdi,
+        payload: toothChartPayload(selectedTooth, payload),
+      })).unwrap();
       dispatch(resetFormState());
     } catch {
       /* formError surfaced via the panel */
     }
-  }, [dispatch, patientId, selectedNumber]);
+  }, [dispatch, patientId, selectedFdi, selectedTooth]);
 
   const isLoading = status === 'loading' || status === 'idle';
 
@@ -72,13 +82,13 @@ export default function ChartTab({ patientId }) {
         {isLoading && <Spinner label={t('emr.chart.loading')} />}
         {error && !isLoading && <EmptyState title={t('emr.chart.loadFailed')} message={error?.message} />}
         {!isLoading && !error && (
-          <DentalChart teeth={teeth} selectedNumber={selectedNumber} onSelect={setSelectedNumber} planItemsByTooth={planItemsByTooth} />
+          <DentalChart teeth={teeth} selectedFdi={selectedFdi} onSelect={setSelectedFdi} planItemsByTooth={planItemsByTooth} />
         )}
       </Card>
 
       <div className="space-y-4">
         <Card title={t('emr.tooth.panelTitle')}>
-          {!selectedNumber ? (
+          {!selectedFdi ? (
             <EmptyState title={t('emr.tooth.selectHint')} />
           ) : !canManage ? (
             <EmptyState title={t('emr.tooth.readOnly')} message={t('emr.tooth.readOnlyHint')} />
@@ -87,12 +97,12 @@ export default function ChartTab({ patientId }) {
               tooth={selectedTooth}
               saving={formStatus === 'loading'}
               onSave={handleSave}
-              onCancel={() => setSelectedNumber(null)}
+              onCancel={() => setSelectedFdi(null)}
             />
           )}
         </Card>
 
-        {selectedNumber && selectedToothItems.length > 0 && (
+        {selectedFdi && selectedToothItems.length > 0 && (
           <Card title={t('emr.plan.procedures')}>
             <div className="space-y-2">
               {selectedToothItems.map((item, i) => (
@@ -111,7 +121,7 @@ export default function ChartTab({ patientId }) {
           </Card>
         )}
 
-        {selectedNumber && canManage && (
+        {selectedFdi && canManage && (
           <button
             type="button"
             onClick={() => setPlanFormOpen(true)}
@@ -126,7 +136,7 @@ export default function ChartTab({ patientId }) {
       <TreatmentPlanFormModal
         open={planFormOpen}
         patientId={patientId}
-        preselectedTooth={selectedNumber}
+        preselectedTooth={selectedFdi}
         onClose={() => setPlanFormOpen(false)}
       />
     </div>

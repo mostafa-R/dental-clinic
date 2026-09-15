@@ -5,6 +5,7 @@ import {
   TOOTH_STATE_STYLES,
   SURFACE_CONDITIONS,
   SURFACE_CONDITION_LABELS,
+  toothFdi,
 } from './dental';
 import { useT } from '../../lib/i18n';
 
@@ -24,10 +25,12 @@ const SURFACE_CONDITION_HEX = {
   restored: '#38bdf8',
 };
 
-function notationLabel(meta, numbering) {
+function notationLabel(meta, numbering, apiTooth) {
   if (!meta) return '';
   if (numbering === 'palmer') return meta.palmerNotation;
-  if (numbering === 'fdi') return String(meta.fdi);
+  // S1b: FDI labels come from the canonical code in the API response when
+  // present, falling back to the static chart meta for legacy payloads.
+  if (numbering === 'fdi') return String(apiTooth?.fdi ?? meta.fdi);
   return String(meta.universal);
 }
 
@@ -57,7 +60,7 @@ function ToothCrown({ tooth, meta, numbering, selected, onSelect, onSurfaceClick
   const handleClick = (e, surface) => {
     e.stopPropagation();
     if (onSurfaceClick && surface) {
-      onSurfaceClick(meta.universal, surface);
+      onSurfaceClick(meta.fdi, surface);
     }
   };
 
@@ -66,14 +69,14 @@ function ToothCrown({ tooth, meta, numbering, selected, onSelect, onSurfaceClick
       className="cursor-pointer"
       role="button"
       tabIndex={0}
-      aria-label={`Tooth ${meta.universal}, ${meta.name}`}
+      aria-label={`Tooth ${meta.fdi}, ${meta.name}`}
       aria-pressed={selected}
-      onClick={() => onSelect(meta.universal)}
-      onFocus={() => onSelect(meta.universal)}
+      onClick={() => onSelect(meta.fdi)}
+      onFocus={() => onSelect(meta.fdi)}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
-          onSelect(meta.universal);
+          onSelect(meta.fdi);
         }
       }}
     >
@@ -175,7 +178,7 @@ function ToothCrown({ tooth, meta, numbering, selected, onSelect, onSurfaceClick
         />
       )}
       <text x={x + CROWN_W / 2} y={labelY} textAnchor="middle" className="fill-slate-500 dark:fill-slate-400" style={{ fontSize: 11, fontWeight: 600 }}>
-        {notationLabel(meta, numbering)}
+        {notationLabel(meta, numbering, tooth)}
       </text>
     </g>
   );
@@ -228,11 +231,13 @@ function Legend({ t }) {
   );
 }
 
-export default function DentalChart({ teeth, selectedNumber, onSelect, onSurfaceClick, planItemsByTooth }) {
+export default function DentalChart({ teeth, selectedFdi, onSelect, onSurfaceClick, planItemsByTooth }) {
   const { t } = useT();
   const [numbering, setNumbering] = useState('universal');
 
-  const byNumber = new Map((teeth || []).map((t) => [t.number, t]));
+  // Index API teeth by canonical FDI (S1b). Legacy number-only responses
+  // still resolve because toothFdi() derives FDI from `number`.
+  const byFdi = new Map((teeth || []).map((t) => [toothFdi(t), t]));
 
   const upper = UPPER_TEETH.map((meta, i) => ({ meta: { ...meta, x: PAD_X + i * SLOT_W }, isUpper: true }));
   const lower = LOWER_TEETH.slice()
@@ -279,27 +284,27 @@ export default function DentalChart({ teeth, selectedNumber, onSelect, onSurface
           {upper.map(({ meta, isUpper }) => (
             <ToothCrown
               key={meta.universal}
-              tooth={byNumber.get(meta.universal)}
+              tooth={byFdi.get(meta.fdi)}
               meta={meta}
               numbering={numbering}
               isUpper={isUpper}
-              selected={selectedNumber === meta.universal}
+              selected={selectedFdi === meta.fdi}
               onSelect={onSelect}
               onSurfaceClick={onSurfaceClick}
-              planItems={planItemsByTooth?.[meta.universal]}
+              planItems={planItemsByTooth?.[meta.fdi]}
             />
           ))}
           {lower.map(({ meta, isUpper }) => (
             <ToothCrown
               key={meta.universal}
-              tooth={byNumber.get(meta.universal)}
+              tooth={byFdi.get(meta.fdi)}
               meta={meta}
               numbering={numbering}
               isUpper={isUpper}
-              selected={selectedNumber === meta.universal}
+              selected={selectedFdi === meta.fdi}
               onSelect={onSelect}
               onSurfaceClick={onSurfaceClick}
-              planItems={planItemsByTooth?.[meta.universal]}
+              planItems={planItemsByTooth?.[meta.fdi]}
             />
           ))}
         </svg>
@@ -312,16 +317,16 @@ export default function DentalChart({ teeth, selectedNumber, onSelect, onSurface
             <button
               key={meta.universal}
               type="button"
-              onClick={() => onSelect(meta.universal)}
-              aria-pressed={selectedNumber === meta.universal}
-              aria-label={`Tooth ${meta.universal}, ${meta.name}`}
+              onClick={() => onSelect(meta.fdi)}
+              aria-pressed={selectedFdi === meta.fdi}
+              aria-label={`Tooth ${meta.fdi}, ${meta.name}`}
               className={`min-h-8 rounded-md border text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
-                selectedNumber === meta.universal
+                selectedFdi === meta.fdi
                   ? 'border-brand bg-brand text-white'
                   : 'border-slate-200 bg-white text-slate-600 hover:border-brand/50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
               }`}
             >
-              {numbering === 'fdi' ? meta.fdi : numbering === 'palmer' ? meta.palmer : meta.universal}
+              {numbering === 'fdi' ? (byFdi.get(meta.fdi)?.fdi ?? meta.fdi) : numbering === 'palmer' ? meta.palmer : meta.universal}
             </button>
           ))}
         </div>
