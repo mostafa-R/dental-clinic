@@ -12,7 +12,13 @@
  * Business events published by the Event Bus. Each key is stored on both the
  * `events` log and the `automations.trigger.type` field.
  * Label pairs are returned by `GET /api/v1/automations/triggers` for the UI.
+ *
+ * Phase 1: every event on the bus carries the stable contract
+ * (eventId/eventType/tenantId/.../schemaVersion, see services/eventBus.js).
+ * Bump EVENT_SCHEMA_VERSION only with a migration story for in-flight
+ * consumers — the bus rejects unknown versions with a structured error.
  */
+export const EVENT_SCHEMA_VERSION = 1;
 export const TRIGGER_TYPES = [
   { key: 'appointment.created', label: 'New appointment booked' },
   { key: 'appointment.confirmed', label: 'Appointment confirmed' },
