@@ -52,7 +52,10 @@ export async function assertFileSignature(filePath, mimetype, ApiError) {
     throw ApiError.badRequest(`Cannot verify file type ${mimetype}`);
   }
 
-  const probeLen = Math.max(132, ...signatures.map((s) => s.offset + s.bytes.length));
+  const probeLen = Math.max(
+    132,
+    ...signatures.map((s) => s.offset + (s.bytes ? s.bytes.length : s.match.length)),
+  );
   const handle = await open(filePath, 'r');
   let buffer;
   try {

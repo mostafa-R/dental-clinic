@@ -348,35 +348,39 @@ describe('fake files and magic-byte sniffing reject mismatched uploads', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('accepts genuine PNG / JPEG byte-form headers', async () => {
+  // GIF87a needs a trailing NUL ('GIF87a\0'); short GIFs of 6 bytes are treated
+  // as truncated and rejected, so valid files use the full 7-byte header.
+  const gifBytes = (version) => Buffer.concat([Buffer.from(`GIF${version}a`), Buffer.from([0]), Buffer.from('...')]);
+
+  it('accepts genuine headers for every allowed upload type', async () => {
     const png = writeBuf('x.png', Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('PAYLOAD')]));
     await expect(assertFileSignature(png, 'image/png', ApiError)).resolves.toBeUndefined();
     await expect(assertFileSignature(writeBuf('x.jpg', Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00])), 'image/jpeg', ApiError)).resolves.toBeUndefined();
-  });
-
-  it('BUG (report): match-form signatures (PDF/GIF/WebP/DICOM) crash with a raw TypeError instead of returning a 400', async () => {
-    // middleware/upload.js:55 reads signature.bytes.length for EVERY entry, but
-    // pdf / gif / webp / dicom signatures are {offset, match} with no .bytes —
-    // so probeLen crashes before sniffing. Any such file fails with a 500, not
-    // a clean 400 rejection. Documented in INVALID-INPUT-REPORT.md; the
-    // campaign is test-only so the product fix is queued, not shipped here.
-    const pdf = writeBuf('x.pdf', Buffer.from('%PDF-1.7'));
-    await expect(assertFileSignature(pdf, 'application/pdf', ApiError)).rejects.toBeInstanceOf(TypeError);
+    await expect(assertFileSignature(writeBuf('x.pdf', Buffer.from('%PDF-1.7')), 'application/pdf', ApiError)).resolves.toBeUndefined();
+    await expect(assertFileSignature(writeBuf('x.gif', gifBytes('89')), 'image/gif', ApiError)).resolves.toBeUndefined();
+    await expect(assertFileSignature(writeBuf('x.gif87', gifBytes('87')), 'image/gif', ApiError)).resolves.toBeUndefined();
+    const webp = Buffer.alloc(20);
+    webp.write('RIFF', 0);
+    webp.write('WEBP', 8);
+    await expect(assertFileSignature(writeBuf('x.webp', webp), 'image/webp', ApiError)).resolves.toBeUndefined();
     const dicom = Buffer.alloc(135, 0);
     dicom.write('DICM', 128);
-    await expect(assertFileSignature(writeBuf('x.dcm', dicom), 'application/dicom', ApiError)).rejects.toBeInstanceOf(TypeError);
+    await expect(assertFileSignature(writeBuf('x.dcm', dicom), 'application/dicom', ApiError)).resolves.toBeUndefined();
   });
 
-  it('accepts a DICOM file with DICM at byte offset 128', async () => {
-    const buf = Buffer.alloc(135, 0);
-    buf.write('DICM', 128);
-    const result = await assertFileSignature(writeBuf('x.dcm', buf), 'application/dicom', ApiError).then(
-      () => 'resolved',
-      (err) => `rejected:${err.constructor.name}`,
-    );
-    // Same underlying bug as above — asserted here so the regression is
-    // visible for both probe sizes (bytes-form and match-form offsets).
-    expect(result).toMatch(/^rejected:TypeError$/);
+  it('PDF / DICOM / WebP impostors (wrong magic bytes) are rejected with a clean 400, never a TypeError', async () => {
+    const cases = [
+      ['x.pdf', Buffer.from('this is not a pdf'), 'application/pdf'],
+      ['x.gif', Buffer.from('GIF99a...'), 'image/gif'],
+      ['x.webp', Buffer.from('not a real webp file'), 'image/webp'],
+      ['x.dcm', Buffer.alloc(135, 0), 'application/dicom'],
+    ];
+    for (const [name, buf, mimetype] of cases) {
+      await expect(assertFileSignature(writeBuf(name, buf), mimetype, ApiError)).rejects.toMatchObject({
+        statusCode: 400,
+        message: `File content does not match type ${mimetype}`,
+      });
+    }
   });
 
   it('rejects an impostor renamed to .png (wrong magic bytes)', async () => {
@@ -387,9 +391,10 @@ describe('fake files and magic-byte sniffing reject mismatched uploads', () => {
     });
   });
 
-  it('rejects a truncated signature (buffer too short)', async () => {
-    const png = writeBuf('short.png', Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-    await expect(assertFileSignature(png, 'image/png', ApiError)).rejects.toMatchObject({ statusCode: 400 });
+  it('rejects truncated signatures for both byte-form and match-form headers', async () => {
+    await expect(assertFileSignature(writeBuf('short.png', Buffer.from([0x89, 0x50, 0x4e, 0x47])), 'image/png', ApiError)).rejects.toMatchObject({ statusCode: 400 });
+    await expect(assertFileSignature(writeBuf('short.pdf', Buffer.from('%PD')), 'application/pdf', ApiError)).rejects.toMatchObject({ statusCode: 400 });
+    await expect(assertFileSignature(writeBuf('short.gif', Buffer.from('GIF87')), 'image/gif', ApiError)).rejects.toMatchObject({ statusCode: 400 });
   });
 
   it('rejects unverifiable mimetypes outright', async () => {
@@ -397,6 +402,18 @@ describe('fake files and magic-byte sniffing reject mismatched uploads', () => {
       statusCode: 400,
       message: 'Cannot verify file type image/bmp',
     });
+  });
+
+  it('rejects oversized uploads via the request-size limiter with a 400', async () => {
+    const { requestSizeLimiter } = await import('../middleware/security.js');
+    const app = express();
+    app.use(requestSizeLimiter('1kb'));
+    app.post('/upload', (_req, res) => res.status(200).json({ ok: true }));
+    app.use(errorHandlerMw);
+
+    const oversized = await request(app).post('/upload').set('Content-Length', '2048');
+    expect(oversized.status).toBe(400);
+    expect(oversized.body.message).toContain('Request too large');
   });
 });
 
