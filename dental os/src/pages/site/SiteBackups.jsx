@@ -147,7 +147,7 @@ export default function SiteBackups() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">{formatDuration(log.durationMs)}</td>
-                    <td className="px-4 py-3 text-right text-xs text-slate-600 dark:text-slate-300">
+                    <td className="px-4 py-3 text-end text-xs text-slate-600 dark:text-slate-300">
                       {log.encrypted ? t('common.yes') : t('common.no')}
                     </td>
                   </tr>

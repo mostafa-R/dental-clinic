@@ -49,7 +49,7 @@ export default function ErrorDialog() {
           <ul className="mt-4 space-y-1.5 rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
             {fields.map((f, i) => (
               <li key={i} className="flex items-start gap-2 text-sm">
-                <span className="mt-0.5 text-slate-400 dark:text-slate-500">â€¢</span>
+                <span className="mt-0.5 text-slate-400 dark:text-slate-500">•</span>
                 <span>
                   <span className="font-medium text-slate-700 dark:text-slate-200">{f.field}:</span>{' '}
                   <span className="text-slate-600 dark:text-slate-300">{f.message}</span>

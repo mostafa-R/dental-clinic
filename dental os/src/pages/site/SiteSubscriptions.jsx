@@ -152,7 +152,7 @@ export default function SiteSubscriptions() {
                     <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
                       {sub.billingCycle === 'yearly' ? t('site.subscriptions.yearly') : t('site.subscriptions.monthly')}
                       {sub.cancelAtPeriodEnd && (
-                        <span className="ml-2 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">
+                        <span className="ms-2 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">
                           {t('site.subscriptions.cancelAtPeriodEnd')}
                         </span>
                       )}
@@ -165,7 +165,7 @@ export default function SiteSubscriptions() {
                     <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
                       {formatDate(sub.currentPeriodStart)} → {formatDate(sub.currentPeriodEnd)}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-end">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"

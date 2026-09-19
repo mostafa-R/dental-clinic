@@ -111,7 +111,7 @@ export default function InvoiceDetailModal({ open, invoice, onClose, onPay, onEd
         </div>
 
         <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-end text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-500">
                 <th className="px-3 py-2 font-medium">{t('billing.form.description')}</th>

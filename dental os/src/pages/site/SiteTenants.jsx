@@ -187,7 +187,7 @@ const onAction = async (id, method, confirmKey, vars = {}) => {
                     <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
                       {tenant.branchesCount ?? 0} {t('site.tenants.branches')} · {tenant.usersCount ?? 0} {t('site.tenants.users')}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-end">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"

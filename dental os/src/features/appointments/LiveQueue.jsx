@@ -269,7 +269,7 @@ export default function LiveQueue() {
                 <button
                   type="button"
                   onClick={() => toggleSection(col.key)}
-                  className={`flex w-full items-center justify-between px-3 py-2.5 text-left transition ${col.bg}`}
+                  className={`flex w-full items-center justify-between px-3 py-2.5 text-start transition ${col.bg}`}
                 >
                   <div className="flex items-center gap-2">
                     <span className={`h-2.5 w-2.5 rounded-full ${col.dotColor}`} />

@@ -189,7 +189,7 @@ export default function RoleFormModal({ open, onClose, role }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50">
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('roles.col.module')}</th>
+                  <th className="px-3 py-2 text-start text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('roles.col.module')}</th>
                   {CRUD_ACTIONS.map((a) => (
                     <th key={a} className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{CRUD_SHORT[a]}</th>
                   ))}

@@ -170,7 +170,7 @@ export default function SiteErrorLogs() {
                       </td>
                       <td className="max-w-[240px] truncate px-4 py-3 text-xs text-slate-500 dark:text-slate-400">{log.message}</td>
                       <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">{log.tenant?.name || log.tenantId || '—'}</td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-end">
                         {!log.resolved ? (
                           <button
                             type="button"

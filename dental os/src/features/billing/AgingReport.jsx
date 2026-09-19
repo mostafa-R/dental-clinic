@@ -91,7 +91,7 @@ export default function AgingReport({ open, onClose }) {
                         const balance = inv.total - inv.paidAmount;
                         const patientName = inv.patient
                           ? `${inv.patient.firstName} ${inv.patient.lastName}`
-                          : 'â€”';
+                          : '—';
                         const daysOverdue = inv.daysOverdue ?? (
                           inv.dueDate && new Date(inv.dueDate) < new Date()
                             ? Math.floor((Date.now() - new Date(inv.dueDate)) / (1000 * 60 * 60 * 24))
@@ -101,12 +101,12 @@ export default function AgingReport({ open, onClose }) {
                           <tr key={inv._id} className="border-b border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50">
                             <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-slate-500 dark:text-slate-400">{inv.invoiceNo}</td>
                             <td className="whitespace-nowrap px-3 py-2.5 text-slate-800 dark:text-slate-100">{patientName}</td>
-                            <td className="whitespace-nowrap px-3 py-2.5 text-xs text-slate-400">{inv.patient?.phone || 'â€”'}</td>
+                            <td className="whitespace-nowrap px-3 py-2.5 text-xs text-slate-400">{inv.patient?.phone || '—'}</td>
                             <td className="whitespace-nowrap px-3 py-2.5 text-end text-slate-700 dark:text-slate-300">{formatMoney(inv.total)}</td>
                             <td className="whitespace-nowrap px-3 py-2.5 text-end text-slate-500 dark:text-slate-400">{formatMoney(inv.paidAmount)}</td>
                             <td className="whitespace-nowrap px-3 py-2.5 text-end font-medium text-slate-900 dark:text-white">{formatMoney(balance)}</td>
                             <td className="whitespace-nowrap px-3 py-2.5 text-xs text-slate-400">
-                              {inv.dueDate ? formatDate(inv.dueDate) : 'â€”'}
+                              {inv.dueDate ? formatDate(inv.dueDate) : '—'}
                             </td>
                             <td className="whitespace-nowrap px-3 py-2.5">
                               <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium uppercase ${
@@ -116,7 +116,7 @@ export default function AgingReport({ open, onClose }) {
                                 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'
                               }`}>{inv.status}</span>
                             </td>
-                            <td className="whitespace-nowrap px-3 py-2.5 text-end text-xs font-medium text-rose-600 dark:text-rose-400">{daysOverdue > 0 ? `${daysOverdue}d` : 'â€”'}</td>
+                            <td className="whitespace-nowrap px-3 py-2.5 text-end text-xs font-medium text-rose-600 dark:text-rose-400">{daysOverdue > 0 ? `${daysOverdue}d` : '—'}</td>
                           </tr>
                         );
                       })}

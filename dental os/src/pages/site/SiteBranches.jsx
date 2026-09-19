@@ -200,7 +200,7 @@ export default function SiteBranches() {
                     </td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{formatDate(branch.createdAt)}</td>
                     {isAdmin && (
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-end">
                         <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"

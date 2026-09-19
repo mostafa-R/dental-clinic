@@ -7,11 +7,11 @@ import { nextStatusOptions, statusTKey } from './statuses';
 import { useT } from '../../lib/i18n';
 
 const STATUS_BORDER = {
-  checked_in: 'border-l-amber-400',
-  in_progress: 'border-l-violet-400',
-  scheduled: 'border-l-sky-400',
-  confirmed: 'border-l-indigo-400',
-  completed: 'border-l-emerald-400',
+  checked_in: 'border-s-amber-400',
+  in_progress: 'border-s-violet-400',
+  scheduled: 'border-s-sky-400',
+  confirmed: 'border-s-indigo-400',
+  completed: 'border-s-emerald-400',
 };
 
 function formatTime(date) {
@@ -49,14 +49,14 @@ export default function QueueCard({ appointment, onClick, isDragging, compact })
     }
   };
 
-  const borderCls = STATUS_BORDER[appointment.status] || 'border-l-slate-300';
+  const borderCls = STATUS_BORDER[appointment.status] || 'border-s-slate-300';
   const time = formatTime(appointment.start);
   const wait = appointment.status === 'checked_in' ? waitingSince(appointment.start) : null;
 
   if (compact) {
     return (
       <div
-        className={`rounded-lg border border-slate-200 border-l-4 bg-white p-2.5 shadow-sm transition active:scale-[0.98] dark:border-slate-700 dark:bg-slate-800 ${borderCls}`}
+        className={`rounded-lg border border-slate-200 border-s-4 bg-white p-2.5 shadow-sm transition active:scale-[0.98] dark:border-slate-700 dark:bg-slate-800 ${borderCls}`}
         onClick={() => onClick?.(appointment)}
       >
         <div className="flex items-center justify-between gap-2">
@@ -102,7 +102,7 @@ export default function QueueCard({ appointment, onClick, isDragging, compact })
 
   return (
     <div
-      className={`cursor-pointer rounded-xl border border-slate-200 border-l-4 bg-white p-3 shadow-sm transition hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${borderCls} ${
+      className={`cursor-pointer rounded-xl border border-slate-200 border-s-4 bg-white p-3 shadow-sm transition hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${borderCls} ${
         isDragging ? 'shadow-lg ring-2 ring-indigo-400/50 rotate-[2deg] opacity-95' : ''
       }`}
       onClick={() => !isDragging && onClick?.(appointment)}

@@ -11,14 +11,14 @@ function Toast({ message, type, onClose }) {
   }, [onClose]);
   return (
     <div
-      className={`fixed top-4 right-4 z-50 rounded-lg px-4 py-2 text-sm font-medium shadow-lg transition-all ${
+      className={`fixed top-4 end-4 z-50 rounded-lg px-4 py-2 text-sm font-medium shadow-lg transition-all ${
         type === 'success'
           ? 'bg-emerald-600 text-white'
           : 'bg-red-600 text-white'
       }`}
     >
       {message}
-      <button onClick={onClose} className="ml-3 opacity-70 hover:opacity-100">
+      <button onClick={onClose} className="ms-3 opacity-70 hover:opacity-100">
         &times;
       </button>
     </div>

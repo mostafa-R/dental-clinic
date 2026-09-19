@@ -72,7 +72,7 @@ export default function JournalTab() {
       {journal.status === 'succeeded' && journal.entries.length === 0 && <EmptyState title={t('accounting.journal.empty')} />}
       {journal.status === 'succeeded' && journal.entries.length > 0 && (
         <Card padded={false}>
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-end text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
                 <th className="px-5 py-3">{t('accounting.journal.entryNo')}</th>

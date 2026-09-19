@@ -74,14 +74,14 @@ export default function LowStock() {
             const ratio = item.reorderPoint > 0 ? item.quantity / item.reorderPoint : 0;
             const urgency = ratio <= 0.3 ? "critical" : ratio <= 0.6 ? "warning" : "low";
             const urgencyStyles = {
-              critical: "border-l-rose-500 bg-rose-50/50 dark:bg-rose-500/5",
-              warning: "border-l-amber-500 bg-amber-50/50 dark:bg-amber-500/5",
-              low: "border-l-transparent",
+              critical: "border-s-rose-500 bg-rose-50/50 dark:bg-rose-500/5",
+              warning: "border-s-amber-500 bg-amber-50/50 dark:bg-amber-500/5",
+              low: "border-s-transparent",
             };
             return (
               <li
                 key={item._id}
-                className={`group flex items-center justify-between rounded-xl border-l-2 p-3 transition-colors duration-150 hover:bg-slate-50 dark:hover:bg-slate-800/50 ${urgencyStyles[urgency]}`}
+                className={`group flex items-center justify-between rounded-xl border-s-2 p-3 transition-colors duration-150 hover:bg-slate-50 dark:hover:bg-slate-800/50 ${urgencyStyles[urgency]}`}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   {urgency === "critical" && (
@@ -98,7 +98,7 @@ export default function LowStock() {
                     </p>
                   </div>
                 </div>
-                <div className="text-right shrink-0">
+                <div className="text-end shrink-0">
                   <p className={`text-sm font-bold ${
                     urgency === "critical"
                       ? "text-rose-600 dark:text-rose-400"

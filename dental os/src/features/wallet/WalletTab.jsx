@@ -218,7 +218,7 @@ export default function WalletTab({ patientId }) {
         )}
         {!isLoading && wallet && wallet.transactions?.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full text-end text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-xs text-slate-400 dark:border-slate-700">
                   <th className="pb-2 font-medium">{t('wallet.date')}</th>
@@ -238,7 +238,7 @@ export default function WalletTab({ patientId }) {
                       </span>
                     </td>
                     <td className="py-2 font-medium text-slate-900 dark:text-white">{formatMoney(tx.amount)}</td>
-                    <td className="py-2 text-slate-500 dark:text-slate-400">{tx.description || 'â€”'}</td>
+                    <td className="py-2 text-slate-500 dark:text-slate-400">{tx.description || '—'}</td>
                     <td className="py-2 text-slate-900 dark:text-white">{formatMoney(tx.balanceAfter)}</td>
                   </tr>
                 ))}
@@ -268,7 +268,7 @@ export default function WalletTab({ patientId }) {
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{plan.title}</h3>
-                    <p className="text-xs text-slate-400 dark:text-slate-500">{plan.installments?.length || 0} {t('wallet.installments')} Â· {t(`wallet.frequency.${plan.frequency || 'monthly'}`)}</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500">{plan.installments?.length || 0} {t('wallet.installments')} · {t(`wallet.frequency.${plan.frequency || 'monthly'}`)}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PLAN_STATUS_STYLES[plan.status]}`}>
@@ -300,7 +300,7 @@ export default function WalletTab({ patientId }) {
 
                 {/* Installments list */}
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full text-end text-xs">
                     <thead>
                       <tr className="border-b border-slate-200 text-slate-400 dark:border-slate-700">
                         <th className="pb-1 font-medium">#</th>
@@ -480,7 +480,7 @@ export default function WalletTab({ patientId }) {
 
             {viewingPlan.installments?.length > 0 && (
               <div className="mb-4 overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                <table className="w-full text-end text-xs">
                   <thead>
                     <tr className="border-b border-slate-200 text-slate-400 dark:border-slate-700">
                       <th className="pb-1 font-medium">#</th>

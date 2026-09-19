@@ -287,7 +287,7 @@ export default function VisitPanel({ open, appointment, onClose }) {
           <div>
             <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
               {t('emr.note.visitNote')}
-              {existingNote && <span className="ml-2 text-emerald-600 dark:text-emerald-400">&#10003;</span>}
+              {existingNote && <span className="ms-2 text-emerald-600 dark:text-emerald-400">&#10003;</span>}
             </h4>
             {loadingNote ? (
               <Spinner label={t('common.loading')} />

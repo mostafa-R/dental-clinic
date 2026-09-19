@@ -79,16 +79,16 @@ export default function TodaySchedule() {
       )}
 
       {sorted.length > 0 && (
-        <ul className="relative ml-2 space-y-0">
+        <ul className="relative ms-2 space-y-0">
           {sorted.map((appt, i) => {
             const isLast = i === sorted.length - 1;
             const dotColor = DOT_COLORS[appt.status] || "bg-slate-400";
             return (
-              <li key={appt._id} className="relative flex items-start gap-4 py-3.5 pl-7">
+              <li key={appt._id} className="relative flex items-start gap-4 py-3.5 ps-7">
                 {!isLast && (
-                  <span className="absolute left-[7px] top-9 h-[calc(100%-12px)] w-px bg-slate-200 dark:bg-slate-700" />
+                  <span className="absolute start-[7px] top-9 h-[calc(100%-12px)] w-px bg-slate-200 dark:bg-slate-700" />
                 )}
-                <span className="absolute left-0 top-4.5 flex h-4 w-4 -translate-x-1/2 items-center justify-center">
+                <span className="absolute start-0 top-4.5 flex h-4 w-4 -translate-x-1/2 rtl:translate-x-1/2 items-center justify-center">
                   <span className={`h-3 w-3 rounded-full ring-4 ring-white dark:ring-slate-900 ${dotColor}`} />
                 </span>
 

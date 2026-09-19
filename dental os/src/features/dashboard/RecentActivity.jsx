@@ -10,17 +10,17 @@ export default function RecentActivity({ recentStaff }) {
   }
 
   return (
-    <ul className="relative ml-4 space-y-0">
+    <ul className="relative ms-4 space-y-0">
       {recentStaff.map((u, i) => {
         const ago = timeAgo(u.createdAt);
         const agoText = typeof ago === 'string' ? ago : t(ago.key, ago.vars);
         const isLast = i === recentStaff.length - 1;
         return (
-          <li key={u._id} className="relative flex items-start gap-4 py-3 pl-6">
+          <li key={u._id} className="relative flex items-start gap-4 py-3 ps-6">
             {!isLast && (
-              <span className="absolute left-0 top-8 h-full w-px bg-slate-200 dark:bg-slate-700" />
+              <span className="absolute start-0 top-8 h-full w-px bg-slate-200 dark:bg-slate-700" />
             )}
-            <span className="absolute left-0 top-4 flex h-3 w-3 -translate-x-1/2 items-center justify-center">
+            <span className="absolute start-0 top-4 flex h-3 w-3 -translate-x-1/2 rtl:translate-x-1/2 items-center justify-center">
               <span className={`h-2.5 w-2.5 rounded-full border-2 border-white dark:border-slate-900 ${
                 i === 0 ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'
               }`} />

@@ -15,7 +15,7 @@ function ImpersonationBanner() {
     <div className="bg-red-600 text-white text-sm px-4 py-2 flex items-center justify-between">
       <span>
         <strong>Impersonation Mode:</strong> You are acting as {user.name || user.email}
-        <span className="ml-2 text-red-200 text-xs"> — All actions are logged</span>
+        <span className="ms-2 text-red-200 text-xs"> — All actions are logged</span>
       </span>
       <span className="text-xs bg-white/20 px-2 py-0.5 rounded">
         by {user._impersonator || 'Admin'}

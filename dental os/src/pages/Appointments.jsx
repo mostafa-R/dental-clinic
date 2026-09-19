@@ -246,7 +246,7 @@ export default function Appointments() {
                   <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
                 </svg>
                 {hasActiveFilters && (
-                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-indigo-500" />
+                  <span className="absolute -end-1 -top-1 h-2 w-2 rounded-full bg-indigo-500" />
                 )}
               </button>
               <div className="flex gap-1 rounded-lg border border-slate-200 p-0.5 dark:border-slate-700">
