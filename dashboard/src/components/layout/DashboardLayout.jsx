@@ -19,6 +19,7 @@ const navigation = [
   { nameKey: "performance", href: "/performance" },
   { nameKey: "auditLogs", href: "/audit-logs" },
   { nameKey: "errorLogs", href: "/error-logs" },
+  { nameKey: "alerts", href: "/alerts" },
   { nameKey: "backups", href: "/backups" },
   { nameKey: "settings", href: "/settings" },
 ];

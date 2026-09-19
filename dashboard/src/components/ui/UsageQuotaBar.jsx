@@ -1,3 +1,6 @@
+import { useSelector } from "react-redux";
+import { t } from "../../lib/i18n";
+
 const colorMap = {
   indigo: "bg-indigo-500",
   emerald: "bg-emerald-500",
@@ -6,6 +9,7 @@ const colorMap = {
 };
 
 export default function UsageQuotaBar({ label, used, limit, unit = "", color = "indigo" }) {
+  const { language } = useSelector((state) => state.ui);
   const percentage = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
   const isNearLimit = percentage >= 80;
   const isAtLimit = percentage >= 100;
@@ -34,10 +38,10 @@ export default function UsageQuotaBar({ label, used, limit, unit = "", color = "
         </div>
       )}
       {isAtLimit && (
-        <p className="text-xs text-red-500 font-medium">{label} limit reached</p>
+        <p className="text-xs text-red-500 font-medium">{t("limitReached", { label }, language)}</p>
       )}
       {isNearLimit && !isAtLimit && (
-        <p className="text-xs text-amber-500">{Math.round(100 - percentage)}% remaining</p>
+        <p className="text-xs text-amber-500">{t("percentRemaining", { pct: Math.round(100 - percentage) }, language)}</p>
       )}
     </div>
   );

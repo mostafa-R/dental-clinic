@@ -41,6 +41,10 @@ export const SITE_PERMISSIONS = {
   PLANS_CREATE: "plans:create",
   PLANS_UPDATE: "plans:update",
   PLANS_DELETE: "plans:delete",
+
+  // Monitoring v1 — platform alerts
+  MONITORING_ALERTS_VIEW: "monitoring:alerts:view",
+  MONITORING_ALERTS_MANAGE: "monitoring:alerts:manage",
 };
 
 // Default role permissions
@@ -59,6 +63,8 @@ export const ROLE_PERMISSIONS = {
       SITE_PERMISSIONS.SUBSCRIPTIONS_UPDATE,
       SITE_PERMISSIONS.ANALYTICS_VIEW,
       SITE_PERMISSIONS.SETTINGS_VIEW,
+      SITE_PERMISSIONS.MONITORING_ALERTS_VIEW,
+      SITE_PERMISSIONS.MONITORING_ALERTS_MANAGE,
     ],
   },
   support: {
@@ -67,6 +73,7 @@ export const ROLE_PERMISSIONS = {
       SITE_PERMISSIONS.TENANTS_VIEW,
       SITE_PERMISSIONS.SUBSCRIPTIONS_VIEW,
       SITE_PERMISSIONS.ANALYTICS_VIEW,
+      SITE_PERMISSIONS.MONITORING_ALERTS_VIEW,
     ],
   },
 };
@@ -116,6 +123,10 @@ export const SITE_ACCESS = {
   admins: { roles: [SUPER_ADMIN, ADMIN] },
   auditLogs: { roles: [SUPER_ADMIN, ADMIN, SUPPORT] },
   errorLogs: { roles: [SUPER_ADMIN, ADMIN] },
+  alerts: {
+    roles: [SUPER_ADMIN, ADMIN, SUPPORT],
+    permission: SITE_PERMISSIONS.MONITORING_ALERTS_VIEW,
+  },
   featureFlags: { roles: [SUPER_ADMIN, ADMIN] },
   health: { roles: [SUPER_ADMIN] },
   quarantine: { roles: [SUPER_ADMIN, ADMIN] },
@@ -185,6 +196,16 @@ export const SITE_ACCESS = {
   },
 
   // ---- Security / ops actions ----
+  "alerts.acknowledge": {
+    roles: [SUPER_ADMIN, ADMIN],
+    permission: SITE_PERMISSIONS.MONITORING_ALERTS_MANAGE,
+    strict: true,
+  },
+  "alerts.resolve": {
+    roles: [SUPER_ADMIN, ADMIN],
+    permission: SITE_PERMISSIONS.MONITORING_ALERTS_MANAGE,
+    strict: true,
+  },
   "quarantine.set": { roles: [SUPER_ADMIN], strict: true },
   "quarantine.remove": { roles: [SUPER_ADMIN], strict: true },
   "backups.trigger": { roles: [SUPER_ADMIN], strict: true },

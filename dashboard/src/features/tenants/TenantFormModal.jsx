@@ -180,17 +180,17 @@ export default function TenantFormModal({ isOpen, onClose, tenant }) {
 
   const validateForm = () => {
     const errors = {};
-    if (!formData.name.trim()) errors.name = "Clinic name is required";
-    if (!formData.email.trim()) errors.email = "Email is required";
+    if (!formData.name.trim()) errors.name = t("clinicNameRequired", language);
+    if (!formData.email.trim()) errors.email = t("emailRequired", language);
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
-      errors.email = "Invalid email address";
+      errors.email = t("invalidEmail", language);
     if (!tenant) {
       if (!formData.adminPassword.trim())
-        errors.adminPassword = "Admin password is required";
+        errors.adminPassword = t("adminPasswordRequired", language);
       else if (formData.adminPassword.length < 8)
-        errors.adminPassword = "Must be at least 8 characters";
+        errors.adminPassword = t("minPasswordChars", language);
     }
-    if (!formData.plan) errors.plan = "Please select a plan";
+    if (!formData.plan) errors.plan = t("selectPlanPrompt", language);
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -201,19 +201,20 @@ export default function TenantFormModal({ isOpen, onClose, tenant }) {
     setLoading(true);
     try {
       if (tenant) {
-        const { adminPassword, ...updateData } = formData;
+        const updateData = { ...formData };
+        delete updateData.adminPassword;
         const result = await dispatch(
           updateTenant({ id: tenant._id, data: updateData }),
         );
         if (result.error) {
-          setFormErrors({ submit: result.payload || "Failed to update tenant" });
+          setFormErrors({ submit: result.payload || t("failedUpdateTenant", language) });
         } else {
           onClose();
         }
       } else {
         const result = await dispatch(createTenant(formData));
         if (result.error) {
-          setFormErrors({ submit: result.payload || "Failed to create tenant" });
+          setFormErrors({ submit: result.payload || t("failedCreateTenant", language) });
         } else {
           setCredentials(
             result.payload?.adminCredentials || {
@@ -433,7 +434,7 @@ export default function TenantFormModal({ isOpen, onClose, tenant }) {
                   value={formData.address}
                   onChange={handleChange}
                   className={inputClass("address")}
-                  placeholder="Street address"
+                  placeholder={t("address", language)}
                 />
               </div>
               <div>
@@ -446,7 +447,7 @@ export default function TenantFormModal({ isOpen, onClose, tenant }) {
                   value={formData.city}
                   onChange={handleChange}
                   className={inputClass("city")}
-                  placeholder="City"
+                  placeholder={t("city", language)}
                 />
               </div>
               <div>
@@ -459,7 +460,7 @@ export default function TenantFormModal({ isOpen, onClose, tenant }) {
                   value={formData.country}
                   onChange={handleChange}
                   className={inputClass("country")}
-                  placeholder="Country"
+                  placeholder={t("country", language)}
                 />
               </div>
             </div>

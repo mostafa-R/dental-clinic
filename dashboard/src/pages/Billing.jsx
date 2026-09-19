@@ -287,9 +287,9 @@ export default function Billing() {
               onChange={(e) => setPaymentMethod(e.target.value)}
               className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
             >
-              <option value="cash">Cash</option>
-              <option value="card">Card</option>
-              <option value="bank_transfer">Bank transfer</option>
+              <option value="cash">{t("paymentCash", language)}</option>
+              <option value="card">{t("paymentCard", language)}</option>
+              <option value="bank_transfer">{t("paymentBankTransfer", language)}</option>
             </select>
           </div>
           <div className="flex justify-end gap-3">

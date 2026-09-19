@@ -15,6 +15,7 @@ import { startNoShowCron, stopNoShowCron } from "./services/noShowCron.js";
 import { startRecallCron, stopRecallCron } from "./services/recallCron.js";
 import { startQueueNotifyCron, stopQueueNotifyCron } from "./services/queueNotifyCron.js";
 import { startSuspensionCron, stopSuspensionCron } from "./services/suspensionCron.js";
+import { startAlertCron, stopAlertCron } from "./modules/site/alert/alertEngine.js";
 import { disconnectAllWhatsAppClients } from "./services/whatsapp.js";
 import { startWhatsAppReminderCron, stopWhatsAppReminderCron } from "./services/whatsappReminderCron.js";
 import { startEventBus } from "./services/eventBus.js";
@@ -72,6 +73,7 @@ async function start() {
 
   startSuspensionCron();
   startAbuseCron();
+  startAlertCron();
   startWhatsAppReminderCron();
   if (!process.env.BACKUP_ENCRYPTION_KEY) {
     console.error(
@@ -99,6 +101,7 @@ async function start() {
     stopSuspensionCron();
     stopAbuseCron();
     stopAbuseFlusher();
+    stopAlertCron();
     stopWhatsAppReminderCron();
     stopBackupCron();
     stopInstallmentCron();

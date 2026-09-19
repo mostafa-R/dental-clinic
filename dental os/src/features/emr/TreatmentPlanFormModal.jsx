@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
+import api from '../../lib/axios';
 import Modal from '../../components/ui/Modal';
 import { createPlan, resetFormState } from './emrSlice';
 import { FDI_TOOTH_OPTIONS } from './dental';
@@ -17,6 +18,11 @@ export default function TreatmentPlanFormModal({ open, patientId, onClose, prese
   const { t } = useT();
   const formStatus = useSelector((s) => s.emr.formStatus);
   const formError = useSelector((s) => s.emr.formError);
+  const currentUser = useSelector((s) => s.auth.user);
+
+  const isDoctor = currentUser?.isDoctor;
+  const [doctor, setDoctor] = useState('');
+  const [doctors, setDoctors] = useState([]);
 
   const [title, setTitle] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
@@ -31,9 +37,18 @@ export default function TreatmentPlanFormModal({ open, patientId, onClose, prese
       setItems([{ ...emptyItem(), fdi: preselectedTooth ? String(preselectedTooth) : '' }]);
       setNextAppointment('');
       setNextAppointmentNotes('');
+      if (isDoctor) {
+        setDoctor(currentUser._id);
+      } else {
+        setDoctor('');
+        api
+          .get('/users/doctors')
+          .then((r) => setDoctors(r.data.data.doctors || []))
+          .catch(() => setDoctors([]));
+      }
       dispatch(resetFormState());
     }
-  }, [open, dispatch, preselectedTooth]);
+  }, [open, isDoctor, currentUser, dispatch, preselectedTooth]);
 
   const updateItem = (idx, field, value) => {
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
@@ -55,6 +70,10 @@ export default function TreatmentPlanFormModal({ open, patientId, onClose, prese
       dispatch(showErrorDialog({ message: t('emr.plan.needTitle') }));
       return;
     }
+    if (!doctor) {
+      dispatch(showErrorDialog({ message: t('emr.plan.needDoctor') }));
+      return;
+    }
     if (cleanItems.length === 0) {
       dispatch(showErrorDialog({ message: t('emr.plan.needItem') }));
       return;
@@ -63,6 +82,7 @@ export default function TreatmentPlanFormModal({ open, patientId, onClose, prese
     try {
       await dispatch(
         createPlan({ patientId, payload: {
+          doctor,
           title: title.trim(),
           diagnosis: diagnosis.trim(),
           items: cleanItems,
@@ -102,6 +122,20 @@ export default function TreatmentPlanFormModal({ open, patientId, onClose, prese
       }
     >
       <div className="space-y-4">
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('emr.plan.doctor')}</label>
+          {isDoctor ? (
+            <input value={currentUser?.name || ''} disabled className={`${inputCls} opacity-70`} />
+          ) : (
+            <select value={doctor} onChange={(e) => setDoctor(e.target.value)} className={inputCls}>
+              <option value="">{t('emr.plan.selectDoctor')}</option>
+              {doctors.map((d) => (
+                <option key={d._id} value={d._id}>{d.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('emr.plan.title')}</label>

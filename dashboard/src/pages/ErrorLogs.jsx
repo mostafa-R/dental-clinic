@@ -88,7 +88,7 @@ export default function ErrorLogs() {
                   <th className="text-start px-4 py-3 font-medium text-slate-500">{t("date", language)}</th>
                   <th className="text-start px-4 py-3 font-medium text-slate-500">{t("status", language)}</th>
                   <th className="text-start px-4 py-3 font-medium text-slate-500">{t("method", language)}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-500">URL</th>
+                  <th className="text-start px-4 py-3 font-medium text-slate-500">{t("url", language)}</th>
                   <th className="text-start px-4 py-3 font-medium text-slate-500">{t("tenantName", language)}</th>
                   <th className="text-start px-4 py-3 font-medium text-slate-500">{t("message", language)}</th>
                 </tr>

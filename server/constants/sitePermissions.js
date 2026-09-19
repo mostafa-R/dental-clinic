@@ -64,6 +64,10 @@ export const SITE_PERMISSIONS = {
   SECURITY_VIEW: "security:view",
   REPORTS_EXPORT: "reports:export",
 
+  // Monitoring v1 — platform alerts
+  MONITORING_ALERTS_VIEW: "monitoring:alerts:view",
+  MONITORING_ALERTS_MANAGE: "monitoring:alerts:manage",
+
   // Raw protected-health-information access (L2). Never part of any role
   // default — only super_admin (implicitly) or an explicit super_admin-granted
   // permission may reach PHI-bearing endpoints, and those endpoints audit.
@@ -92,6 +96,8 @@ export const SITE_ROLE_DEFAULT_PERMISSIONS = {
     SITE_PERMISSIONS.USAGE_VIEW,
     SITE_PERMISSIONS.ACTIVITY_VIEW,
     SITE_PERMISSIONS.SAAS_BILLING_VIEW,
+    SITE_PERMISSIONS.MONITORING_ALERTS_VIEW,
+    SITE_PERMISSIONS.MONITORING_ALERTS_MANAGE,
   ],
   support: [
     SITE_PERMISSIONS.TENANTS_VIEW,
@@ -102,6 +108,7 @@ export const SITE_ROLE_DEFAULT_PERMISSIONS = {
     SITE_PERMISSIONS.APPOINTMENTS_VIEW,
     SITE_PERMISSIONS.USAGE_VIEW,
     SITE_PERMISSIONS.ACTIVITY_VIEW,
+    SITE_PERMISSIONS.MONITORING_ALERTS_VIEW,
   ],
 };
 

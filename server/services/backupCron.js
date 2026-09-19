@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { performBackup } from "./backup.js";
 import PlatformSetting from "../modules/platform/platformSetting.model.js";
+import { reportEventAlert } from "../modules/site/alert/alertReporter.js";
 
 /**
  * Read the platform's backup schedule. Falls back to defaults when no
@@ -35,8 +36,22 @@ async function runScheduledBackup() {
     console.log(
       `[Backup-Cron] Backup completed: ${log.filename} (${(log.sizeBytes / 1024 / 1024).toFixed(2)} MB in ${log.durationMs}ms)`,
     );
+    await reportEventAlert({
+      action: "recover",
+      type: "backup",
+      source: "backup",
+      key: "scheduled",
+    });
   } catch (err) {
     console.error("[Backup-Cron] Backup failed:", err.message);
+    await reportEventAlert({
+      type: "backup",
+      severity: "critical",
+      source: "backup",
+      key: "scheduled",
+      title: "Scheduled backup failed",
+      message: err.message || "The scheduled database backup failed.",
+    });
   }
 }
 

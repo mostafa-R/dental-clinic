@@ -1,5 +1,6 @@
 import { configureStore } from "@reduxjs/toolkit";
 import adminsReducer from "../features/admins/adminsSlice";
+import alertsReducer from "../features/alerts/alertsSlice";
 import analyticsReducer from "../features/analytics/analyticsSlice";
 import backupsReducer from "../features/backups/backupsSlice";
 import perfReducer from "../features/perf/perfSlice";
@@ -26,6 +27,7 @@ export const store = configureStore({
     subscriptions: subscriptionsReducer,
     analytics: analyticsReducer,
     admins: adminsReducer,
+    alerts: alertsReducer,
     auditLogs: auditLogsReducer,
     errorLogs: errorLogsReducer,
     plans: plansReducer,

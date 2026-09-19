@@ -24,11 +24,16 @@ vi.mock("../services/cronLock.js", () => ({
   withCronLock: vi.fn(async (_key, _ttl, fn) => fn()),
 }));
 
+vi.mock("../modules/site/alert/alertReporter.js", () => ({
+  reportEventAlert: vi.fn(async () => null),
+}));
+
 import PlatformSetting from "../modules/platform/platformSetting.model.js";
 import Subscription from "../modules/site/tenant/subscription.model.js";
 import Tenant from "../modules/site/tenant/tenant.model.js";
 import { invalidateTenant } from "../utils/cache.js";
 import { checkAndSuspend } from "../services/suspensionCron.js";
+import { reportEventAlert } from "../modules/site/alert/alertReporter.js";
 
 function subscriptionQuery(overdue) {
   return {
@@ -90,6 +95,15 @@ describe("suspensionCron - checkAndSuspend", () => {
     expect(invalidateTenant).toHaveBeenCalledTimes(2);
     expect(invalidateTenant).toHaveBeenCalledWith("t1");
     expect(invalidateTenant).toHaveBeenCalledWith("t2");
+    expect(reportEventAlert).toHaveBeenCalledTimes(2);
+    expect(reportEventAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "subscription",
+        scope: "tenant",
+        tenantId: "t1",
+        key: "suspension",
+      }),
+    );
   });
 
   it("skips overdue subscriptions without a tenant and never invalidates cache", async () => {

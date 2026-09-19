@@ -5,6 +5,7 @@ import Tenant from "../modules/site/tenant/tenant.model.js";
 import { invalidateTenant } from "../utils/cache.js";
 import { withTransaction } from "../core/transaction.js";
 import { withCronLock } from "./cronLock.js";
+import { reportEventAlert } from "../modules/site/alert/alertReporter.js";
 
 const CRON_LOCK_KEY = "suspension-cron";
 const CRON_LOCK_TTL_MS = 5 * 60 * 1000;
@@ -43,6 +44,17 @@ async function checkAndSuspend() {
         });
 
         await invalidateTenant(String(sub.tenant._id));
+
+        await reportEventAlert({
+          type: "subscription",
+          severity: "warning",
+          scope: "tenant",
+          tenantId: sub.tenant._id,
+          key: "suspension",
+          title: "Tenant suspended (overdue subscription)",
+          message: `"${sub.tenant.name}" was auto-suspended for an overdue subscription.`,
+          source: "system",
+        });
 
         console.log(
           `[Auto-Suspend] Suspended tenant "${sub.tenant.name}" (${sub.tenant._id}) — overdue since ${sub.nextPaymentAt?.toISOString()}`,

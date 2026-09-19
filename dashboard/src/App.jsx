@@ -14,6 +14,7 @@ const Branches = lazy(() => import("./pages/Branches"));
 const Billing = lazy(() => import("./pages/Billing"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const Admins = lazy(() => import("./pages/Admins"));
+const Alerts = lazy(() => import("./pages/Alerts"));
 const AuditLogs = lazy(() => import("./pages/AuditLogs"));
 const ErrorLogs = lazy(() => import("./pages/ErrorLogs"));
 const FeatureFlags = lazy(() => import("./pages/FeatureFlags"));
@@ -27,21 +28,13 @@ const Performance = lazy(() => import("./pages/Performance"));
 function App() {
   const dispatch = useDispatch();
   const { _initialized, loading } = useSelector((state) => state.auth);
-  const { theme, language } = useSelector((state) => state.ui);
+  const { language } = useSelector((state) => state.ui);
 
   useEffect(() => {
     if (!_initialized && !loading) {
       dispatch(getCurrentUser());
     }
   }, [dispatch, _initialized, loading]);
-
-  useEffect(() => {
-    if (theme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  }, [theme]);
 
   useEffect(() => {
     document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
@@ -120,6 +113,14 @@ function App() {
               element={
                 <RequireAccess accessKey="errorLogs">
                   <ErrorLogs />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/alerts"
+              element={
+                <RequireAccess accessKey="alerts">
+                  <Alerts />
                 </RequireAccess>
               }
             />

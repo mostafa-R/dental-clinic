@@ -335,6 +335,48 @@ export const translations = {
     method: "Method",
     message: "Message",
 
+    // Alerts
+    alerts: "Alerts",
+    alertsDesc: "Platform monitoring alerts for infrastructure, performance and tenant activity",
+    alertsOpen: "Open",
+    alertsCritical: "Critical",
+    alertsWarning: "Warnings",
+    alertsInfo: "Info",
+    alertsResolved: "Resolved",
+    alertsAllStatus: "All statuses",
+    alertsAllSeverity: "All severities",
+    alertsAllTypes: "All types",
+    alertsSeverity: "Severity",
+    alertsType: "Type",
+    alertsStatus: "Status",
+    alertsOccurrences: "Occurrences",
+    alertsLastSeen: "Last seen",
+    alertsPlatform: "Platform",
+    alertsAcknowledge: "Acknowledge",
+    alertsResolve: "Resolve",
+    alertsMarkAllRead: "Mark all read",
+    alertsMarkedAllRead: "All alerts acknowledged",
+    alertsNoneDesc: "No alerts match the current filters. Alerts will appear here when thresholds are crossed.",
+    alertsBellTitle: "Notifications",
+    alertsViewAll: "View all alerts",
+    alertsNoOpen: "No open alerts",
+    alertsToastNewCritical: "Critical alert",
+    statusAcknowledged: "Acknowledged",
+    statusResolved: "Resolved",
+    "alertType.error_rate": "Error rate",
+    "alertType.memory": "Memory",
+    "alertType.redis": "Redis",
+    "alertType.mongodb": "MongoDB",
+    "alertType.response_time": "Response time",
+    "alertType.tenant_quota": "Tenant quota",
+    "alertType.tenant_spike": "Tenant spike",
+    "alertType.backup": "Backup",
+    "alertType.quarantine": "Quarantine",
+    "alertType.subscription": "Subscription",
+    "alert.acknowledge": "Acknowledge Alert",
+    "alert.resolve": "Resolve Alert",
+    "alert.acknowledge_all": "Acknowledge All Alerts",
+
     // Auto-Suspension
     subscriptionStatus: "Subscription Status",
     subscriptionEndDate: "End Date",
@@ -385,6 +427,86 @@ export const translations = {
     backupCodeOption: "Use a backup code instead",
     enterBackupCode: "Enter backup code",
     loginCode: "Login Code",
+
+    // Login
+    siteDashboard: "Site Dashboard",
+    siteAccessOnly: "Site administrator access only",
+    signIn: "Sign in",
+
+    // Pagination
+    previous: "Previous",
+    next: "Next",
+    pageOf: "Page",
+    of: "of",
+    pagination: "Pagination",
+
+    // Admins
+    noAdminsFound: "No admins found",
+    noAdminsDesc: "Add site administrators to manage the platform.",
+    adminCreated: "Admin Created",
+    shareAdminCredentials: "Share these credentials with the admin:",
+    deleteAdminTitle: "Delete Admin",
+    deleteAdminConfirm: "Are you sure you want to delete {name}? This action cannot be undone.",
+    nameRequired: "Name is required",
+    emailRequired: "Email is required",
+    passwordRequired: "Password is required",
+    permissionRequired: "At least one permission is required",
+    leaveBlank: "(leave blank to keep current)",
+    keepCurrent: "Keep current",
+    minChars8: "Min 8 chars",
+    moreCount: "+{count} more",
+
+    // Plans
+    subscriptionPlans: "Subscription Plans",
+    noPlansFound: "No plans found",
+    noPlansDesc: "Create subscription plans for your platform.",
+    monthly: "Monthly",
+    yearly: "Yearly",
+    modulesAppAccess: "Modules (App Access)",
+    addFeaturePlaceholder: "Add a feature",
+    add: "Add",
+    activeForNewSub: "Active (available for new subscriptions)",
+    deletePlanTitle: "Delete Plan",
+    deletePlanConfirm: "Are you sure you want to delete the {name} plan? This action cannot be undone.",
+    planNamePlaceholder: "e.g., Starter, Professional, Enterprise",
+    zeroUnlimited: "0 for unlimited",
+    storagePlaceholder: "e.g., 5GB, Unlimited",
+    supportPlaceholder: "e.g., Email, Priority Email + Chat",
+    pricePositive: "Price must be positive",
+    invalidValue: "Invalid value",
+
+    // Feature module names
+    patients: "Patients",
+    appointments: "Appointments",
+    accounting: "Accounting",
+    inventory: "Inventory",
+    emr: "Medical Records (EMR)",
+    prescriptions: "Prescriptions",
+    users: "Users",
+    roles: "Roles",
+
+    // Error Logs
+    url: "URL",
+
+    // Usage Quota
+    limitReached: "{label} limit reached",
+    percentRemaining: "{pct}% remaining",
+
+    // Forms
+    clinicNameRequired: "Clinic name is required",
+    invalidEmail: "Invalid email address",
+    adminPasswordRequired: "Admin password is required",
+    minPasswordChars: "Must be at least 8 characters",
+    selectPlanPrompt: "Please select a plan",
+    failedUpdateTenant: "Failed to update tenant",
+    failedCreateTenant: "Failed to create tenant",
+    failedUpdateBranch: "Failed to update branch",
+    failedCreateBranch: "Failed to create branch",
+
+    // Payment methods
+    paymentCash: "Cash",
+    paymentCard: "Card",
+    paymentBankTransfer: "Bank transfer",
   },
   ar: {
     // Navigation
@@ -720,6 +842,48 @@ export const translations = {
     method: "الطريقة",
     message: "الرسالة",
 
+    // Alerts
+    alerts: "التنبيهات",
+    alertsDesc: "تنبيهات مراقبة المنصة للبنية التحتية والأداء ونشاط المشتركين",
+    alertsOpen: "مفتوحة",
+    alertsCritical: "حرجة",
+    alertsWarning: "تحذيرات",
+    alertsInfo: "معلومات",
+    alertsResolved: "تم حلها",
+    alertsAllStatus: "جميع الحالات",
+    alertsAllSeverity: "جميع المستويات",
+    alertsAllTypes: "جميع الأنواع",
+    alertsSeverity: "المستوى",
+    alertsType: "النوع",
+    alertsStatus: "الحالة",
+    alertsOccurrences: "مرات التكرار",
+    alertsLastSeen: "آخر ظهور",
+    alertsPlatform: "المنصة",
+    alertsAcknowledge: "إقرار",
+    alertsResolve: "حل",
+    alertsMarkAllRead: "إقرار الكل كمقروء",
+    alertsMarkedAllRead: "تم إقرار جميع التنبيهات",
+    alertsNoneDesc: "لا توجد تنبيهات مطابقة لعوامل التصفية الحالية. ستظهر التنبيهات هنا عند تجاوز الحدود.",
+    alertsBellTitle: "الإشعارات",
+    alertsViewAll: "عرض جميع التنبيهات",
+    alertsNoOpen: "لا توجد تنبيهات مفتوحة",
+    alertsToastNewCritical: "تنبيه حرج",
+    statusAcknowledged: "مُقَرّ",
+    statusResolved: "تم حلها",
+    "alertType.error_rate": "معدل الخطأ",
+    "alertType.memory": "الذاكرة",
+    "alertType.redis": "Redis",
+    "alertType.mongodb": "MongoDB",
+    "alertType.response_time": "زمن الاستجابة",
+    "alertType.tenant_quota": "حصة المشترك",
+    "alertType.tenant_spike": "زيادة المشتركين",
+    "alertType.backup": "النسخ الاحتياطي",
+    "alertType.quarantine": "الحظر",
+    "alertType.subscription": "الاشتراك",
+    "alert.acknowledge": "إقرار تنبيه",
+    "alert.resolve": "حل تنبيه",
+    "alert.acknowledge_all": "إقرار جميع التنبيهات",
+
     // Auto-Suspension
     subscriptionStatus: "حالة الاشتراك",
     subscriptionEndDate: "تاريخ الانتهاء",
@@ -769,7 +933,87 @@ export const translations = {
     twoFactorChallengeDesc: "أدخل الرمز المكون من 6 أرقام من تطبيق المصادقة",
     backupCodeOption: "استخدم رمز النسخ الاحتياطي بدلاً من ذلك",
     enterBackupCode: "أدخل رمز النسخ الاحتياطي",
-    loginCode: "رمز الدخول"
+    loginCode: "رمز الدخول",
+
+    // Login
+    siteDashboard: "لوحة تحكم الموقع",
+    siteAccessOnly: "الوصول مخصص لمسؤولي الموقع فقط",
+    signIn: "تسجيل الدخول",
+
+    // Pagination
+    previous: "السابق",
+    next: "التالي",
+    pageOf: "صفحة",
+    of: "من",
+    pagination: "ترقيم الصفحات",
+
+    // Admins
+    noAdminsFound: "لا يوجد مسؤولون",
+    noAdminsDesc: "أضف مسؤولي الموقع لإدارة المنصة.",
+    adminCreated: "تم إنشاء المسؤول",
+    shareAdminCredentials: "شارك بيانات الدخول هذه مع المسؤول:",
+    deleteAdminTitle: "حذف المسؤول",
+    deleteAdminConfirm: "هل أنت متأكد من حذف {name}؟ لا يمكن التراجع عن هذا الإجراء.",
+    nameRequired: "الاسم مطلوب",
+    emailRequired: "البريد الإلكتروني مطلوب",
+    passwordRequired: "كلمة المرور مطلوبة",
+    permissionRequired: "مطلوب صلاحية واحدة على الأقل",
+    leaveBlank: "(اتركه فارغاً للحفاظ على كلمة المرور الحالية)",
+    keepCurrent: "الحفاظ على الحالية",
+    minChars8: "8 أحرف على الأقل",
+    moreCount: "+{count} إضافية",
+
+    // Plans
+    subscriptionPlans: "خطط الاشتراك",
+    noPlansFound: "لا توجد خطط",
+    noPlansDesc: "أنشئ خطط اشتراك لمنصتك.",
+    monthly: "شهري",
+    yearly: "سنوي",
+    modulesAppAccess: "الوحدات (الوصول للتطبيق)",
+    addFeaturePlaceholder: "أضف ميزة",
+    add: "إضافة",
+    activeForNewSub: "نشط (متاح للاشتراكات الجديدة)",
+    deletePlanTitle: "حذف الخطة",
+    deletePlanConfirm: "هل أنت متأكد من حذف خطة {name}؟ لا يمكن التراجع عن هذا الإجراء.",
+    planNamePlaceholder: "مثال: مبتدئ، احترافي، مؤسسي",
+    zeroUnlimited: "0 للغير محدود",
+    storagePlaceholder: "مثال: 5GB، غير محدود",
+    supportPlaceholder: "مثال: بريد إلكتروني، بريد إلكتروني ودردشة ذات أولوية",
+    pricePositive: "يجب أن يكون السعر موجباً",
+    invalidValue: "قيمة غير صالحة",
+
+    // Feature module names
+    patients: "المرضى",
+    appointments: "المواعيد",
+    accounting: "المحاسبة",
+    inventory: "المخزون",
+    emr: "السجلات الطبية (EMR)",
+    prescriptions: "الوصفات الطبية",
+    users: "المستخدمين",
+    roles: "الأدوار",
+
+    // Error Logs
+    url: "الرابط",
+
+    // Usage Quota
+    limitReached: "تم الوصول إلى حد {label}",
+    percentRemaining: "{pct}% متبقية",
+
+    // Forms
+    clinicNameRequired: "اسم العيادة مطلوب",
+    invalidEmail: "عنوان البريد الإلكتروني غير صالح",
+    adminPasswordRequired: "كلمة مرور المدير مطلوبة",
+    minPasswordChars: "يجب أن تكون كلمة المرور 8 أحرف على الأقل",
+    selectPlanPrompt: "يرجى اختيار خطة",
+    failedUpdateTenant: "فشل تحديث المشترك",
+    failedCreateTenant: "فشل إنشاء المشترك",
+    failedUpdateBranch: "فشل تحديث الفرع",
+    failedCreateBranch: "فشل إنشاء الفرع",
+
+    // Payment methods
+    paymentCash: "نقداً",
+    paymentCard: "بطاقة",
+    paymentBankTransfer: "تحويل بنكي"
   }
 };
 

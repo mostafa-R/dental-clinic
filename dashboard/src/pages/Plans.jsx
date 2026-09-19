@@ -121,11 +121,11 @@ export default function Plans() {
 
   const validateForm = () => {
     const errors = {};
-    if (!formData.name.trim()) errors.name = "Name is required";
-    if (formData.price < 0) errors.price = "Price must be positive";
-    if (formData.maxBranches < 0) errors.maxBranches = "Invalid value";
-    if (formData.maxDoctors < 0) errors.maxDoctors = "Invalid value";
-    if (formData.maxPatients < 0) errors.maxPatients = "Invalid value";
+    if (!formData.name.trim()) errors.name = t("nameRequired", language);
+    if (formData.price < 0) errors.price = t("pricePositive", language);
+    if (formData.maxBranches < 0) errors.maxBranches = t("invalidValue", language);
+    if (formData.maxDoctors < 0) errors.maxDoctors = t("invalidValue", language);
+    if (formData.maxPatients < 0) errors.maxPatients = t("invalidValue", language);
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -178,7 +178,7 @@ export default function Plans() {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
-          Subscription Plans
+          {t("subscriptionPlans", language)}
         </h2>
         {can("plans.create") && (
           <Button onClick={() => setShowForm(true)}>
@@ -190,8 +190,8 @@ export default function Plans() {
 
       {items.length === 0 ? (
         <EmptyState
-          title="No plans found"
-          description="Create subscription plans for your platform."
+          title={t("noPlansFound", language)}
+          description={t("noPlansDesc", language)}
           icon={Squares2X2Icon}
           action={
             can("plans.create") && (
@@ -208,7 +208,7 @@ export default function Plans() {
             <Card key={plan._id} className="relative">
               {!plan.isActive && (
                 <div className="absolute top-4 end-4">
-                  <Badge variant="warning">Inactive</Badge>
+                  <Badge variant="warning">{t("inactive", language)}</Badge>
                 </div>
               )}
               <div className="text-center mb-6">
@@ -217,10 +217,10 @@ export default function Plans() {
                 </h3>
                 <div className="mt-4">
                   <span className="text-4xl font-bold text-slate-900 dark:text-white">
-                    {formatCurrency(plan.price)}
+                    {formatCurrency(plan.price, "USD", language)}
                   </span>
                   <span className="text-slate-500 dark:text-slate-400">
-                    /{plan.interval || "month"}
+                    /{plan.interval === "year" ? t("yearly", language).toLowerCase() : t("monthly", language).toLowerCase()}
                   </span>
                 </div>
               </div>
@@ -231,7 +231,7 @@ export default function Plans() {
                     {t("maxBranches", language)}
                   </span>
                   <span className="font-medium text-slate-900 dark:text-white">
-                    {plan.limits?.maxBranches || "Unlimited"}
+                    {plan.limits?.maxBranches || t("unlimited", language)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
@@ -239,7 +239,7 @@ export default function Plans() {
                     {t("maxDoctors", language)}
                   </span>
                   <span className="font-medium text-slate-900 dark:text-white">
-                    {plan.limits?.maxDoctors || "Unlimited"}
+                    {plan.limits?.maxDoctors || t("unlimited", language)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
@@ -247,7 +247,7 @@ export default function Plans() {
                     {t("maxPatients", language)}
                   </span>
                   <span className="font-medium text-slate-900 dark:text-white">
-                    {plan.limits?.maxPatients || "Unlimited"}
+                    {plan.limits?.maxPatients || t("unlimited", language)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
@@ -255,7 +255,7 @@ export default function Plans() {
                     {t("storage", language)}
                   </span>
                   <span className="font-medium text-slate-900 dark:text-white">
-                    {plan.limits?.storage || "Unlimited"}
+                    {plan.limits?.storage || t("unlimited", language)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
@@ -268,7 +268,7 @@ export default function Plans() {
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-600 dark:text-slate-300">
-                    Modules
+                    {t("modules", language)}
                   </span>
                   <span className="font-medium text-slate-900 dark:text-white">
                     {plan.modules?.length || 0}/12
@@ -343,7 +343,7 @@ export default function Plans() {
                     ? "border-red-500"
                     : "border-slate-300 dark:border-slate-600"
                 }`}
-                placeholder="e.g., Starter, Professional, Enterprise"
+                placeholder={t("planNamePlaceholder", language)}
               />
               {formErrors.name && (
                 <p className="text-red-500 text-sm mt-1">{formErrors.name}</p>
@@ -377,8 +377,8 @@ export default function Plans() {
                   }
                   className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                 >
-                  <option value="month">Monthly</option>
-                  <option value="year">Yearly</option>
+                  <option value="month">{t("monthly", language)}</option>
+                  <option value="year">{t("yearly", language)}</option>
                 </select>
               </div>
             </div>
@@ -397,7 +397,7 @@ export default function Plans() {
                   })
                 }
                 className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder="0 for unlimited"
+                placeholder={t("zeroUnlimited", language)}
               />
             </div>
 
@@ -415,7 +415,7 @@ export default function Plans() {
                   })
                 }
                 className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder="0 for unlimited"
+                placeholder={t("zeroUnlimited", language)}
               />
             </div>
 
@@ -433,7 +433,7 @@ export default function Plans() {
                   })
                 }
                 className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder="0 for unlimited"
+                placeholder={t("zeroUnlimited", language)}
               />
             </div>
 
@@ -448,7 +448,7 @@ export default function Plans() {
                   setFormData({ ...formData, storage: e.target.value })
                 }
                 className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder="e.g., 5GB, Unlimited"
+                placeholder={t("storagePlaceholder", language)}
               />
             </div>
 
@@ -463,14 +463,14 @@ export default function Plans() {
                   setFormData({ ...formData, support: e.target.value })
                 }
                 className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder="e.g., Email, Priority Email + Chat"
+                placeholder={t("supportPlaceholder", language)}
               />
             </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Modules (App Access)
+              {t("modulesAppAccess", language)}
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {ALL_MODULES.map((mod) => (
@@ -495,7 +495,7 @@ export default function Plans() {
                     }}
                     className="sr-only"
                   />
-                  {mod.label}
+                  {t(mod.key, language)}
                 </label>
               ))}
             </div>
@@ -514,14 +514,14 @@ export default function Plans() {
                   e.key === "Enter" && (e.preventDefault(), handleAddFeature())
                 }
                 className="flex-1 px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder="Add a feature"
+                placeholder={t("addFeaturePlaceholder", language)}
               />
               <Button
                 type="button"
                 variant="secondary"
                 onClick={handleAddFeature}
               >
-                Add
+                {t("add", language)}
               </Button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -557,7 +557,7 @@ export default function Plans() {
               htmlFor="isActive"
               className="text-sm text-slate-700 dark:text-slate-300"
             >
-              Active (available for new subscriptions)
+              {t("activeForNewSub", language)}
             </label>
           </div>
 
@@ -580,13 +580,11 @@ export default function Plans() {
       <Modal
         isOpen={!!deleteConfirm}
         onClose={() => setDeleteConfirm(null)}
-        title={`Delete Plan`}
+        title={t("deletePlanTitle", language)}
         size="sm"
       >
         <p className="text-slate-600 dark:text-slate-300 mb-6">
-          Are you sure you want to delete the{" "}
-          <strong>{deleteConfirm?.name}</strong> plan? This action cannot be
-          undone.
+          {t("deletePlanConfirm", { name: deleteConfirm?.name }, language)}
         </p>
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>

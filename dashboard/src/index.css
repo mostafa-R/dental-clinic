@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Class-based dark mode: the .dark class is toggled on <html> by App/main */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
  * DentoCare brand palette — re-point Tailwind's indigo/violet/purple ramps
  * at the DentoCare colors so existing utilities render on-brand:

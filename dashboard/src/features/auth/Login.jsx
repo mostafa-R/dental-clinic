@@ -151,7 +151,7 @@ export default function Login() {
                 Dental OS
               </h1>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Site Dashboard
+                {t("siteDashboard", language)}
               </p>
             </div>
           </div>
@@ -200,13 +200,13 @@ export default function Login() {
             )}
 
             <Button type="submit" className="w-full" loading={loading}>
-              Sign in
+              {t("signIn", language)}
             </Button>
           </form>
         </div>
 
         <p className="mt-4 text-center text-sm text-slate-500 dark:text-slate-400">
-          Site administrator access only
+          {t("siteAccessOnly", language)}
         </p>
       </div>
     </div>

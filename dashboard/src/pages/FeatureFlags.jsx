@@ -11,21 +11,6 @@ import {
 import { t } from "../lib/i18n";
 import { canUserAccess } from "../lib/permissions";
 
-const MODULE_LABELS = {
-  dashboard: "Dashboard",
-  patients: "Patients",
-  appointments: "Appointments",
-  billing: "Billing",
-  accounting: "Accounting",
-  emr: "EMR",
-  prescriptions: "Prescriptions",
-  users: "Users",
-  branches: "Branches",
-  inventory: "Inventory",
-  roles: "Roles",
-  settings: "Settings",
-};
-
 export default function FeatureFlags() {
   const dispatch = useDispatch();
   const { items: tenants, loading: tenantsLoading } = useSelector((state) => state.tenants);
@@ -100,13 +85,13 @@ export default function FeatureFlags() {
                     }`}
                   >
                     <span className={`font-medium text-sm ${enabled ? "text-indigo-700 dark:text-indigo-300" : "text-slate-600 dark:text-slate-400"}`}>
-                      {MODULE_LABELS[mod] || mod}
+                      {t(mod, language)}
                     </span>
                     <div
                       className={`relative w-10 h-5 rounded-full transition-colors ${enabled ? "bg-indigo-600" : "bg-slate-300 dark:bg-slate-600"} ${canToggle ? "cursor-pointer" : "opacity-60"}`}
                       onClick={canToggle ? () => handleToggle(mod) : undefined}
                     >
-                      <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${enabled ? "translate-x-5" : ""}`} />
+                      <div className={`absolute top-0.5 start-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${enabled ? "translate-x-5 rtl:-translate-x-5" : ""}`} />
                     </div>
                   </label>
                 );

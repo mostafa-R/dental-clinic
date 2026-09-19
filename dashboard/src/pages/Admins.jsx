@@ -104,12 +104,12 @@ export default function Admins() {
 
   const validateForm = () => {
     const errors = {};
-    if (!formData.name.trim()) errors.name = "Name is required";
-    if (!formData.email.trim()) errors.email = "Email is required";
+    if (!formData.name.trim()) errors.name = t("nameRequired", language);
+    if (!formData.email.trim()) errors.email = t("emailRequired", language);
     if (!selectedAdmin && !formData.password)
-      errors.password = "Password is required";
+      errors.password = t("passwordRequired", language);
     if (formData.permissions.length === 0)
-      errors.permissions = "At least one permission is required";
+      errors.permissions = t("permissionRequired", language);
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -203,8 +203,8 @@ export default function Admins() {
       <Card padding="p-0">
         {items.length === 0 ? (
           <EmptyState
-            title="No admins found"
-            description="Add site administrators to manage the platform."
+            title={t("noAdminsFound", language)}
+            description={t("noAdminsDesc", language)}
             icon={ShieldCheckIcon}
             action={
               can("admins.create") && (
@@ -275,13 +275,13 @@ export default function Admins() {
                         ))}
                         {admin.permissions?.length > 3 && (
                           <span className="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300">
-                            +{admin.permissions.length - 3} more
+                            {t("moreCount", { count: admin.permissions.length - 3 }, language)}
                           </span>
                         )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-slate-600 dark:text-slate-300">
-                      {formatDate(admin.lastActive || admin.createdAt)}
+                      {formatDate(admin.lastActive || admin.createdAt, language)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-end">
                       <div className="flex items-center justify-end gap-2">
@@ -378,7 +378,8 @@ export default function Admins() {
 
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Password {selectedAdmin ? "(leave blank to keep current)" : "*"}
+                {t("password", language)}{" "}
+                {selectedAdmin ? t("leaveBlank", language) : "*"}
               </label>
               <PasswordInput
                 value={formData.password}
@@ -386,7 +387,7 @@ export default function Admins() {
                   setFormData({ ...formData, password: e.target.value })
                 }
                 required={!selectedAdmin}
-                placeholder={selectedAdmin ? "Keep current" : "Min 8 chars"}
+                placeholder={selectedAdmin ? t("keepCurrent", language) : t("minChars8", language)}
                 className={`w-full px-4 py-2 border rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none ${
                   formErrors.password
                     ? "border-red-500"
@@ -466,30 +467,30 @@ export default function Admins() {
       <Modal
         isOpen={!!credentials}
         onClose={() => setCredentials(null)}
-        title="Admin Created"
+        title={t("adminCreated", language)}
         size="md"
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-600 dark:text-slate-300">
-            Share these credentials with the admin:
+            {t("shareAdminCredentials", language)}
           </p>
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-900/20">
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <span className="w-20 text-sm font-medium text-slate-600 dark:text-slate-300">Email:</span>
+                <span className="w-20 text-sm font-medium text-slate-600 dark:text-slate-300">{t("email", language)}:</span>
                 <code className="flex-1 rounded bg-white px-2 py-1 text-sm font-mono text-slate-900 dark:bg-slate-800 dark:text-white">{credentials?.email}</code>
-                <button type="button" onClick={() => navigator.clipboard?.writeText(credentials?.email)} className="rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300">Copy</button>
+                <button type="button" onClick={() => navigator.clipboard?.writeText(credentials?.email)} className="rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300">{t("copy", language)}</button>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-20 text-sm font-medium text-slate-600 dark:text-slate-300">Password:</span>
+                <span className="w-20 text-sm font-medium text-slate-600 dark:text-slate-300">{t("password", language)}:</span>
                 <code className="flex-1 rounded bg-white px-2 py-1 text-sm font-mono text-slate-900 dark:bg-slate-800 dark:text-white">{credentials?.password}</code>
-                <button type="button" onClick={() => navigator.clipboard?.writeText(credentials?.password)} className="rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300">Copy</button>
+                <button type="button" onClick={() => navigator.clipboard?.writeText(credentials?.password)} className="rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300">{t("copy", language)}</button>
               </div>
             </div>
-            <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">This password is shown only once. Save it now.</p>
+            <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">{t("credentialsOneTime", language)}</p>
           </div>
           <div className="flex justify-end">
-            <Button onClick={() => { setCredentials(null); setShowForm(false); resetForm(); }}>Done</Button>
+            <Button onClick={() => { setCredentials(null); setShowForm(false); resetForm(); }}>{t("done", language)}</Button>
           </div>
         </div>
       </Modal>
@@ -497,12 +498,11 @@ export default function Admins() {
       <Modal
         isOpen={!!deleteConfirm}
         onClose={() => setDeleteConfirm(null)}
-        title={`Delete Admin`}
+        title={t("deleteAdminTitle", language)}
         size="sm"
       >
         <p className="text-slate-600 dark:text-slate-300 mb-6">
-          Are you sure you want to delete <strong>{deleteConfirm?.name}</strong>
-          ? This action cannot be undone.
+          {t("deleteAdminConfirm", { name: deleteConfirm?.name }, language)}
         </p>
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>

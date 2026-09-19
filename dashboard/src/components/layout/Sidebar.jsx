@@ -145,7 +145,7 @@ export default function Sidebar() {
   const { language } = useSelector((state) => state.ui);
   const { user } = useSelector((state) => state.auth);
 
-  const logoVariant = theme === "dark" ? "light" : "brand";
+  const logoVariant = theme === "dark" ? "onDark" : "brand";
 
   const visibleNav = navigation.filter(
     (item) => !item.accessKey || canUserAccess(user, item.accessKey),
@@ -176,10 +176,10 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="flex items-center h-16 px-4 border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-3">
-          <DentoCareLogo
+<DentoCareLogo
             variant={logoVariant}
-            width={sidebarCollapsed ? 30 : 150}
-            height={sidebarCollapsed ? 30 : 40}
+            width={sidebarCollapsed ? 30 : 32}
+            height={30}
             showText={!sidebarCollapsed}
             className="shrink-0"
           />

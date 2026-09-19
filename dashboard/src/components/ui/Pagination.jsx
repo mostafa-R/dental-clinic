@@ -1,6 +1,9 @@
+import { useSelector } from "react-redux";
 import Button from "./Button";
+import { t } from "../../lib/i18n";
 
 export default function Pagination({ currentPage, totalPages, onPageChange }) {
+  const { language } = useSelector((state) => state.ui);
   const pages = [];
   const showEllipsisStart = currentPage > 3;
   const showEllipsisEnd = currentPage < totalPages - 2;
@@ -32,7 +35,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }) {
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
         >
-          Previous
+          {t("previous", language)}
         </Button>
         <Button
           variant="outline"
@@ -40,27 +43,28 @@ export default function Pagination({ currentPage, totalPages, onPageChange }) {
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
         >
-          Next
+          {t("next", language)}
         </Button>
       </div>
       <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-slate-700 dark:text-slate-300">
-            Page <span className="font-medium">{currentPage}</span> of{" "}
+            {t("pageOf", language)}{" "}
+            <span className="font-medium">{currentPage}</span> {t("of", language)}{" "}
             <span className="font-medium">{totalPages}</span>
           </p>
         </div>
         <div>
           <nav
             className="inline-flex -space-x-px rounded-md shadow-sm"
-            aria-label="Pagination"
+            aria-label={t("pagination", language)}
           >
             <button
               onClick={() => onPageChange(currentPage - 1)}
               disabled={currentPage === 1}
               className="relative inline-flex items-center rounded-s-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-300 dark:ring-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 focus:z-20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span className="sr-only">Previous</span>
+              <span className="sr-only">{t("previous", language)}</span>
               <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path
                   fillRule="evenodd"
@@ -96,7 +100,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }) {
               disabled={currentPage === totalPages}
               className="relative inline-flex items-center rounded-e-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-300 dark:ring-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 focus:z-20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span className="sr-only">Next</span>
+              <span className="sr-only">{t("next", language)}</span>
               <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path
                   fillRule="evenodd"
