@@ -53,6 +53,7 @@ export default function ConfirmDialog() {
     const prevOverflow = document.body.style.overflow;
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
+    (first || panel)?.focus?.();
 
     return () => {
       document.removeEventListener('keydown', onKey);
