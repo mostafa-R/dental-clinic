@@ -996,6 +996,7 @@ const translations = {
     'error.serverErrorMsg': 'Something went wrong on our end. Please try again in a moment.',
     'error.actionFailed': 'Action failed',
     'error.hint.required': 'This field is required.',
+    'error.hint.amount': 'Please enter a valid amount.',
     'error.hint.email': 'Please enter a valid email address.',
     'error.hint.phone': 'Please enter a valid phone number.',
     'error.hint.branch': 'Please select a valid branch.',
@@ -1130,6 +1131,8 @@ const translations = {
     'site.nav.errorLogs': 'Error logs',
     'site.nav.backups': 'Backups',
     'site.nav.settings': 'Settings',
+    'site.nav.openMenu': 'Open menu',
+    'site.nav.closeMenu': 'Close menu',
 
     'site.dashboard.title': 'Platform overview',
     'site.dashboard.subtitle': 'High-level metrics across all tenants.',
@@ -2329,6 +2332,7 @@ const translations = {
     'error.serverErrorMsg': 'حدث خطأ من جانبنا. حاول مرة أخرى بعد لحظات.',
     'error.actionFailed': 'فشل الإجراء',
     'error.hint.required': 'هذا الحقل مطلوب.',
+    'error.hint.amount': 'يرجى إدخال مبلغ صالح.',
     'error.hint.email': 'يرجى إدخال بريد إلكتروني صالح.',
     'error.hint.phone': 'يرجى إدخال رقم هاتف صالح.',
     'error.hint.branch': 'يرجى اختيار فرع صالح.',
@@ -2463,6 +2467,8 @@ const translations = {
     'site.nav.errorLogs': 'سجلات الأخطاء',
     'site.nav.backups': 'النسخ الاحتياطي',
     'site.nav.settings': 'الإعدادات',
+    'site.nav.openMenu': 'فتح القائمة',
+    'site.nav.closeMenu': 'إغلاق القائمة',
 
     'site.dashboard.title': 'نظرة عامة على المنصة',
     'site.dashboard.subtitle': 'مؤشرات شاملة عبر جميع المستأجرين.',
