@@ -162,7 +162,7 @@ export default function SiteLayout() {
 
       {/* Mobile drawer */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label={t('site.adminPanel')}>
+        <div id="site-mobile-nav" className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label={t('site.adminPanel')}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
           <aside
             ref={drawerRef}
@@ -193,7 +193,7 @@ export default function SiteLayout() {
           >
             <MenuIcon />
           </button>
-          <h1 className="truncate text-lg font-semibold text-slate-900 dark:text-white">{t('site.adminPanel')}</h1>
+          <p className="truncate text-lg font-semibold text-slate-900 dark:text-white">{t('site.adminPanel')}</p>
         </header>
         <main className="flex-1 overflow-y-auto p-6">
           <div key={location.pathname} className="animate-page-in">

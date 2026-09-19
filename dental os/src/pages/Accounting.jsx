@@ -47,7 +47,6 @@ export default function Accounting() {
   const dispatch = useDispatch();
   const { t } = useT();
   const { summary, summaryStatus, expenses, drawings, commissions } = useSelector((s) => s.accounting);
-  const user = useSelector((s) => s.auth.user);
   const canManage = canManageAccounting();
 
   const [tab, setTab] = useState('summary');
@@ -122,7 +121,7 @@ export default function Accounting() {
   const s = summary?.summary;
   const isLoading = summaryStatus === 'loading' || summaryStatus === 'idle';
 
-  const COLORS = ['#22c55e', '#f59e0b', '#ef4444', '#3b82f6', '#a855f7', '#14b8a6', '#f97316', '#6366f1'];
+  const CHART_COLORS = ['#2F7A4F', '#F29D7E', '#A3D2A4', '#0F533E', '#5AA17C', '#F5C4A8', '#7FC299', '#E9825C'];
 
   const monthlyChartData = useMemo(() => {
     const raw = summary?.monthlyRevenue || [];
@@ -141,8 +140,6 @@ export default function Accounting() {
     const raw = summary?.revenueByMethod || [];
     return raw.map((r) => ({ name: t(`invoice.payment.${r.method}`), value: r.total }));
   }, [summary, t]);
-
-  const CHART_COLORS = ['#22c55e', '#f59e0b', '#ef4444', '#3b82f6', '#a855f7', '#14b8a6', '#f97316', '#6366f1'];
 
   return (
     <div className="space-y-6">
@@ -172,11 +169,11 @@ export default function Accounting() {
             <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">{t('accounting.from')}</label>
-                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">{t('accounting.to')}</label>
-                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
               </div>
               <Button size="sm" onClick={applyDateFilter}>
                 {t('accounting.filter')}
@@ -202,14 +199,14 @@ export default function Accounting() {
                 ) : (
                   <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={monthlyChartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" strokeOpacity={0.3} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                       <Tooltip
-                        contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
+                        contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #cbd5e1' }}
                         formatter={(value) => [formatMoney(value), t('accounting.revenue')]}
                       />
-                      <Bar dataKey="revenue" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="revenue" fill="#2F7A4F" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}

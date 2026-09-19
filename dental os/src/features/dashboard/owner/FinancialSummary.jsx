@@ -46,7 +46,7 @@ function PaidIcon() {
 }
 
 const FINANCIAL_META = {
-  revenue: { icon: RevenueIcon, bg: 'bg-emerald-600' },
+  revenue: { icon: RevenueIcon, bg: 'bg-brand' },
   expenses: { icon: ExpenseIcon, bg: 'bg-rose-500' },
   profit: { icon: ProfitIcon, bg: 'bg-indigo-600' },
   pending: { icon: PendingIcon, bg: 'bg-amber-500' },
@@ -119,7 +119,7 @@ export default function FinancialSummary() {
   ];
 
   return (
-    <Card title={t("doctorDashboard.financialSummary")} accent="emerald">
+    <Card title={t("doctorDashboard.financialSummary")} accent="brand">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {rows.map((row) => {
           const meta = FINANCIAL_META[row.key];

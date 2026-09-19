@@ -9,8 +9,10 @@ const { modelFactory } = vi.hoisted(() => ({
     MockModel.findOne = vi.fn();
     MockModel.findById = vi.fn();
     MockModel.countDocuments = vi.fn();
+    MockModel.validateMany = vi.fn();
     MockModel.create = vi.fn();
     MockModel.aggregate = vi.fn();
+    MockModel.distinct = vi.fn();
     return { default: MockModel };
   },
 }));
@@ -290,6 +292,56 @@ describe("listTenants", () => {
     await listTenants({ page: 1, limit: 10 });
     expect(Branch.aggregate).not.toHaveBeenCalled();
     expect(User.aggregate).not.toHaveBeenCalled();
+  });
+
+  it("restricts trial tenants whose trial ends within the given window", async () => {
+    const lean = vi.fn().mockResolvedValue([]);
+    Tenant.find.mockReturnValue({
+      sort: () => ({ skip: () => ({ limit: () => ({ lean }) }) }),
+    });
+    Tenant.countDocuments.mockResolvedValue(0);
+
+    await listTenants({ page: 1, limit: 10, trialExpiring: "7" });
+
+    const call = Tenant.find.mock.calls[0][0];
+    expect(call.status).toBe("trial");
+    expect(call.trialEndsAt.$gte).toBeInstanceOf(Date);
+    expect(call.trialEndsAt.$lte).toBeInstanceOf(Date);
+    const windowMs = call.trialEndsAt.$lte.getTime() - call.trialEndsAt.$gte.getTime();
+    expect(windowMs).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+
+  it("excludes tenants that have any user or branch when dormant is requested", async () => {
+    const lean = vi.fn().mockResolvedValue([]);
+    Tenant.find.mockReturnValue({
+      sort: () => ({ skip: () => ({ limit: () => ({ lean }) }) }),
+    });
+    Tenant.countDocuments.mockResolvedValue(0);
+    User.distinct.mockResolvedValue(["t-used-1"]);
+    Branch.distinct.mockResolvedValue(["t-used-1", "t-used-2"]);
+
+    await listTenants({ page: 1, limit: 10, dormant: "true" });
+
+    const call = Tenant.find.mock.calls[0][0];
+    expect(User.distinct).toHaveBeenCalledWith("tenant");
+    expect(Branch.distinct).toHaveBeenCalledWith("tenant");
+    expect(call._id).toEqual({
+      $nin: expect.arrayContaining(["t-used-1", "t-used-2"]),
+    });
+  });
+
+  it("does not apply the dormant filter when the flag is falsy", async () => {
+    const lean = vi.fn().mockResolvedValue([]);
+    Tenant.find.mockReturnValue({
+      sort: () => ({ skip: () => ({ limit: () => ({ lean }) }) }),
+    });
+    Tenant.countDocuments.mockResolvedValue(0);
+
+    await listTenants({ page: 1, limit: 10 });
+
+    expect(User.distinct).not.toHaveBeenCalled();
+    expect(Branch.distinct).not.toHaveBeenCalled();
+    expect(Tenant.find).toHaveBeenCalledWith({});
   });
 });
 

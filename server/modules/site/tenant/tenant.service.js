@@ -50,7 +50,7 @@ function generatePassword() {
   return Array.from(bytes, (b) => chars[b % chars.length]).join('');
 }
 
-export async function listTenants({ page, limit, status, plan, search }) {
+export async function listTenants({ page, limit, status, plan, search, dormant, trialExpiring }) {
   const skip = (page - 1) * limit;
   const filter = {};
   if (status) filter.status = status;
@@ -61,6 +61,23 @@ export async function listTenants({ page, limit, status, plan, search }) {
       { name: { $regex: safe, $options: 'i' } },
       { email: { $regex: safe, $options: 'i' } },
     ];
+  }
+  if (trialExpiring) {
+    const days = parseInt(trialExpiring, 10) || 14;
+    const now = new Date();
+    filter.status = 'trial';
+    filter.trialEndsAt = {
+      $gte: now,
+      $lte: new Date(now.getTime() + days * 24 * 60 * 60 * 1000),
+    };
+  }
+  if (dormant === 'true' || dormant === true || dormant === '1') {
+    const [userTenantIds, branchTenantIds] = await Promise.all([
+      User.distinct('tenant'),
+      Branch.distinct('tenant'),
+    ]);
+    const used = new Set([...userTenantIds, ...branchTenantIds].map(String));
+    filter._id = { $nin: [...used] };
   }
 
   const [tenants, total] = await Promise.all([

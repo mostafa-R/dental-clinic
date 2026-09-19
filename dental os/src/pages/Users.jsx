@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import DataTable from '../components/ui/DataTable';
+import Pagination from '../components/ui/Pagination';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import { fetchUsers, toggleUserActive } from '../features/users/userSlice';
@@ -20,6 +21,8 @@ export default function Users() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
   const canManage = canManageUsers();
 
   useEffect(() => {
@@ -53,6 +56,23 @@ export default function Users() {
 
   const isLoading = status === 'loading' || status === 'idle';
 
+  const PAGE_SIZE = 20;
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(
+      (u) => u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q),
+    );
+  }, [items, query]);
+
+  const visible = useMemo(() => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filtered, page]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
+  const onQueryChange = (value) => {
+    setQuery(value);
+    setPage(1);
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -84,18 +104,54 @@ export default function Users() {
       )}
 
       {status === 'succeeded' && items.length > 0 && (
-        <DataTable
-          columns={[
-            { label: t('users.col.name') },
-            { label: t('users.col.email') },
-            { label: t('users.col.role') },
-            { label: t('users.col.branch') },
-            { label: t('users.col.status') },
-            { label: t('users.col.actions'), className: 'text-end' },
-          ]}
-          count={items.length}
-        >
-          {items.map((u) => (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <label className="relative flex-1 sm:max-w-xs">
+              <span className="sr-only">{t('users.search')}</span>
+              <svg className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z" />
+              </svg>
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => onQueryChange(e.target.value)}
+                placeholder={t('users.searchPlaceholder')}
+                className="w-full rounded-xl border border-slate-200 bg-white py-2 ps-9 pe-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500"
+              />
+            </label>
+            <span className="hidden text-xs text-slate-400 dark:text-slate-500 sm:inline">
+              {visible.length} / {items.length}
+            </span>
+          </div>
+
+          {filtered.length === 0 ? (
+            <EmptyState title={t('users.noResults')} />
+          ) : (
+            <DataTable
+              columns={[
+                { label: t('users.col.name') },
+                { label: t('users.col.email') },
+                { label: t('users.col.role') },
+                { label: t('users.col.branch') },
+                { label: t('users.col.status') },
+                { label: t('users.col.actions'), className: 'text-end' },
+              ]}
+              count={visible.length}
+              footer={
+                totalPages > 1 ? (
+                  <Pagination
+                    page={page}
+                    pages={totalPages}
+                    total={filtered.length}
+                    pageSize={PAGE_SIZE}
+                    onChange={setPage}
+                    prevLabel={t('common.prev')}
+                    nextLabel={t('common.next')}
+                  />
+                ) : undefined
+              }
+            >
+              {visible.map((u) => (
             <tr key={u._id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/30">
               <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{u.name}</td>
               <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{u.email}</td>
@@ -125,8 +181,10 @@ export default function Users() {
                 )}
               </td>
             </tr>
-          ))}
-        </DataTable>
+              ))}
+            </DataTable>
+          )}
+        </div>
       )}
 
       <UserFormModal open={formOpen} onClose={closeForm} user={editing} />

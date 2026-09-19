@@ -204,6 +204,35 @@ describe("evaluateAlerts", () => {
     expect(mocks.alertModel.create).not.toHaveBeenCalled();
   });
 
+  it("raises trial_expiring when trials end within 7 days and recovers when none remain", async () => {
+    healthyHealth();
+    mocks.perf.getPerfStats.mockReturnValue({ totals: { totalRequests: 100, totalErrors: 0 }, globalAvgMs: 80 });
+    setHeapUsagePercent(40);
+    mocks.tenantModel.countDocuments.mockResolvedValue(0);
+    mocks.abuse.getAbuseStatsForTenants.mockResolvedValue([]);
+    mocks.tenantModel.find.mockReturnValue(
+      chainSelect([{ _id: "t9", name: "Soon Clinic", trialEndsAt: new Date() }]),
+    );
+
+    const first = await evaluateAlerts();
+
+    expect(first.trialsExpiring).toBe(1);
+    const createdTypes = mocks.alertModel.create.mock.calls.map((c) => c[0].type);
+    expect(createdTypes).toContain("trial_expiring");
+    const trial = mocks.alertModel.create.mock.calls.find((c) => c[0].type === "trial_expiring")[0];
+    expect(trial.severity).toBe("warning");
+    expect(trial.meta.count).toBe(1);
+    expect(trial.message).toContain("Soon Clinic");
+
+    mocks.tenantModel.find.mockReturnValue(chainSelect([]));
+    await evaluateAlerts();
+
+    const recovered = mocks.alertModel.updateMany.mock.calls.map((c) => c[0].fingerprint);
+    expect(recovered).toContain(
+      buildFingerprint({ type: "trial_expiring", scope: "platform", source: "platform" }),
+    );
+  });
+
   it("recovers tenant_quota alerts whose tenant is no longer flagged", async () => {
     healthyHealth();
     mocks.perf.getPerfStats.mockReturnValue({ totals: { totalRequests: 100, totalErrors: 0 }, globalAvgMs: 80 });

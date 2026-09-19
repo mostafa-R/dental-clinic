@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { protectSite, authorizeSite } from '../../../middleware/siteAuth.js';
-import { getGlobalStats, getGrowthData, getTenantUsage } from './siteAnalytics.controller.js';
+import { getGlobalStats, getGrowthData, getRevenueByPlan, getTenantUsage } from './siteAnalytics.controller.js';
 
 const router = Router();
 
@@ -107,6 +107,44 @@ router.get(
   '/usage/:tenantId',
   authorizeSite('super_admin', 'admin', 'support'),
   getTenantUsage
+);
+
+/**
+ * @swagger
+ * /api/v1/site/analytics/plans:
+ *   get:
+ *     tags: [Site Analytics]
+ *     summary: Get recurring revenue grouped by plan
+ *     description: Site realm. Requires `super_admin`, `admin`, or `support` role. Returns active-subscription MRR and subscriber counts grouped by plan.
+ *     security:
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
+ *     responses:
+ *       '200':
+ *         description: Revenue by plan
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       plan: { type: string, example: pro }
+ *                       count: { type: integer, example: 12 }
+ *                       mrr: { type: number, example: 1188 }
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ */
+router.get(
+  '/plans',
+  authorizeSite('super_admin', 'admin', 'support'),
+  getRevenueByPlan
 );
 
 export default router;

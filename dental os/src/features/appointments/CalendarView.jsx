@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useT } from '../../lib/i18n';
 import { statusStyle, statusTKey } from './statuses';
 
@@ -62,14 +61,19 @@ function DaySchedule({ day, appointments, onEdit, onNew, t }) {
   </section>;
 }
 
-function MobileAgenda({ day, appointments, onEdit, t }) {
+function MobileAgenda({ day, appointments, onEdit, onNew, t }) {
   const items = appointments.filter((a) => isTimedAppointment(a) && sameDay(new Date(a.start), day)).sort((a, b) => new Date(a.start) - new Date(b.start));
-  return <div className="space-y-2">{items.length ? items.map((a) => <button type="button" key={a._id} onClick={() => onEdit(a)} className="flex w-full items-center gap-3 rounded-lg border border-slate-200 p-3 text-start dark:border-slate-700"><time className="text-xs font-semibold text-slate-600 dark:text-slate-300">{timeLabel(a.start)}</time><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-slate-900 dark:text-white">{a.patient?.fullName || t('appointments.patientFallback')}</p><p className="truncate text-xs text-slate-500">{resourceFor(a, t)}</p></div><span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusStyle(a.status)}`}>{t(statusTKey(a.status))}</span></button>) : <p className="py-8 text-center text-sm text-slate-400">{t('appointments.noAppointments')}</p>}</div>;
+  return <div className="space-y-2">
+    <div className="flex items-center justify-between px-1">
+      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{day.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</p>
+      <button type="button" onClick={() => onNew(day)} aria-label={t('appointments.addAppointment')} className="flex h-7 w-7 items-center justify-center rounded-full bg-brand text-lg font-semibold leading-none text-white shadow-sm shadow-brand/25 transition hover:bg-brand-dark active:bg-brand-dark">+</button>
+    </div>
+    {items.length ? items.map((a) => <button type="button" key={a._id} onClick={() => onEdit(a)} className="flex w-full items-center gap-3 rounded-lg border border-slate-200 p-3 text-start dark:border-slate-700"><time className="text-xs font-semibold text-slate-600 dark:text-slate-300">{timeLabel(a.start)}</time><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-slate-900 dark:text-white">{a.patient?.fullName || t('appointments.patientFallback')}</p><p className="truncate text-xs text-slate-500">{resourceFor(a, t)}</p></div><span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusStyle(a.status)}`}>{t(statusTKey(a.status))}</span></button>) : <p className="py-8 text-center text-sm text-slate-400">{t('appointments.noAppointments')}</p>}</div>;
 }
 
 export default function CalendarView({ appointments, view, anchorDate, doctorFilter, onEdit, onNew }) {
   const { t } = useT();
   const days = useMemo(() => Array.from({ length: view === 'week' ? 7 : 1 }, (_, i) => addDays(anchorDate, i)), [view, anchorDate]);
   const filtered = useMemo(() => appointments.filter((a) => !doctorFilter || a.doctor?._id === doctorFilter), [appointments, doctorFilter]);
-  return <div><div className="hidden overflow-x-auto md:block">{days.map((day) => <DaySchedule key={day.toISOString()} day={day} appointments={filtered} onEdit={onEdit} onNew={onNew} t={t} />)}</div><div className="md:hidden">{days.map((day) => <MobileAgenda key={day.toISOString()} day={day} appointments={filtered} onEdit={onEdit} t={t} />)}</div></div>;
+  return <div><div className="hidden overflow-x-auto md:block">{days.map((day) => <DaySchedule key={day.toISOString()} day={day} appointments={filtered} onEdit={onEdit} onNew={onNew} t={t} />)}</div><div className="md:hidden">{days.map((day) => <MobileAgenda key={day.toISOString()} day={day} appointments={filtered} onEdit={onEdit} onNew={onNew} t={t} />)}</div></div>;
 }

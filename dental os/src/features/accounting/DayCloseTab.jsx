@@ -144,7 +144,7 @@ export default function DayCloseTab() {
                       type="button"
                       onClick={handleClose}
                       disabled={closeStatus === 'loading'}
-                      className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+                      className="w-full rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-brand/25 transition hover:bg-brand-dark active:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60 dark:bg-brand dark:hover:bg-brand-dark"
                     >
                       {closeStatus === 'loading' ? t('accounting.dayClose.closing') : t('accounting.dayClose.close')}
                     </button>

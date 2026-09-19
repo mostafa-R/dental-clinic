@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Modal from '../../components/ui/Modal';
+import Button from '../../components/ui/Button';
+import { Select, TextInput } from '../../components/ui/Field';
 import { createExpense, resetFormState } from './accountingSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import {
@@ -32,8 +34,10 @@ export default function ExpenseModal({ open, onClose }) {
     }
   }, [open, dispatch]);
 
-  const submit = async () => {
-    if (!description.trim() || !amount) {
+  const submit = async (e) => {
+    e.preventDefault();
+    const value = Number(amount);
+    if (!description.trim() || !Number.isFinite(value) || value <= 0) {
       dispatch(showErrorDialog({ message: t('accounting.needFields') }));
       return;
     }
@@ -42,7 +46,7 @@ export default function ExpenseModal({ open, onClose }) {
         createExpense({
           category,
           description: description.trim(),
-          amount: Number(amount),
+          amount: Math.round((value + Number.EPSILON) * 100) / 100,
           date: date ? new Date(date).toISOString() : undefined,
           paymentMethod,
         }),
@@ -53,8 +57,7 @@ export default function ExpenseModal({ open, onClose }) {
     }
   };
 
-  const inputCls =
-    'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-indigo-500/20';
+  const labelCls = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500';
 
   return (
     <Modal
@@ -63,49 +66,49 @@ export default function ExpenseModal({ open, onClose }) {
       onClose={onClose}
       footer={
         <>
-          <button type="button" onClick={onClose} className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
+          <Button variant="secondary" onClick={onClose}>
             {t('common.cancel')}
-          </button>
-          <button type="button" onClick={submit} disabled={formStatus === 'loading'} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-400">
+          </Button>
+          <Button type="submit" form="expense-form" disabled={formStatus === 'loading'}>
             {formStatus === 'loading' ? t('common.saving') : t('common.save')}
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="space-y-4">
+      <form id="expense-form" onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('accounting.expense.category')}</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
+            <label className={labelCls}>{t('accounting.expense.category')}</label>
+            <Select value={category} onChange={(e) => setCategory(e.target.value)}>
               {EXPENSE_CATEGORIES.map((c) => (
                 <option key={c} value={c}>{t(`accounting.category.${c}`)}</option>
               ))}
-            </select>
+            </Select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('accounting.expense.paymentMethod')}</label>
-            <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className={inputCls}>
+            <label className={labelCls}>{t('accounting.expense.paymentMethod')}</label>
+            <Select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
               {EXPENSE_PAYMENT_METHODS.map((m) => (
                 <option key={m} value={m}>{t(`accounting.payment.${m}`)}</option>
               ))}
-            </select>
+            </Select>
           </div>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('accounting.expense.description')}</label>
-          <input value={description} onChange={(e) => setDescription(e.target.value)} className={inputCls} maxLength={300} />
+          <label className={labelCls}>{t('accounting.expense.description')}</label>
+          <TextInput value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('accounting.amount')}</label>
-            <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" min="0" step="0.01" className={inputCls} />
+            <label className={labelCls}>{t('accounting.amount')}</label>
+            <TextInput value={amount} onChange={(e) => setAmount(e.target.value)} type="number" min="0" step="0.01" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('accounting.date')}</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+            <label className={labelCls}>{t('accounting.date')}</label>
+            <TextInput type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }

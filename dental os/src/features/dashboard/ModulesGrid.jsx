@@ -16,7 +16,7 @@ import {
 const MODULE_CONFIG = {
   patients: {
     icon: PatientsIcon,
-    bg: 'bg-emerald-600',
+    bg: 'bg-brand',
     descKey: 'nav.patients',
   },
   appointments: {
@@ -41,7 +41,7 @@ const MODULE_CONFIG = {
   },
   branches: {
     icon: BranchIcon,
-    bg: 'bg-cyan-600',
+    bg: 'bg-sky-500',
     descKey: 'nav.branches',
   },
   chat: {
@@ -56,7 +56,7 @@ const MODULE_CONFIG = {
   },
   roles: {
     icon: RolesIcon,
-    bg: 'bg-fuchsia-500',
+    bg: 'bg-violet-600',
     descKey: 'nav.roles',
   },
   settings: {

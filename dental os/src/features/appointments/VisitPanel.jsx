@@ -25,8 +25,6 @@ export default function VisitPanel({ open, appointment, onClose }) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { t } = useT();
-  const currentUser = useSelector((s) => s.auth.user);
-  const isDoctor = currentUser?.isDoctor;
 
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');

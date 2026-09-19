@@ -9,7 +9,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import { platformApi } from '../../features/site/platformApi';
 import { showErrorDialog } from '../../features/ui/uiSlice';
 import { useT } from '../../lib/i18n';
-import { formatTime } from '../../lib/format';
+import { formatDateTime } from '../../lib/format';
 
 export default function SiteAuditLogs() {
   const dispatch = useDispatch();
@@ -137,7 +137,7 @@ export default function SiteAuditLogs() {
         >
               {data.logs.map((log) => (
                   <tr key={log._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">{formatTime(log.createdAt)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">{formatDateTime(log.createdAt)}</td>
                     <td className="px-4 py-3">
                       <p className="font-medium text-slate-900 dark:text-white">{log.adminEmail || '—'}</p>
                       {log.adminRole && (

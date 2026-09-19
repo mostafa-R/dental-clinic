@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
@@ -46,7 +46,7 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
   const [showInvoiceSection, setShowInvoiceSection] = useState(false);
 
   const inputCls =
-    'w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 sm:py-2';
+    'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 sm:py-2';
 
   useEffect(() => {
     if (open) {
@@ -175,7 +175,7 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
             type="submit"
             form="appointment-form"
             disabled={submitting}
-            className="flex-1 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-400 sm:flex-none"
+            className="flex-1 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-sm shadow-brand/25 transition hover:bg-brand-dark active:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60 dark:bg-brand dark:hover:bg-brand-dark sm:flex-none"
           >
             {submitting ? t('common.saving') : isEdit ? t('common.save') : t('appointments.form.book')}
           </button>
@@ -206,7 +206,7 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
             <datalist id="patient-options">
               {filteredPatients.map((p) => (
                 <option key={p._id} value={p.fullName}>
-                  {p.patientId} · {p.phone}
+                  {p.patientId} Â· {p.phone}
                 </option>
               ))}
             </datalist>
@@ -265,7 +265,7 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
             <button
               type="button"
               onClick={() => setShowInvoiceSection((v) => !v)}
-              className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+              className="flex items-center gap-1.5 text-xs font-medium text-brand hover:text-brand-dark dark:text-brand-light"
             >
               <svg className={`transition ${showInvoiceSection ? 'rotate-90' : ''}`} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
               {showInvoiceSection ? t('billing.form.lineItems') : `+ ${t('billing.form.addItem')}`}
@@ -280,13 +280,13 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
                   <div key={i} className="flex items-center gap-1.5">
                     <input value={it.description} onChange={(e) => {
                       const next = [...invItems]; next[i] = { ...next[i], description: e.target.value }; setInvItems(next);
-                    }} placeholder={t('billing.form.descriptionPlaceholder')} className="min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs outline-none focus:border-indigo-400 dark:border-slate-600 dark:bg-slate-800 dark:text-white" />
+                    }} placeholder={t('billing.form.descriptionPlaceholder')} className="min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs outline-none focus:border-brand dark:border-slate-600 dark:bg-slate-800 dark:text-white" />
                     <input type="number" min="1" step="1" value={it.quantity} onChange={(e) => {
                       const next = [...invItems]; next[i] = { ...next[i], quantity: e.target.value }; setInvItems(next);
-                    }} className="w-14 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-center outline-none focus:border-indigo-400 dark:border-slate-600 dark:bg-slate-800 dark:text-white" />
+                    }} className="w-14 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-center outline-none focus:border-brand dark:border-slate-600 dark:bg-slate-800 dark:text-white" />
                     <input type="number" min="0" step="0.01" value={it.unitPrice} onChange={(e) => {
                       const next = [...invItems]; next[i] = { ...next[i], unitPrice: e.target.value }; setInvItems(next);
-                    }} className="w-20 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-right outline-none focus:border-indigo-400 dark:border-slate-600 dark:bg-slate-800 dark:text-white" />
+                    }} className="w-20 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-right outline-none focus:border-brand dark:border-slate-600 dark:bg-slate-800 dark:text-white" />
                     <span className="w-16 text-right text-xs text-slate-500 dark:text-slate-400">
                       {formatMoney((Number(it.quantity) || 0) * (Number(it.unitPrice) || 0))}
                     </span>
@@ -298,7 +298,7 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
                   </div>
                 ))}
                 <div className="flex items-center justify-between">
-                  <button type="button" onClick={() => setInvItems([...invItems, { description: '', quantity: 1, unitPrice: 0 }])} className="text-xs font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400">
+                  <button type="button" onClick={() => setInvItems([...invItems, { description: '', quantity: 1, unitPrice: 0 }])} className="text-xs font-medium text-brand hover:text-brand-dark dark:text-brand-light">
                     + {t('billing.form.addItem')}
                   </button>
                   {invSubtotal > 0 && (

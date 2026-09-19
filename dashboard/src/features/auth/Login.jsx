@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import Button from "../../components/ui/Button";
+import { DentoCareLogo } from "../../components/ui/DentoCareLogo";
 import { login, verify2faLogin, clear2faChallenge } from "./authSlice";
 import { t } from "../../lib/i18n";
 
@@ -57,9 +58,7 @@ export default function Login() {
         <div className="max-w-md w-full">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl p-8">
             <div className="flex items-center justify-center gap-3 mb-8">
-              <div className="w-12 h-12 bg-indigo-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-xl">DO</span>
-              </div>
+              <DentoCareLogo showText={false} width={52} height={46} />
               <div>
                 <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
                   Dental OS
@@ -143,9 +142,7 @@ export default function Login() {
       <div className="max-w-md w-full">
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl p-8">
           <div className="flex items-center justify-center gap-3 mb-8">
-            <div className="w-12 h-12 bg-indigo-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-xl">DO</span>
-            </div>
+            <DentoCareLogo showText={false} width={52} height={46} />
             <div>
               <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
                 Dental OS

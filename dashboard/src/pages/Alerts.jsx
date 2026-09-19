@@ -32,7 +32,7 @@ const statusVariant = (status) => ({
   resolved: "success",
 }[status] || "default");
 
-const ALERT_TYPES = ["error_rate", "memory", "redis", "mongodb", "response_time", "tenant_quota", "tenant_spike", "backup", "quarantine", "subscription"];
+const ALERT_TYPES = ["error_rate", "memory", "redis", "mongodb", "response_time", "tenant_quota", "tenant_spike", "backup", "quarantine", "subscription", "trial_expiring"];
 
 export default function Alerts() {
   const dispatch = useDispatch();

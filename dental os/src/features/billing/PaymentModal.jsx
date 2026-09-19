@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Modal from '../../components/ui/Modal';
+import Button from '../../components/ui/Button';
+import { Select, TextInput } from '../../components/ui/Field';
 import Spinner from '../../components/ui/Spinner';
 import { showErrorDialog } from '../ui/uiSlice';
 import { recordPayment, resetPaymentState } from './billingSlice';
@@ -24,28 +26,30 @@ export default function PaymentModal({ open, invoice, onClose, onSaved }) {
   const [notes, setNotes] = useState('');
 
   const balance = invoice ? round2(invoice.balance ?? invoice.total - invoice.paidAmount) : 0;
+  const maxPayment = Math.max(balance, 0);
 
   useEffect(() => {
     if (!open) return;
-    setAmount(balance > 0 ? String(balance) : '');
+    setAmount(maxPayment > 0 ? String(maxPayment) : '');
     setMethod('cash');
     setReference('');
     setNotes('');
     dispatch(resetPaymentState());
-  }, [open, balance, dispatch]);
+  }, [open, maxPayment, dispatch]);
 
   const submitting = paymentStatus === 'loading';
-
-  const inputCls =
-    'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500';
 
   const labelCls = 'mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200';
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    const value = Number(amount);
+    const value = round2(amount);
     if (!Number.isFinite(value) || value <= 0) {
       dispatch(showErrorDialog({ message: t('billing.payment.invalidAmount') }));
+      return;
+    }
+    if (value > maxPayment + 0.005) {
+      dispatch(showErrorDialog({ message: t('billing.payment.exceedsBalance') }));
       return;
     }
     try {
@@ -66,21 +70,12 @@ export default function PaymentModal({ open, invoice, onClose, onSaved }) {
       size="md"
       footer={
         <>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
+          <Button variant="secondary" onClick={onClose}>
             {t('common.cancel')}
-          </button>
-          <button
-            type="submit"
-            form="payment-form"
-            disabled={submitting}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-emerald-500 dark:hover:bg-emerald-400"
-          >
+          </Button>
+          <Button type="submit" form="payment-form" disabled={submitting}>
             {submitting ? t('common.saving') : t('billing.payment.submit')}
-          </button>
+          </Button>
         </>
       }
     >
@@ -106,33 +101,33 @@ export default function PaymentModal({ open, invoice, onClose, onSaved }) {
 
         <label className="block">
           <span className={labelCls}>{t('billing.payment.amount')} <span className="text-red-500">*</span></span>
-          <input
+          <TextInput
             type="number"
             min="0.01"
+            max={maxPayment}
             step="0.01"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             required
-            className={inputCls}
           />
         </label>
 
         <label className="block">
           <span className={labelCls}>{t('billing.payment.method')}</span>
-          <select value={method} onChange={(e) => setMethod(e.target.value)} className={inputCls}>
+          <Select value={method} onChange={(e) => setMethod(e.target.value)}>
             {PAYMENT_METHODS.map((m) => (
               <option key={m} value={m}>{t(paymentMethodTKey(m))}</option>
             ))}
-          </select>
+          </Select>
         </label>
 
         <label className="block">
           <span className={labelCls}>{t('billing.payment.reference')}</span>
-          <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder={t('billing.payment.referencePlaceholder')} className={inputCls} />
+          <TextInput value={reference} onChange={(e) => setReference(e.target.value)} placeholder={t('billing.payment.referencePlaceholder')} />
         </label>
         <label className="block">
           <span className={labelCls}>{t('billing.payment.notes')}</span>
-          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('billing.payment.notesPlaceholder')} className={inputCls} />
+          <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('billing.payment.notesPlaceholder')} />
         </label>
       </form>
     </Modal>

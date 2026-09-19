@@ -31,6 +31,20 @@ export const fetchGrowthData = createAsyncThunk(
   },
 );
 
+export const fetchRevenueByPlan = createAsyncThunk(
+  "analytics/fetchRevenueByPlan",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get("/analytics/plans");
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch revenue by plan",
+      );
+    }
+  },
+);
+
 export const fetchTenantUsage = createAsyncThunk(
   "analytics/fetchTenantUsage",
   async (tenantId, { rejectWithValue }) => {
@@ -62,6 +76,7 @@ const initialState = {
     patients: [],
   },
   tenantUsage: null,
+  revenueByPlan: [],
   loading: false,
   error: null,
 };
@@ -107,6 +122,14 @@ const analyticsSlice = createSlice({
       })
       .addCase(fetchTenantUsage.rejected, (state, action) => {
         state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(fetchRevenueByPlan.fulfilled, (state, action) => {
+        state.revenueByPlan = Array.isArray(action.payload)
+          ? action.payload
+          : action.payload?.plans || [];
+      })
+      .addCase(fetchRevenueByPlan.rejected, (state, action) => {
         state.error = action.payload;
       });
   },

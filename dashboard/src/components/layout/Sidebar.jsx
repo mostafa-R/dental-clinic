@@ -1,8 +1,11 @@
-import { useSelector } from "react-redux";
+import { useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { NavLink } from "react-router-dom";
 import DentoCareLogo from "../ui/DentoCareLogo";
+import { fetchAlertSummary } from "../../features/alerts/alertsSlice";
 import {
   ArrowUpTrayIcon,
+  BellIcon,
   BuildingOfficeIcon,
   ChartBarIcon,
   CheckCircleIcon,
@@ -20,6 +23,7 @@ import {
 } from "../ui/icons";
 import { t } from "../../lib/i18n";
 import { canUserAccess } from "../../lib/permissions";
+import { APP_VERSION } from "../../lib/appInfo";
 
 const navigation = [
   // Overview
@@ -116,6 +120,14 @@ const navigation = [
     accessKey: "auditLogs",
   },
   {
+    nameKey: "alerts",
+    href: "/alerts",
+    icon: BellIcon,
+    group: "monitoring",
+    accessKey: "alerts",
+    badge: "alerts",
+  },
+  {
     nameKey: "errorLogs",
     href: "/error-logs",
     icon: ExclamationTriangleIcon,
@@ -141,9 +153,20 @@ const navigation = [
 ];
 
 export default function Sidebar() {
+  const dispatch = useDispatch();
   const { sidebarCollapsed, theme } = useSelector((state) => state.ui);
   const { language } = useSelector((state) => state.ui);
   const { user } = useSelector((state) => state.auth);
+  const alertSummary = useSelector((state) => state.alerts.summary);
+
+  useEffect(() => {
+    if (!canUserAccess(user, "alerts")) return;
+    dispatch(fetchAlertSummary());
+    const timer = setInterval(() => dispatch(fetchAlertSummary()), 30000);
+    return () => clearInterval(timer);
+  }, [dispatch, user]);
+
+  const openAlerts = alertSummary?.open ?? alertSummary?.active ?? 0;
 
   const logoVariant = theme === "dark" ? "onDark" : "brand";
 
@@ -187,7 +210,10 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 overflow-y-auto">
+      <nav
+        className="flex-1 px-3 py-4 overflow-y-auto"
+        aria-label={t("mainNavigation", language)}
+      >
         {groups.map((group, groupIndex) => (
           <div key={group.key}>
             {groupIndex > 0 && (
@@ -210,10 +236,16 @@ export default function Sidebar() {
                         : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white"
                     }`
                   }
+                  aria-label={t(item.nameKey, language)}
                   title={sidebarCollapsed ? t(item.nameKey, language) : undefined}
                 >
                   <item.icon className="w-5 h-5 flex-shrink-0" />
                   {!sidebarCollapsed && <span>{t(item.nameKey, language)}</span>}
+                  {item.badge === "alerts" && openAlerts > 0 && (
+                    <span className="ms-auto min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center">
+                      {openAlerts > 99 ? "99+" : openAlerts}
+                    </span>
+                  )}
                 </NavLink>
               ))}
             </div>
@@ -225,7 +257,7 @@ export default function Sidebar() {
       <div className="p-4 border-t border-slate-200 dark:border-slate-700">
         {!sidebarCollapsed && (
           <div className="text-xs text-slate-500 dark:text-slate-400 text-center">
-            Site Dashboard v1.0
+            {t("siteDashboard", language)} v{APP_VERSION}
           </div>
         )}
       </div>

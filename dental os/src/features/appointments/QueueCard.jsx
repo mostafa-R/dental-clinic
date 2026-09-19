@@ -52,10 +52,20 @@ export default function QueueCard({ appointment, onClick, isDragging, compact })
   const borderCls = STATUS_BORDER[appointment.status] || 'border-s-slate-300';
   const time = formatTime(appointment.start);
   const wait = appointment.status === 'checked_in' ? waitingSince(appointment.start) : null;
+  const cardLabel = appointment.patient?.fullName || t('appointments.patientFallback');
 
   if (compact) {
     return (
       <div
+        role="button"
+        tabIndex={0}
+        aria-label={cardLabel}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onClick?.(appointment);
+          }
+        }}
         className={`rounded-lg border border-slate-200 border-s-4 bg-white p-2.5 shadow-sm transition active:scale-[0.98] dark:border-slate-700 dark:bg-slate-800 ${borderCls}`}
         onClick={() => onClick?.(appointment)}
       >
@@ -102,8 +112,17 @@ export default function QueueCard({ appointment, onClick, isDragging, compact })
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={cardLabel}
+      onKeyDown={(e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && !isDragging) {
+          e.preventDefault();
+          onClick?.(appointment);
+        }
+      }}
       className={`cursor-pointer rounded-xl border border-slate-200 border-s-4 bg-white p-3 shadow-sm transition hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${borderCls} ${
-        isDragging ? 'shadow-lg ring-2 ring-indigo-400/50 rotate-[2deg] opacity-95' : ''
+        isDragging ? 'shadow-lg ring-2 ring-brand/40 rotate-[2deg] opacity-95' : ''
       }`}
       onClick={() => !isDragging && onClick?.(appointment)}
     >

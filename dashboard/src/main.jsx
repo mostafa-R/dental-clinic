@@ -1,9 +1,10 @@
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { Provider, useSelector } from "react-redux";
+import { Provider, useDispatch, useSelector } from "react-redux";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { store } from "./app/store";
+import { setLanguage, setTheme } from "./features/ui/uiSlice";
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./index.css";
 
@@ -15,6 +16,7 @@ if (localStorage.getItem("theme") === "dark") {
 }
 
 function Root() {
+  const dispatch = useDispatch();
   const { language, theme } = useSelector((state) => state.ui);
 
   useEffect(() => {
@@ -27,6 +29,20 @@ function Root() {
     // Keep the root .dark class in sync with the theme setting
     document.documentElement.classList.toggle("dark", theme === "dark");
   }, [theme]);
+
+  useEffect(() => {
+    // Sync theme/language across tabs when localStorage changes elsewhere
+    const handleStorage = (e) => {
+      if (e.key === "theme") {
+        dispatch(setTheme(e.newValue === "dark" ? "dark" : "light"));
+      }
+      if (e.key === "language") {
+        dispatch(setLanguage(e.newValue || "en"));
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [dispatch]);
 
   return (
     <ErrorBoundary>

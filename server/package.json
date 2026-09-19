@@ -12,6 +12,7 @@
     "start": "node server.js",
     "migrate": "node -e \"import('./migrations/runner.js').then(m => m.runMigrations()).then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); })\"",
     "check": "node --check app.js && node --check server.js",
+    "verify": "npm run check && npm test",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

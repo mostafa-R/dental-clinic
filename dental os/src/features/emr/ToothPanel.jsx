@@ -45,7 +45,6 @@ function StateButton({ state, active, onClick, label }) {
 }
 
 function SurfaceRow({ surface, condition, onChange }) {
-  const { t } = useT();
   return (
     <div className="flex items-center gap-2">
       <span className="w-16 text-xs font-medium text-slate-600 dark:text-slate-300">

@@ -122,7 +122,13 @@ export default function GlobalSearch() {
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
           placeholder={t('search.placeholder')}
-          className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pe-9 ps-9 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:border-indigo-600 dark:focus:bg-slate-800 dark:focus:ring-indigo-500/20"
+          aria-label={t('search.placeholder')}
+          role="combobox"
+          aria-expanded={open}
+          aria-controls="gs-listbox"
+          aria-activedescendant={active >= 0 ? `gs-opt-${active}` : undefined}
+          autoComplete="off"
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pe-9 ps-9 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:border-brand dark:focus:bg-slate-800 dark:focus:ring-brand/20"
         />
         {q && (
           <button
@@ -137,7 +143,7 @@ export default function GlobalSearch() {
       </div>
 
       {open && (
-        <div className="absolute start-0 top-full z-40 mt-2 max-h-[70vh] w-full overflow-auto rounded-xl border border-slate-200 bg-white shadow-xl ring-1 ring-slate-900/5 dark:border-slate-700 dark:bg-slate-800">
+        <div id="gs-listbox" role="listbox" aria-label={t('search.placeholder')} className="absolute start-0 top-full z-40 mt-2 max-h-[70vh] w-full overflow-auto rounded-xl border border-slate-200 bg-white shadow-xl ring-1 ring-slate-900/5 dark:border-slate-700 dark:bg-slate-800">
           {q.trim().length < 2 ? (
             <p className="px-4 py-6 text-center text-sm text-slate-400">{t('search.typeMore')}</p>
           ) : loading ? (
@@ -164,10 +170,13 @@ export default function GlobalSearch() {
                         <button
                           key={item._id}
                           type="button"
+                          id={`gs-opt-${flatIdx}`}
+                          role="option"
+                          aria-selected={active === flatIdx}
                           onMouseEnter={() => setActive(flatIdx)}
                           onClick={() => go(key, item)}
                           className={`flex w-full items-center gap-3 rounded-lg px-2 py-2 text-start transition ${
-                            active === flatIdx ? 'bg-indigo-50 dark:bg-indigo-500/15' : ''
+                            active === flatIdx ? 'bg-brand/5 dark:bg-brand/20' : ''
                           }`}
                         >
                           <div className="min-w-0 flex-1">

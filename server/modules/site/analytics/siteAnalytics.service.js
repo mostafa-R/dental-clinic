@@ -115,6 +115,29 @@ export async function getGrowthData(period = '6months') {
   };
 }
 
+export async function getRevenueByPlan() {
+  const rows = await Subscription.aggregate([
+    { $match: { status: 'active' } },
+    { $addFields: {
+        monthlyAmount: {
+          $cond: {
+            if: { $eq: ['$billingCycle', 'yearly'] },
+            then: { $divide: ['$amount', 12] },
+            else: '$amount',
+          },
+        },
+    } },
+    { $group: { _id: '$plan', count: { $sum: 1 }, mrr: { $sum: '$monthlyAmount' } } },
+    { $sort: { mrr: -1 } },
+  ]);
+
+  return rows.map((r) => ({
+    plan: r._id,
+    count: r.count,
+    mrr: r.mrr,
+  }));
+}
+
 export async function getTenantUsage(tenantId) {
   const tenant = await Tenant.findById(tenantId);
   if (!tenant) return null;

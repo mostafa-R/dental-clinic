@@ -28,7 +28,7 @@ const PLAN_STATUS_STYLES = {
 export default function WalletTab({ patientId }) {
   const dispatch = useDispatch();
   const { t } = useT();
-  const { wallet, walletStatus, plans, transactionStatus, formStatus, formError } = useSelector((s) => s.wallet);
+  const { wallet, walletStatus, plans, transactionStatus, formStatus } = useSelector((s) => s.wallet);
   const canManage = canManageBilling();
   const canView = canViewBilling();
 
@@ -214,7 +214,7 @@ export default function WalletTab({ patientId }) {
             </Field>
             <div className="flex gap-2">
               <button type="submit" disabled={transactionStatus === 'loading'}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+                className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white shadow-sm shadow-brand/25 hover:bg-brand-dark active:bg-brand-dark disabled:opacity-50 dark:bg-brand dark:hover:bg-brand-dark">
                 {transactionStatus === 'loading' ? t('common.saving') : t('wallet.addFunds')}
               </button>
               <button type="button" onClick={() => setShowAddFunds(false)}

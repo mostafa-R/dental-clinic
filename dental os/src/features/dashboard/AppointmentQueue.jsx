@@ -12,13 +12,13 @@ const STATUS_LABELS = {
 };
 
 const STATUS_COLORS = {
-  scheduled: "#6366f1",
-  confirmed: "#3b82f6",
+  scheduled: "#F29D7E",
+  confirmed: "#2F7A4F",
   checked_in: "#f59e0b",
-  in_progress: "#10b981",
+  in_progress: "#A3D2A4",
   completed: "#6b7280",
   cancelled: "#ef4444",
-  no_show: "#8b5cf6",
+  no_show: "#94a3b8",
 };
 
 const STATUS_ORDER = [

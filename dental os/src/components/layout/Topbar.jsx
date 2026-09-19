@@ -204,6 +204,7 @@ export default function Topbar() {
   const menuRef = useRef(null);
   const notifRef = useRef(null);
   const chatUnread = useSelector((s) => s.chat.unread);
+  const mobileOpen = useSelector((s) => s.ui.mobileSidebarOpen);
   const totalNotif = useMemo(
     () => Object.values(chatUnread).reduce((sum, n) => sum + n, 0),
     [chatUnread],
@@ -242,6 +243,8 @@ export default function Topbar() {
         onClick={() => dispatch(toggleMobileSidebar())}
         className="-ms-2 rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 lg:hidden"
         aria-label={t("topbar.toggleMenu")}
+        aria-expanded={mobileOpen}
+        aria-controls="app-mobile-nav"
       >
         <MenuIcon />
       </button>

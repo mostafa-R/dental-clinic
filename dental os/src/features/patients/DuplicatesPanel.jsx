@@ -119,7 +119,7 @@ export default function DuplicatesPanel() {
                     type="button"
                     onClick={() => handleMerge(group)}
                     disabled={mergeStatus === 'loading'}
-                    className="mt-2.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+                    className="mt-2.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-brand/25 transition hover:bg-brand-dark active:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60 dark:bg-brand dark:hover:bg-brand-dark"
                   >
                     {mergeStatus === 'loading' ? t('common.loading') : t('patients.duplicates.mergeInto')}
                   </button>

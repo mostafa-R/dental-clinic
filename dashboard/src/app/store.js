@@ -16,6 +16,7 @@ import platformReducer from "../features/platform/platformSlice";
 import quarantineReducer from "../features/quarantine/quarantineSlice";
 import subscriptionsReducer from "../features/subscriptions/subscriptionsSlice";
 import tenantsReducer from "../features/tenants/tenantsSlice";
+import tenantDetailReducer from "../features/tenants/tenantDetailSlice";
 import twofaReducer from "../features/twofa/twofaSlice";
 import uiReducer from "../features/ui/uiSlice";
 
@@ -23,6 +24,7 @@ export const store = configureStore({
   reducer: {
     auth: authReducer,
     tenants: tenantsReducer,
+    tenantDetail: tenantDetailReducer,
     branches: branchesReducer,
     subscriptions: subscriptionsReducer,
     analytics: analyticsReducer,

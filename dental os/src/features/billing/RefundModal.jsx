@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Modal from '../../components/ui/Modal';
+import Button from '../../components/ui/Button';
+import { Select, TextInput } from '../../components/ui/Field';
 import Spinner from '../../components/ui/Spinner';
 import { refundPayment, resetPaymentState } from './billingSlice';
 import { PAYMENT_METHODS, paymentMethodTKey } from './statuses';
@@ -35,9 +37,6 @@ export default function RefundModal({ open, invoice, onClose, onSaved }) {
   }, [open, maxRefund, dispatch]);
 
   const submitting = paymentStatus === 'loading';
-
-  const inputCls =
-    'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500';
 
   const labelCls = 'mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200';
 
@@ -80,22 +79,12 @@ export default function RefundModal({ open, invoice, onClose, onSaved }) {
       size="md"
       footer={
         <>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
+          <Button variant="secondary" onClick={onClose} disabled={submitting}>
             {t('common.cancel')}
-          </button>
-          <button
-            type="submit"
-            form="refund-form"
-            disabled={submitting}
-            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-red-500 dark:hover:bg-red-400"
-          >
+          </Button>
+          <Button type="submit" form="refund-form" variant="danger" disabled={submitting}>
             {submitting ? t('common.saving') : t('billing.refund.submit')}
-          </button>
+          </Button>
         </>
       }
     >
@@ -121,7 +110,7 @@ export default function RefundModal({ open, invoice, onClose, onSaved }) {
 
         <label className="block">
           <span className={labelCls}>{t('billing.refund.amount')} <span className="text-red-500">*</span></span>
-          <input
+          <TextInput
             type="number"
             min="0.01"
             step="0.01"
@@ -129,26 +118,25 @@ export default function RefundModal({ open, invoice, onClose, onSaved }) {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             required
-            className={inputCls}
           />
         </label>
 
         <label className="block">
           <span className={labelCls}>{t('billing.refund.method')}</span>
-          <select value={method} onChange={(e) => setMethod(e.target.value)} className={inputCls}>
+          <Select value={method} onChange={(e) => setMethod(e.target.value)}>
             {PAYMENT_METHODS.map((m) => (
               <option key={m} value={m}>{t(paymentMethodTKey(m))}</option>
             ))}
-          </select>
+          </Select>
         </label>
 
         <label className="block">
           <span className={labelCls}>{t('billing.refund.reference')}</span>
-          <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder={t('billing.refund.referencePlaceholder')} className={inputCls} />
+          <TextInput value={reference} onChange={(e) => setReference(e.target.value)} placeholder={t('billing.refund.referencePlaceholder')} />
         </label>
         <label className="block">
           <span className={labelCls}>{t('billing.refund.notes')}</span>
-          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('billing.refund.notesPlaceholder')} className={inputCls} />
+          <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('billing.refund.notesPlaceholder')} />
         </label>
       </form>
     </Modal>

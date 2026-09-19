@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Modal from '../../components/ui/Modal';
+import Button from '../../components/ui/Button';
 import { createBranch, updateBranch, resetFormState } from './branchSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { useT } from '../../lib/i18n';
@@ -75,7 +76,8 @@ export default function BranchFormModal({ open, onClose, branch }) {
     setWorkingHours((prev) => ({ ...prev, [day]: { ...prev[day], ...patch } }));
   };
 
-  const submit = async () => {
+  const submit = async (e) => {
+    e?.preventDefault?.();
     if (!name.trim()) return;
 
     const payload = {
@@ -99,7 +101,7 @@ export default function BranchFormModal({ open, onClose, branch }) {
   };
 
   const inputCls =
-    'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-indigo-500/20';
+    'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500';
   const disabledInputCls = inputCls + ' opacity-50 disabled:cursor-not-allowed';
 
   return (
@@ -110,16 +112,16 @@ export default function BranchFormModal({ open, onClose, branch }) {
       size="lg"
       footer={
         <>
-          <button type="button" onClick={onClose} className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
+          <Button variant="ghost" onClick={onClose}>
             {t('common.cancel')}
-          </button>
-          <button type="button" onClick={submit} disabled={formStatus === 'loading'} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-400">
+          </Button>
+          <Button type="submit" form="branch-form" disabled={formStatus === 'loading'}>
             {formStatus === 'loading' ? t('common.saving') : t('common.save')}
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="space-y-5">
+      <form id="branch-form" onSubmit={submit} className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('branches.form.name')} *</label>
@@ -135,7 +137,7 @@ export default function BranchFormModal({ open, onClose, branch }) {
           <input value={address} onChange={(e) => setAddress(e.target.value)} className={inputCls} maxLength={200} />
         </div>
         <div className="flex items-center gap-3">
-          <input type="checkbox" id="branchIsActive" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+          <input type="checkbox" id="branchIsActive" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="h-4 w-4 rounded border-slate-300 accent-brand" />
           <label htmlFor="branchIsActive" className="text-sm text-slate-600 dark:text-slate-300">{t('branches.form.active')}</label>
         </div>
 
@@ -161,7 +163,7 @@ export default function BranchFormModal({ open, onClose, branch }) {
                         type="checkbox"
                         checked={Boolean(d?.closed)}
                         onChange={(e) => setDay(day, { closed: e.target.checked })}
-                        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        className="h-4 w-4 rounded border-slate-300 accent-brand"
                       />
                       {t('branches.form.closed')}
                     </label>
@@ -188,7 +190,7 @@ export default function BranchFormModal({ open, onClose, branch }) {
             })}
           </div>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }

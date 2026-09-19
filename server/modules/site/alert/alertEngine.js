@@ -161,6 +161,7 @@ export async function evaluateAlerts({ batchTenants = Infinity } = {}) {
     avgMs: 0,
     tenantSpike: 0,
     tenantAlerts: 0,
+    trialsExpiring: 0,
   };
 
   // -- Infrastructure (Mongo / Redis) ------------------------------------
@@ -345,6 +346,28 @@ export async function evaluateAlerts({ batchTenants = Infinity } = {}) {
     });
   } else {
     await recoverAlert({ type: "quarantine", source: "platform" });
+  }
+
+  // -- Trials expiring within 7 days --------------------------------------
+  const trialWindowEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const expiringTrials = await Tenant.find({
+    status: "trial",
+    trialEndsAt: { $gte: new Date(), $lte: trialWindowEnd },
+  }).select("name trialEndsAt").lean();
+
+  results.trialsExpiring = expiringTrials.length;
+  if (expiringTrials.length > 0) {
+    const names = expiringTrials.slice(0, 5).map((tr) => tr.name || String(tr._id)).join(", ");
+    await raiseAlert({
+      type: "trial_expiring",
+      severity: "warning",
+      title: "Trials expiring soon",
+      message: `${expiringTrials.length} trial tenant(s) expire within 7 days: ${names}${expiringTrials.length > 5 ? "…" : ""}`,
+      source: "platform",
+      meta: { count: expiringTrials.length },
+    });
+  } else {
+    await recoverAlert({ type: "trial_expiring", source: "platform" });
   }
 
   return results;

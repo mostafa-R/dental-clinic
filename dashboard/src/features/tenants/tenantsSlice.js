@@ -112,6 +112,8 @@ const initialState = {
     status: "",
     plan: "",
     search: "",
+    dormant: "",
+    trialExpiring: "",
   },
   loading: false,
   error: null,

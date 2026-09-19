@@ -8,6 +8,7 @@ import Modal from "../components/ui/Modal";
 import Pagination from "../components/ui/Pagination";
 import { PageLoader } from "../components/ui/Spinner";
 import {
+  ArrowDownTrayIcon,
   BuildingOfficeIcon,
   MagnifyingGlassIcon,
   PlusIcon,
@@ -20,6 +21,7 @@ import {
 } from "../features/branches/branchesSlice";
 import { fetchTenants } from "../features/tenants/tenantsSlice";
 import { formatDate } from "../lib/format";
+import { downloadCsv } from "../lib/exportCsv";
 import { t } from "../lib/i18n";
 import { canUserAccess } from "../lib/permissions";
 
@@ -63,6 +65,21 @@ export default function Branches() {
     setDeleteTarget(null);
   };
 
+  const exportRows = () => {
+    downloadCsv({
+      filename: t("exportBranches", language),
+      rows: items,
+      headers: [
+        { label: t("branchName", language), getValue: (r) => r.name },
+        { label: t("branchTenant", language), getValue: (r) => r.tenant?.name || tenantName(r.tenant) },
+        { label: t("branchUsers", language), getValue: (r) => r.usersCount || 0 },
+        { label: t("branchAddress", language), getValue: (r) => r.address || "" },
+        { label: t("status", language), getValue: (r) => r.isActive ? t("branchActive", language) : t("branchInactive", language) },
+        { label: t("branchCreated", language), getValue: (r) => formatDate(r.createdAt, language) },
+      ],
+    });
+  };
+
   if (loading && !items.length) {
     return <PageLoader />;
   }
@@ -102,6 +119,11 @@ export default function Branches() {
           <Button onClick={() => setShowForm(true)}>
             <PlusIcon className="w-4 h-4" />
             {t("addBranch", language)}
+          </Button>
+        )}
+        {can("branches.view") && (
+          <Button variant="outline" onClick={exportRows} icon={ArrowDownTrayIcon}>
+            {t("exportCsv", language)}
           </Button>
         )}
       </div>

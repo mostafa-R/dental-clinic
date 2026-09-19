@@ -232,7 +232,7 @@ export default function ClinicalNoteFormModal({ open, patientId, patient, note, 
                 </select>
                 <input value={a.url} onChange={(e) => updateAttachment(idx, 'url', e.target.value)} placeholder={t('emr.note.urlPlaceholder')} className={`${inputCls} flex-1`} />
                 <input value={a.caption} onChange={(e) => updateAttachment(idx, 'caption', e.target.value)} placeholder={t('emr.note.caption')} className={`${inputCls} w-44`} />
-                <button type="button" onClick={() => removeAttachment(idx)} disabled={attachments.length <= 1} className="rounded-md p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30 dark:hover:bg-rose-500/15" aria-label={t('common.cancel')}>
+                <button type="button" onClick={() => removeAttachment(idx)} disabled={attachments.length <= 1} className="rounded-md p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30 dark:hover:bg-rose-500/15" aria-label={t('common.remove')}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
                 </button>
               </div>

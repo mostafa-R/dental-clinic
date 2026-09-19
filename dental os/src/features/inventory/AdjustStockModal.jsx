@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Modal from '../../components/ui/Modal';
+import Button from '../../components/ui/Button';
 import { adjustStock, resetFormState } from './inventorySlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { STOCK_TX_TYPES } from './inventory';
@@ -24,7 +25,8 @@ export default function AdjustStockModal({ open, onClose, item }) {
     setReason('');
   }, [open, dispatch]);
 
-  const submit = async () => {
+  const submit = async (e) => {
+    e?.preventDefault?.();
     if (!quantity || Number(quantity) <= 0) {
       dispatch(showErrorDialog({ message: t('inventory.needQuantity') }));
       return;
@@ -38,7 +40,7 @@ export default function AdjustStockModal({ open, onClose, item }) {
   };
 
   const inputCls =
-    'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-indigo-500/20';
+    'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500';
 
   return (
     <Modal
@@ -47,16 +49,16 @@ export default function AdjustStockModal({ open, onClose, item }) {
       onClose={onClose}
       footer={
         <>
-          <button type="button" onClick={onClose} className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
+          <Button variant="ghost" onClick={onClose}>
             {t('common.cancel')}
-          </button>
-          <button type="button" onClick={submit} disabled={formStatus === 'loading'} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-400">
+          </Button>
+          <Button type="submit" form="adjust-form" disabled={formStatus === 'loading'}>
             {formStatus === 'loading' ? t('common.saving') : t('common.save')}
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="space-y-4">
+      <form id="adjust-form" onSubmit={submit} className="space-y-4">
         <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50">
           <p className="text-sm text-slate-600 dark:text-slate-300">{t('inventory.adjust.current')}: <strong className="text-slate-900 dark:text-white">{item?.quantity || 0}</strong></p>
         </div>
@@ -74,7 +76,7 @@ export default function AdjustStockModal({ open, onClose, item }) {
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('inventory.adjust.reason')}</label>
           <input value={reason} onChange={(e) => setReason(e.target.value)} className={inputCls} />
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }

@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from 'react';
+﻿import { Fragment, useCallback, useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import PageHeader from '../../components/ui/PageHeader';
 import Card from '../../components/ui/Card';
@@ -10,7 +10,7 @@ import StatCard from '../../components/ui/StatCard';
 import { platformApi } from '../../features/site/platformApi';
 import { showErrorDialog } from '../../features/ui/uiSlice';
 import { useT } from '../../lib/i18n';
-import { formatTime } from '../../lib/format';
+import { formatDateTime } from '../../lib/format';
 
 export default function SiteErrorLogs() {
   const dispatch = useDispatch();
@@ -84,10 +84,10 @@ export default function SiteErrorLogs() {
       <PageHeader title={t('site.errors.title')} subtitle={t('site.errors.subtitle')} />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label={t('site.errors.stats.total')} value={stats?.total ?? '—'} />
-        <StatCard label={`4xx`} value={stats?.['4xx'] ?? '—'} />
-        <StatCard label={`5xx`} value={stats?.['5xx'] ?? '—'} />
-        <StatCard label={t('site.errors.stats.tenants')} value={stats?.byTenant?.length ?? '—'} />
+        <StatCard label={t('site.errors.stats.total')} value={stats?.total ?? 'â€”'} />
+        <StatCard label={`4xx`} value={stats?.['4xx'] ?? 'â€”'} />
+        <StatCard label={`5xx`} value={stats?.['5xx'] ?? 'â€”'} />
+        <StatCard label={t('site.errors.stats.tenants')} value={stats?.byTenant?.length ?? 'â€”'} />
       </div>
 
       <Card>
@@ -96,25 +96,25 @@ export default function SiteErrorLogs() {
             value={filters.tenantId}
             onChange={setFilter('tenantId')}
             placeholder={t('site.errors.filter.tenantId')}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
           />
           <input
             value={filters.statusCode}
             onChange={setFilter('statusCode')}
             placeholder={t('site.errors.filter.statusCode')}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
           />
           <input
             type="date"
             value={filters.startDate}
             onChange={setFilter('startDate')}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
           />
           <input
             type="date"
             value={filters.endDate}
             onChange={setFilter('endDate')}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
           />
         </div>
       </Card>
@@ -152,24 +152,24 @@ export default function SiteErrorLogs() {
               {data.logs.map((log) => (
                   <Fragment key={log._id}>
                     <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                      <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">{formatTime(log.createdAt)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">{formatDateTime(log.createdAt)}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeFor(log.statusCode)}`}>
-                          {log.statusCode || '—'}
+                          {log.statusCode || 'â€”'}
                         </span>
                       </td>
                       <td className="px-4 py-3">
                         <button
                           type="button"
                           onClick={() => setExpanded(expanded === log._id ? null : log._id)}
-                          className="max-w-[220px] truncate font-mono text-xs text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400"
+                          className="max-w-[220px] truncate font-mono text-xs text-slate-600 hover:text-brand dark:text-slate-300 dark:hover:text-brand-light"
                           title={log.url}
                         >
                           <span className="font-semibold uppercase">{log.method}</span> {log.url}
                         </button>
                       </td>
                       <td className="max-w-[240px] truncate px-4 py-3 text-xs text-slate-500 dark:text-slate-400">{log.message}</td>
-                      <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">{log.tenant?.name || log.tenantId || '—'}</td>
+                      <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">{log.tenant?.name || log.tenantId || 'â€”'}</td>
                       <td className="px-4 py-3 text-end">
                         {!log.resolved ? (
                           <button
@@ -191,12 +191,12 @@ export default function SiteErrorLogs() {
                       <tr className="bg-slate-50/70 dark:bg-slate-800/30">
                         <td colSpan={6} className="px-4 py-3">
                           <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-900 p-3 font-mono text-xs text-slate-200 dark:bg-slate-950">
-                            {log.stack || log.message || '—'}
+                            {log.stack || log.message || 'â€”'}
                           </pre>
                           <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                            <span>{t('site.errors.requestId')}: {log.requestId || '—'}</span>
-                            <span>IP: {log.ip || '—'}</span>
-                            <span>{t('site.errors.userAgent')}: {log.userAgent || '—'}</span>
+                            <span>{t('site.errors.requestId')}: {log.requestId || 'â€”'}</span>
+                            <span>IP: {log.ip || 'â€”'}</span>
+                            <span>{t('site.errors.userAgent')}: {log.userAgent || 'â€”'}</span>
                           </div>
                         </td>
                       </tr>

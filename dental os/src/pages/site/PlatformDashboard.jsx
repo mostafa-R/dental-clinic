@@ -59,7 +59,7 @@ export default function PlatformDashboard() {
       <PageHeader title={t('site.dashboard.title')} subtitle={t('site.dashboard.subtitle')} />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label={t('site.dashboard.totalTenants')} value={stats?.totalTenants ?? '—'} sub={t('site.dashboard.activeTenants', { count: stats?.activeTenants ?? 0 })} />
+        <StatCard label={t('site.dashboard.totalTenants')} value={stats?.totalTenants ?? '—'} sub={stats ? t('site.dashboard.activeTenants', { count: stats.activeTenants ?? 0 }) : '—'} />
         <StatCard label={t('site.dashboard.totalPatients')} value={stats?.totalPatients ?? '—'} />
         <StatCard label={t('site.dashboard.totalAppointments')} value={stats?.totalAppointments ?? '—'} />
         <StatCard label={t('site.dashboard.mrr')} value={stats ? formatMoney(stats.monthlyRecurring) : '—'} />
@@ -69,7 +69,7 @@ export default function PlatformDashboard() {
         <StatCard label={t('site.dashboard.totalRevenue')} value={stats ? formatMoney(stats.totalRevenue) : '—'} />
         <StatCard label={t('site.dashboard.newTenantsThisMonth')} value={stats?.newTenantsThisMonth ?? '—'} />
         <StatCard label={t('site.dashboard.arpa')} value={stats ? formatMoney(stats.arpa) : '—'} />
-        <StatCard label={t('site.dashboard.churnRate')} value={`${(stats?.churnRate ?? 0).toFixed(1)}%`} />
+        <StatCard label={t('site.dashboard.churnRate')} value={stats ? `${stats.churnRate.toFixed(1)}%` : '—'} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

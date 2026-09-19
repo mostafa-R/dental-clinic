@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -37,7 +37,6 @@ export default function Appointments() {
   const { t, lang } = useT();
   const locale = lang === 'ar' ? 'ar-EG' : 'en-US';
   const { items, status, error, query } = useSelector((s) => s.appointments);
-  const user = useSelector((s) => s.auth.user);
   const canManage = canManageAppointments();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -66,7 +65,7 @@ export default function Appointments() {
     if (newParam || tabParam) {
       setSearchParams({}, { replace: true });
     }
-  }, []);
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     api.get('/users/doctors').then((d) => setDoctors(d.data.data.doctors)).catch(() => {});

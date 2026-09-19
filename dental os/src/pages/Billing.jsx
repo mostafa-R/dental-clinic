@@ -55,7 +55,7 @@ export default function Billing() {
       setFormOpen(true);
       setSearchParams({}, { replace: true });
     }
-  }, []);
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!canViewBilling()) return undefined;

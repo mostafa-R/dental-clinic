@@ -16,6 +16,7 @@ import { useSocket } from '../../hooks/useSocket';
 import { subscribeQueue, unsubscribeQueue } from '../../lib/socket';
 import QueueCard from './QueueCard';
 import VisitPanel from './VisitPanel';
+import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
 import { useT } from '../../lib/i18n';
 import { canTransition } from './statuses';
@@ -213,7 +214,7 @@ export default function LiveQueue() {
   }
 
   const selectCls =
-    'rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200';
+    'rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-700 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200';
 
   return (
     <div className="space-y-3 sm:space-y-4">
@@ -238,14 +239,13 @@ export default function LiveQueue() {
                 ))}
               </select>
             )}
-            <button
-              type="button"
+            <Button
               onClick={handleCallNext}
               disabled={callStatus === 'loading'}
-              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-emerald-500 dark:hover:bg-emerald-400 sm:text-sm"
+              size="sm"
             >
               {callStatus === 'loading' ? t('appointments.queue.calling') : t('appointments.queue.callNext')}
-            </button>
+            </Button>
           </div>
           <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
             <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
@@ -270,6 +270,8 @@ export default function LiveQueue() {
                 <button
                   type="button"
                   onClick={() => toggleSection(col.key)}
+                  aria-expanded={isExpanded}
+                  aria-controls={`queue-col-${col.key}`}
                   className={`flex w-full items-center justify-between px-3 py-2.5 text-start transition ${col.bg}`}
                 >
                   <div className="flex items-center gap-2">
@@ -293,7 +295,7 @@ export default function LiveQueue() {
                   </svg>
                 </button>
                 {isExpanded && (
-                  <div className="space-y-1.5 bg-white p-2 dark:bg-slate-900">
+                  <div id={`queue-col-${col.key}`} className="space-y-1.5 bg-white p-2 dark:bg-slate-900">
                     {colItems.length === 0 ? (
                       <p className="py-3 text-center text-xs text-slate-300 dark:text-slate-600">
                         {t('appointments.queue.emptyCol')}

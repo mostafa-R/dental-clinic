@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Modal from '../../components/ui/Modal';
+import Button from '../../components/ui/Button';
 import { createItem, resetFormState, updateItem } from './inventorySlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { INVENTORY_CATEGORIES, INVENTORY_UNITS } from './inventory';
@@ -53,7 +54,8 @@ export default function ItemFormModal({ open, onClose, item }) {
 
   const set = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
-  const submit = async () => {
+  const submit = async (e) => {
+    e?.preventDefault?.();
     if (!form.name.trim()) {
       dispatch(showErrorDialog({ message: t('inventory.needName') }));
       return;
@@ -86,7 +88,7 @@ export default function ItemFormModal({ open, onClose, item }) {
   };
 
   const inputCls =
-    'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-indigo-500/20';
+    'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500';
 
   return (
     <Modal
@@ -96,16 +98,16 @@ export default function ItemFormModal({ open, onClose, item }) {
       size="lg"
       footer={
         <>
-          <button type="button" onClick={onClose} className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
+          <Button variant="ghost" onClick={onClose}>
             {t('common.cancel')}
-          </button>
-          <button type="button" onClick={submit} disabled={formStatus === 'loading'} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-400">
+          </Button>
+          <Button type="submit" form="item-form" disabled={formStatus === 'loading'}>
             {formStatus === 'loading' ? t('common.saving') : t('common.save')}
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="space-y-4">
+      <form id="item-form" onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('inventory.form.name')} *</label>
@@ -154,7 +156,7 @@ export default function ItemFormModal({ open, onClose, item }) {
             <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={2} className={`${inputCls} resize-none`} />
           </div>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }

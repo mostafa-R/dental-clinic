@@ -1,5 +1,4 @@
 import { useNavigate } from 'react-router-dom';
-import { useSelector } from 'react-redux';
 import Modal from '../../components/ui/Modal';
 import EmptyState from '../../components/ui/EmptyState';
 import { formatDate } from '../../lib/format';

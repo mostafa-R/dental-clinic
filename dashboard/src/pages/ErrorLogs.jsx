@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Badge from "../components/ui/Badge";
+import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import EmptyState from "../components/ui/EmptyState";
 import Pagination from "../components/ui/Pagination";
 import StatCard from "../components/ui/StatCard";
 import { PageLoader } from "../components/ui/Spinner";
+import { ArrowDownTrayIcon } from "../components/ui/icons";
 import { fetchErrorLogs, fetchErrorLogStats } from "../features/errorLogs/errorLogsSlice";
 import { fetchTenants } from "../features/tenants/tenantsSlice";
 import { formatDateTime } from "../lib/format";
+import { downloadCsv } from "../lib/exportCsv";
 import { t } from "../lib/i18n";
 
 const statusVariant = (code) => {
@@ -34,6 +37,21 @@ export default function ErrorLogs() {
     dispatch(fetchErrorLogs({ page, tenantId: tenantFilter || undefined, statusCode: statusFilter || undefined }));
     dispatch(fetchErrorLogStats());
   }, [dispatch, page, tenantFilter, statusFilter]);
+
+  const exportRows = () => {
+    downloadCsv({
+      filename: t("exportErrorLogs", language),
+      rows: logs,
+      headers: [
+        { label: "Date", getValue: (r) => formatDateTime(r.createdAt, language) },
+        { label: "Status", getValue: (r) => r.statusCode },
+        { label: "Method", getValue: (r) => r.method },
+        { label: "URL", getValue: (r) => r.url },
+        { label: "Tenant", getValue: (r) => r.tenant?.name || "" },
+        { label: "Message", getValue: (r) => r.message || "" },
+      ],
+    });
+  };
 
   return (
     <div className="p-6">
@@ -73,6 +91,11 @@ export default function ErrorLogs() {
               <option value="429">429</option>
               <option value="500">500</option>
             </select>
+            {logs.length > 0 && (
+              <Button variant="outline" size="sm" onClick={exportRows} icon={ArrowDownTrayIcon}>
+                {t("exportCsv", language)}
+              </Button>
+            )}
           </div>
         </div>
 

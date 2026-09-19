@@ -10,6 +10,7 @@ import { getCurrentUser } from "./features/auth/authSlice";
 const Login = lazy(() => import("./features/auth/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Tenants = lazy(() => import("./pages/Tenants"));
+const TenantDetail = lazy(() => import("./pages/TenantDetail"));
 const Branches = lazy(() => import("./pages/Branches"));
 const Billing = lazy(() => import("./pages/Billing"));
 const Analytics = lazy(() => import("./pages/Analytics"));
@@ -65,6 +66,14 @@ function App() {
               element={
                 <RequireAccess accessKey="tenants">
                   <Tenants />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/tenants/:id"
+              element={
+                <RequireAccess accessKey="tenants">
+                  <TenantDetail />
                 </RequireAccess>
               }
             />

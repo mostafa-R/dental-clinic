@@ -1,63 +1,163 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useSearchParams } from "react-router-dom";
 import Badge from "../components/ui/Badge";
+import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import EmptyState from "../components/ui/EmptyState";
+import Input from "../components/ui/Input";
+import PageHeader from "../components/ui/PageHeader";
 import Pagination from "../components/ui/Pagination";
+import Select from "../components/ui/Select";
 import { PageLoader } from "../components/ui/Spinner";
+import {
+  ArrowDownTrayIcon,
+  FilterIcon,
+} from "../components/ui/icons";
 import {
   fetchAuditActions,
   fetchAuditLogs,
 } from "../features/auditLogs/auditLogsSlice";
 import { formatDateTime } from "../lib/format";
+import { actionVariant } from "../lib/audit";
+import { downloadCsv } from "../lib/exportCsv";
 import { t } from "../lib/i18n";
 
-const actionVariant = (action) => {
-  if (action?.includes("delete") || action?.includes("suspend"))
-    return "danger";
-  if (action?.includes("create") || action?.includes("activate"))
-    return "success";
-  if (action?.includes("update") || action?.includes("toggle"))
-    return "warning";
-  return "default";
-};
+const TARGET_TYPES = ["tenant", "branch", "admin", "subscription", "plan", "platform"];
 
 export default function AuditLogs() {
   const dispatch = useDispatch();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { logs, loading, pagination, actions } = useSelector(
     (state) => state.auditLogs,
   );
   const { language } = useSelector((state) => state.ui);
   const [actionFilter, setActionFilter] = useState("");
+  const [targetTypeFilter, setTargetTypeFilter] = useState(
+    searchParams.get("targetType") || "",
+  );
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    dispatch(fetchAuditLogs({ page, action: actionFilter || undefined }));
+    const params = {
+      page,
+      action: actionFilter || undefined,
+      targetType: targetTypeFilter || undefined,
+      startDate: startDate ? new Date(startDate).toISOString() : undefined,
+      endDate: endDate ? new Date(endDate).toISOString() : undefined,
+    };
+    dispatch(fetchAuditLogs(params));
     dispatch(fetchAuditActions());
-  }, [dispatch, page, actionFilter]);
+  }, [dispatch, page, actionFilter, targetTypeFilter, startDate, endDate]);
 
   const handlePageChange = (p) => setPage(p);
 
+  const hasFilters = actionFilter || targetTypeFilter || startDate || endDate;
+
+  const resetFilters = () => {
+    setActionFilter("");
+    setTargetTypeFilter("");
+    setStartDate("");
+    setEndDate("");
+    setPage(1);
+    if (searchParams.has("targetType")) setSearchParams({});
+  };
+
+  const exportRows = () => {
+    downloadCsv({
+      filename: t("exportAuditLogs", language),
+      rows: logs,
+      headers: [
+        { label: t("action", language), getValue: (r) => t(r.action, language) },
+        { label: t("admin", language), getValue: (r) => r.admin?.name || r.adminEmail || "" },
+        { label: t("email", language), getValue: (r) => r.adminEmail || "" },
+        { label: t("role", language), getValue: (r) => r.adminRole || "" },
+        { label: t("target", language), getValue: (r) => r.target?.name || r.target?.id || "" },
+        { label: t("targetType", language), getValue: (r) => r.target?.type || "" },
+        { label: t("date", language), getValue: (r) => formatDateTime(r.createdAt, language) },
+        { label: t("ip", language), getValue: (r) => r.ip || "" },
+      ],
+    });
+  };
+
   return (
     <div className="p-6">
+      <PageHeader
+        title={t("auditLogs", language)}
+        subtitle={t("auditLogsDesc", language)}
+        actions={
+          <Button variant="outline" onClick={exportRows} icon={ArrowDownTrayIcon}>
+            {t("exportCsv", language)}
+          </Button>
+        }
+      />
+
       <Card>
         <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-          <div className="flex flex-wrap items-center gap-3">
-            <select
-              value={actionFilter}
-              onChange={(e) => {
-                setActionFilter(e.target.value);
-                setPage(1);
-              }}
-              className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm"
-            >
-              <option value="">{t("allActions", language)}</option>
-              {actions.map((a) => (
-                <option key={a} value={a}>
-                  {t(a, language)}
-                </option>
-              ))}
-            </select>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-44">
+              <Select
+                label={t("action", language)}
+                value={actionFilter}
+                onChange={(e) => {
+                  setActionFilter(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">{t("allActions", language)}</option>
+                {actions.map((a) => (
+                  <option key={a} value={a}>
+                    {t(a, language)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="w-44">
+              <Select
+                label={t("targetType", language)}
+                value={targetTypeFilter}
+                onChange={(e) => {
+                  setTargetTypeFilter(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">{t("allTargetTypes", language)}</option>
+                {TARGET_TYPES.map((tt) => (
+                  <option key={tt} value={tt}>
+                    {t(tt, language)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="w-40">
+              <Input
+                label={t("fromDate", language)}
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
+            <div className="w-40">
+              <Input
+                label={t("toDate", language)}
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
+            {hasFilters && (
+              <Button variant="ghost" size="sm" icon={FilterIcon} onClick={resetFilters}>
+                {t("clearFilters", language)}
+              </Button>
+            )}
           </div>
         </div>
 

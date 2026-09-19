@@ -3,8 +3,6 @@ import { useState } from 'react';
 import {
   PERMANENT_TEETH,
   TOOTH_STATE_STYLES,
-  SURFACE_CONDITIONS,
-  SURFACE_CONDITION_LABELS,
   toothFdi,
 } from './dental';
 import { useT } from '../../lib/i18n';
@@ -88,7 +86,7 @@ function ToothCrown({ tooth, meta, numbering, selected, onSelect, onSurfaceClick
         height={CROWN_H}
         rx={9}
         fill={isMissing ? '#fff' : crownFill(state)}
-        stroke={selected ? '#4f46e5' : '#cbd5e1'}
+        stroke={selected ? '#2F7A4F' : '#cbd5e1'}
         strokeWidth={selected ? 3 : 1.5}
         strokeDasharray={isMissing ? '4 3' : undefined}
         className="transition-all"

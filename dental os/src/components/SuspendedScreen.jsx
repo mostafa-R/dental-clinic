@@ -1,10 +1,23 @@
-﻿import { useSelector } from 'react-redux';
+﻿import { useDispatch, useSelector } from 'react-redux';
+import { logout } from '../features/auth/authSlice';
+import { authApi } from '../features/auth/authApi';
+import Button from './ui/Button';
 import { useT } from '../lib/i18n';
 
 export default function SuspendedScreen() {
+  const dispatch = useDispatch();
   const user = useSelector((s) => s.auth.user);
   const { t } = useT();
   const tenantName = user?.tenant?.name || '';
+
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      // ignore server logout errors; always clear the local session
+    }
+    dispatch(logout());
+  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-amber-50 dark:bg-slate-900 p-6">
@@ -23,6 +36,9 @@ export default function SuspendedScreen() {
         <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4 text-xs text-slate-600 dark:text-slate-400">
           {t('suspended.help')}
         </div>
+        <Button variant="secondary" className="mt-6 w-full" onClick={handleLogout}>
+          {t('topbar.logout')}
+        </Button>
       </div>
     </div>
   );

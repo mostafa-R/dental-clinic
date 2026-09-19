@@ -4,9 +4,10 @@ import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import { PageLoader } from "../components/ui/Spinner";
-import { ArrowUpTrayIcon } from "../components/ui/icons";
+import { ArrowDownTrayIcon, ArrowUpTrayIcon } from "../components/ui/icons";
 import { fetchBackups, triggerBackup } from "../features/backups/backupsSlice";
 import { formatDate } from "../lib/format";
+import { downloadCsv } from "../lib/exportCsv";
 import { t } from "../lib/i18n";
 import { canUserAccess } from "../lib/permissions";
 
@@ -52,12 +53,32 @@ export default function Backups() {
     dispatch(triggerBackup());
   };
 
+  const exportRows = () => {
+    downloadCsv({
+      filename: t("exportBackups", language),
+      rows: items,
+      headers: [
+        { label: t("date", language), getValue: (r) => (r.createdAt ? formatDate(r.createdAt, language) : "") },
+        { label: t("type", language), getValue: (r) => r.type || "scheduled" },
+        { label: t("status", language), getValue: (r) => r.status || "" },
+        { label: t("filename", language), getValue: (r) => r.filename || "" },
+        { label: t("size", language), getValue: (r) => formatBytes(r.sizeBytes) },
+        { label: t("duration", language), getValue: (r) => formatDuration(r.durationMs) },
+      ],
+    });
+  };
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <p className="text-sm text-slate-500 dark:text-slate-400">
           {t("backupsDesc", language)}
         </p>
+        {items.length > 0 && (
+          <Button variant="outline" onClick={exportRows} icon={ArrowDownTrayIcon}>
+            {t("exportCsv", language)}
+          </Button>
+        )}
         {canUserAccess(user, "backups.trigger") && (
           <Button onClick={handleTriggerBackup} loading={triggering} icon={ArrowUpTrayIcon}>
             {t("triggerBackup", language)}

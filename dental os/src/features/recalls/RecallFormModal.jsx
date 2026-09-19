@@ -11,8 +11,12 @@ import { useT } from '../../lib/i18n';
 const TYPES = ['hygiene', 'follow_up', 'treatment_review', 'post_procedure', 'periodic_check', 'custom'];
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'];
 
-const inputCls = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-indigo-500/20';
+const inputCls = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-brand dark:focus:ring-brand/20';
 const labelCls = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500';
+
+function isObjectId(value) {
+  return /^[0-9a-f]{24}$/i.test(value);
+}
 
 function toLocalInput(date) {
   if (!date) return '';
@@ -81,7 +85,7 @@ export default function RecallFormModal({ open, mode = 'create', recall, onClose
   const canSubmit = useMemo(() => {
     if (mode === 'create') return !!patientId && !!dueDate;
     if (mode === 'postpone') return !!postponedUntil;
-    if (mode === 'schedule') return appointmentId.trim().length === 24;
+    if (mode === 'schedule') return isObjectId(appointmentId.trim());
     return false;
   }, [mode, patientId, dueDate, postponedUntil, appointmentId]);
 
@@ -120,7 +124,7 @@ export default function RecallFormModal({ open, mode = 'create', recall, onClose
 
   return (
     <Modal open={open} onClose={onClose} title={titles[mode] || titles.create}>
-      <div className="space-y-4">
+      <form id="recall-form" onSubmit={(e) => { e.preventDefault(); submit(); }} className="space-y-4">
         {mode === 'create' && (
           <>
             <div>
@@ -200,11 +204,11 @@ export default function RecallFormModal({ open, mode = 'create', recall, onClose
         )}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
-          <Button onClick={submit} disabled={!canSubmit || formStatus === 'loading'}>
+          <Button type="submit" form="recall-form" disabled={!canSubmit || formStatus === 'loading'}>
             {formStatus === 'loading' ? t('common.saving') : t('common.save')}
           </Button>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }

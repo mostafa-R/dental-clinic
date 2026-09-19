@@ -35,7 +35,6 @@ export default function PrescriptionFormModal({ open, patientId, patient, onClos
       setDoctor(currentUser._id);
     } else {
       setDoctor('');
-      const branchId = patient?.branch?._id || patient?.branch;
       api
         .get('/users/doctors').then((r) => setDoctors(r.data.data.doctors || []))
         .catch(() => setDoctors([]));
@@ -132,7 +131,7 @@ export default function PrescriptionFormModal({ open, patientId, patient, onClos
               <div key={idx} className="rounded-lg border border-slate-100 p-2 dark:border-slate-800">
                 <div className="flex items-center gap-2">
                   <input value={m.name} onChange={(e) => updateMed(idx, 'name', e.target.value)} placeholder={t('emr.rx.medName')} className={`${inputCls} flex-1`} />
-                  <button type="button" onClick={() => removeMed(idx)} disabled={meds.length <= 1} className="rounded-md p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30 dark:hover:bg-rose-500/15" aria-label={t('common.cancel')}>
+                  <button type="button" onClick={() => removeMed(idx)} disabled={meds.length <= 1} className="rounded-md p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30 dark:hover:bg-rose-500/15" aria-label={t('common.remove')}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
                   </button>
                 </div>

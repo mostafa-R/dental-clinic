@@ -212,7 +212,7 @@ export default function TreatmentPlansTab({ patientId }) {
                             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PROCEDURE_STATUS_STYLES[item.status]}`}>{t(`emr.procedure.status.${item.status}`)}</span>
                           )}
                           {canManage && (
-                            <button type="button" onClick={() => onRemoveItem(plan._id, item._id)} className="rounded-md p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/15" aria-label={t('common.cancel')}>
+                            <button type="button" onClick={() => onRemoveItem(plan._id, item._id)} className="rounded-md p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/15" aria-label={t('common.remove')}>
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
                             </button>
                           )}

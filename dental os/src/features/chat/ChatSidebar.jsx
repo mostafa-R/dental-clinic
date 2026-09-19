@@ -19,16 +19,16 @@ const CHANNELS = [
   },
 ];
 
-export default function ChatSidebar({ activeChat, onSelectChat, onClose }) {
+export default function ChatSidebar({ activeChat, onSelectChat, onClose, className = '' }) {
   const { t } = useT();
   const staff = useSelector((s) => s.chat.staff);
   const unread = useSelector((s) => s.chat.unread);
 
   const activeClass =
-    "bg-indigo-50 font-medium text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300";
+    "bg-brand/5 font-medium text-brand-dark dark:bg-brand/20 dark:text-brand-light";
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-e border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <aside className={`flex w-full shrink-0 flex-col border-e border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 lg:w-64 ${className}`}>
       <div className="flex h-16 items-center justify-between border-b border-slate-200 px-4 dark:border-slate-800">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
           {t("chat.title")}
@@ -37,6 +37,7 @@ export default function ChatSidebar({ activeChat, onSelectChat, onClose }) {
           <button
             type="button"
             onClick={onClose}
+            aria-label={t("common.close")}
             className="rounded p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
           >
             <svg
@@ -73,13 +74,13 @@ export default function ChatSidebar({ activeChat, onSelectChat, onClose }) {
                   : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
               }`}
             >
-              <span
-                className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                  activeChat?.type === "channel" && activeChat.id === ch.key
-                    ? "bg-indigo-600 text-white"
-                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                }`}
-              >
+                <span
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                    activeChat?.type === "channel" && activeChat.id === ch.key
+                      ? "bg-brand text-white"
+                      : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                  }`}
+                >
                 #
               </span>
               <span className="flex-1 text-start">

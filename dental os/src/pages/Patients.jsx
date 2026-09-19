@@ -35,7 +35,7 @@ export default function Patients() {
       setFormOpen(true);
       setSearchParams({}, { replace: true });
     }
-  }, []);
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     dispatch(fetchPatients(query));

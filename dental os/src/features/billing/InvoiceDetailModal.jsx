@@ -67,7 +67,7 @@ export default function InvoiceDetailModal({ open, invoice, onClose, onPay, onEd
             <button
               type="button"
               onClick={() => onPay?.(invoice)}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+              className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white shadow-sm shadow-brand/25 transition hover:bg-brand-dark active:bg-brand-dark dark:bg-brand dark:hover:bg-brand-dark"
             >
               {t('billing.pay')}
             </button>

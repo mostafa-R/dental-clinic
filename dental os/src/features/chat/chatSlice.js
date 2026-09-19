@@ -164,6 +164,13 @@ const chatSlice = createSlice({
         state.error = null;
       })
       .addCase(fetchMessages.fulfilled, (state, action) => {
+        // Guard against stale in-flight responses: ignore payloads that were
+        // requested for a chat that is no longer active (poll race on switch).
+        const arg = action.meta.arg || {};
+        const forActive = state.activeChat
+          && ((state.activeChat.type === 'dm' && String(arg.recipient) === String(state.activeChat.id))
+            || (state.activeChat.type === 'channel' && String(arg.channel) === String(state.activeChat.id)));
+        if (!forActive) return;
         state.messages = action.payload.messages;
         state.status = 'succeeded';
         if (state.activeChat?.type === 'dm') {

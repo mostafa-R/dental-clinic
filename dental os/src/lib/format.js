@@ -56,6 +56,13 @@ export function formatTime(date) {
   return d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
+export function formatDateTime(date) {
+  if (!date) return '--';
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return '--';
+  return `${formatDate(d)} · ${d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+}
+
 export function greetingFor(date = new Date()) {
   const h = date.getHours();
   if (h < 12) return 'dashboard.greetingMorning';

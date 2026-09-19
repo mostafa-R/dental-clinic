@@ -165,7 +165,7 @@ export default function TreatmentPlanFormModal({ open, patientId, onClose, prese
                 <input value={it.procedureName} onChange={(e) => updateItem(idx, 'procedureName', e.target.value)} placeholder={t('emr.plan.procedureName')} className={`${inputCls} col-span-5`} />
                 <input value={it.procedureCode} onChange={(e) => updateItem(idx, 'procedureCode', e.target.value)} placeholder={t('emr.plan.code')} className={`${inputCls} col-span-2`} />
                 <input value={it.estimatedCost} onChange={(e) => updateItem(idx, 'estimatedCost', e.target.value)} type="number" min="0" step="0.01" placeholder={t('emr.plan.cost')} className={`${inputCls} col-span-2`} />
-                <button type="button" onClick={() => removeItem(idx)} disabled={items.length <= 1} className="col-span-1 rounded-md p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30 dark:hover:bg-rose-500/15" aria-label={t('common.cancel')}>
+                <button type="button" onClick={() => removeItem(idx)} disabled={items.length <= 1} className="col-span-1 rounded-md p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30 dark:hover:bg-rose-500/15" aria-label={t('common.remove')}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
                 </button>
               </div>

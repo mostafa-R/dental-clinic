@@ -69,10 +69,6 @@ function hasAccess(permissions, module) {
   return actions && actions.length > 0;
 }
 
-function isActivePath(pathname, to) {
-  return to === '/dashboard' ? pathname === to : pathname.startsWith(to);
-}
-
 export default function Sidebar() {
   const dispatch = useDispatch();
   const location = useLocation();
@@ -106,7 +102,7 @@ export default function Sidebar() {
 
   useEffect(() => {
     if (mobileOpen) dispatch(setMobileSidebarOpen(false));
-  }, [location.pathname, dispatch]);
+  }, [location.pathname, dispatch, mobileOpen]);
 
   const totalChatUnread = useMemo(
     () => Object.values(chatUnread).reduce((sum, n) => sum + n, 0),
@@ -144,7 +140,7 @@ export default function Sidebar() {
 
       {/* Mobile overlay */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden">
+        <div id="app-mobile-nav" className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label={t('topbar.toggleMenu')}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => dispatch(setMobileSidebarOpen(false))} />
           <aside className="relative flex h-full w-56 shrink-0 flex-col overflow-hidden bg-brand-dark dark:bg-[#0e1c17]">
             <SidebarContent
@@ -161,7 +157,7 @@ export default function Sidebar() {
   );
 }
 
-function NavItem({ item, collapsed, location, totalChatUnread, t }) {
+function NavItem({ item, collapsed, totalChatUnread, t }) {
   const Icon = item.icon;
 
   return (

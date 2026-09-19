@@ -16,3 +16,8 @@ export const getTenantUsage = asyncHandler(async (req, res) => {
   const usage = await siteAnalyticsService.getTenantUsage(req.params.tenantId);
   return sendSuccess(res, usage);
 });
+
+export const getRevenueByPlan = asyncHandler(async (_req, res) => {
+  const data = await siteAnalyticsService.getRevenueByPlan();
+  return sendSuccess(res, data);
+});

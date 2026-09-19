@@ -1,5 +1,5 @@
 import StatCard from '../../components/ui/StatCard';
-import { UsersIcon, StethoscopeIcon, BranchIcon } from '../../components/ui/icons';
+import { UsersIcon, StethoscopeIcon } from '../../components/ui/icons';
 import { formatNumber, formatMoney } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 

@@ -1,6 +1,5 @@
 import { useEffect, useCallback, useMemo, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { getSocket } from '../../lib/socket';
 import { useSocket } from '../../hooks/useSocket';
 import { addMessage, fetchUnreadCounts, markMessagesAsRead } from './chatSlice';
 import { playNotificationSound } from '../../lib/notificationSound';
