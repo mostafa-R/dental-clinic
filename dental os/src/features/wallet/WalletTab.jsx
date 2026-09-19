@@ -5,6 +5,7 @@ import Card from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
+import { Field, TextInput, Select } from '../../components/ui/Field';
 import { fetchWallet, fetchInstallmentPlans, addTransaction, createInstallmentPlan, payInstallmentPlan, updateInstallmentPlan, resetFormState, resetTransactionState } from './walletSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { canManageBilling, canViewBilling } from '../../lib/roles';
@@ -190,13 +191,27 @@ export default function WalletTab({ patientId }) {
       {showAddFunds && (
         <Card title={t('wallet.addFunds')}>
           <form onSubmit={handleAddFunds} className="space-y-3">
-            <input type="number" step="0.01" min="0.01" required
-              value={fundAmount} onChange={(e) => setFundAmount(e.target.value)}
-              placeholder={t('wallet.amount')}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500" />
-            <input type="text" value={fundDesc} onChange={(e) => setFundDesc(e.target.value)}
-              placeholder={t('wallet.description')}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500" />
+            <Field label={t('wallet.amount')} htmlFor="wallet-fund-amount" required>
+              <TextInput
+                id="wallet-fund-amount"
+                type="number"
+                step="0.01"
+                min="0.01"
+                required
+                value={fundAmount}
+                onChange={(e) => setFundAmount(e.target.value)}
+                placeholder={t('wallet.amount')}
+              />
+            </Field>
+            <Field label={t('wallet.description')} htmlFor="wallet-fund-desc">
+              <TextInput
+                id="wallet-fund-desc"
+                type="text"
+                value={fundDesc}
+                onChange={(e) => setFundDesc(e.target.value)}
+                placeholder={t('wallet.description')}
+              />
+            </Field>
             <div className="flex gap-2">
               <button type="submit" disabled={transactionStatus === 'loading'}
                 className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
@@ -350,10 +365,19 @@ export default function WalletTab({ patientId }) {
         title={t('wallet.pay')}
         size="sm"
       >
-        <input type="number" step="0.01" min="0.01" required value={payAmount}
-          onChange={(e) => setPayAmount(e.target.value)}
-          placeholder={t('wallet.amount')}
-          className="mb-4 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500" />
+        <Field label={t('wallet.amount')} htmlFor="wallet-pay-amount" required>
+          <TextInput
+            id="wallet-pay-amount"
+            type="number"
+            step="0.01"
+            min="0.01"
+            required
+            value={payAmount}
+            onChange={(e) => setPayAmount(e.target.value)}
+            placeholder={t('wallet.amount')}
+            className="mb-4"
+          />
+        </Field>
         <div className="flex gap-2">
           <button type="button" onClick={() => handlePayInstallment(payingPlanId)} disabled={formStatus === 'loading'}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
@@ -370,21 +394,37 @@ export default function WalletTab({ patientId }) {
       {showNewPlan && (
         <Card title={t('wallet.createPlan')}>
           <form onSubmit={handleCreatePlan} className="space-y-3">
-            <input type="text" required value={planTitle} onChange={(e) => setPlanTitle(e.target.value)}
-              placeholder={t('wallet.planTitle')}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500" />
-            <div className="flex gap-3">
-              <input type="number" step="0.01" min="0.01" required value={planTotal}
-                onChange={(e) => setPlanTotal(e.target.value)}
-                placeholder={t('wallet.totalAmount')}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500" />
-              <select value={planFrequency} onChange={(e) => setPlanFrequency(e.target.value)}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
-                <option value="weekly">{t('wallet.frequency.weekly')}</option>
-                <option value="biweekly">{t('wallet.frequency.biweekly')}</option>
-                <option value="monthly">{t('wallet.frequency.monthly')}</option>
-                <option value="custom">{t('wallet.frequency.custom')}</option>
-              </select>
+            <Field label={t('wallet.planTitle')} htmlFor="wallet-plan-title" required>
+              <TextInput
+                id="wallet-plan-title"
+                type="text"
+                required
+                value={planTitle}
+                onChange={(e) => setPlanTitle(e.target.value)}
+                placeholder={t('wallet.planTitle')}
+              />
+            </Field>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={t('wallet.totalAmount')} htmlFor="wallet-plan-total" required>
+                <TextInput
+                  id="wallet-plan-total"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  value={planTotal}
+                  onChange={(e) => setPlanTotal(e.target.value)}
+                  placeholder={t('wallet.totalAmount')}
+                />
+              </Field>
+              <Field label={t('wallet.frequency')} htmlFor="wallet-plan-frequency">
+                <Select id="wallet-plan-frequency" value={planFrequency} onChange={(e) => setPlanFrequency(e.target.value)}>
+                  <option value="weekly">{t('wallet.frequency.weekly')}</option>
+                  <option value="biweekly">{t('wallet.frequency.biweekly')}</option>
+                  <option value="monthly">{t('wallet.frequency.monthly')}</option>
+                  <option value="custom">{t('wallet.frequency.custom')}</option>
+                </Select>
+              </Field>
             </div>
 
             <div className="space-y-2">
@@ -393,10 +433,12 @@ export default function WalletTab({ patientId }) {
                 <div key={idx} className="flex items-center gap-2">
                   <input type="date" required value={inst.dueDate}
                     onChange={(e) => handleInstallmentChange(idx, 'dueDate', e.target.value)}
+                    aria-label={t('wallet.dueDate')}
                     className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
                   <input type="number" step="0.01" min="0.01" required value={inst.amount}
                     onChange={(e) => handleInstallmentChange(idx, 'amount', e.target.value)}
                     placeholder={t('wallet.amount')}
+                    aria-label={t('wallet.amount')}
                     className="w-24 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500" />
                   {planInstallments.length > 1 && (
                     <button type="button" onClick={() => handleRemoveInstallment(idx)}
@@ -433,9 +475,17 @@ export default function WalletTab({ patientId }) {
         title={t('wallet.editPlan')}
         size="sm"
       >
-        <input type="text" required value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
-          placeholder={t('wallet.planTitle')}
-          className="mb-4 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500" />
+        <Field label={t('wallet.planTitle')} htmlFor="wallet-edit-plan-title" required>
+          <TextInput
+            id="wallet-edit-plan-title"
+            type="text"
+            required
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            placeholder={t('wallet.planTitle')}
+            className="mb-4"
+          />
+        </Field>
         <div className="flex gap-2">
           <button type="button" onClick={handleEditPlan} disabled={formStatus === 'loading' || !editTitle.trim()}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
