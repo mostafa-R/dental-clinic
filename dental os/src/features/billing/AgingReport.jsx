@@ -4,6 +4,7 @@ import { fetchAgingReport } from './billingSlice';
 import Card from '../../components/ui/Card';
 import Spinner from '../../components/ui/Spinner';
 import EmptyState from '../../components/ui/EmptyState';
+import Modal from '../../components/ui/Modal';
 import { useT } from '../../lib/i18n';
 import { formatMoney, formatDate } from '../../lib/format';
 
@@ -31,15 +32,14 @@ export default function AgingReport({ open, onClose }) {
   const isLoading = agingStatus === 'loading' || agingStatus === 'idle';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 pt-10 backdrop-blur-sm">
-      <div className="w-full max-w-4xl rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900">
-        <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{t('billing.aging.title')}</h2>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
-          </button>
-        </div>
-
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={t('billing.aging.title')}
+      size="xl"
+      describedBy="aging-report-body"
+    >
+      <div id="aging-report-body">
         {isLoading ? (
           <Spinner label={t('billing.aging.loading')} />
         ) : !brackets ? (
@@ -128,6 +128,6 @@ export default function AgingReport({ open, onClose }) {
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }
