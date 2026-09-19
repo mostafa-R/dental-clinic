@@ -1,36 +1,17 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useDispatch } from 'react-redux';
 import Spinner from '../../components/ui/Spinner';
 import Card from '../../components/ui/Card';
 import { settingsApi } from './settingsApi';
+import { pushToast } from '../ui/uiSlice';
 import { useT } from '../../lib/i18n';
-
-function Toast({ message, type, onClose }) {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-  return (
-    <div
-      className={`fixed top-4 end-4 z-50 rounded-lg px-4 py-2 text-sm font-medium shadow-lg transition-all ${
-        type === 'success'
-          ? 'bg-emerald-600 text-white'
-          : 'bg-red-600 text-white'
-      }`}
-    >
-      {message}
-      <button onClick={onClose} className="ms-3 opacity-70 hover:opacity-100">
-        &times;
-      </button>
-    </div>
-  );
-}
 
 export default function WhatsAppSettings() {
   const { t } = useT();
+  const dispatch = useDispatch();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [msg, setMsg] = useState(null);
   const [settings, setSettings] = useState({
     enabled: false,
     provider: 'whatsapp_web',
@@ -45,10 +26,6 @@ export default function WhatsAppSettings() {
   const [testForm, setTestForm] = useState({ to: '', message: '' });
   const [sendingTest, setSendingTest] = useState(false);
 
-  const toast = useCallback((message, type = 'success') => {
-    setMsg({ message, type });
-  }, []);
-
   useEffect(() => {
     loadSettings();
   }, []);
@@ -59,7 +36,7 @@ export default function WhatsAppSettings() {
       const data = await settingsApi.getWhatsAppSettings();
       setSettings(data);
     } catch {
-      toast(t('whatsapp.failed'), 'error');
+      dispatch(pushToast({ type: 'error', message: t('whatsapp.failed') }));
     } finally {
       setLoading(false);
     }
@@ -70,9 +47,9 @@ export default function WhatsAppSettings() {
     try {
       const data = await settingsApi.updateWhatsAppSettings(settings);
       setSettings(data);
-      toast(t('whatsapp.saved'));
+      dispatch(pushToast({ type: 'success', message: t('whatsapp.saved') }));
     } catch {
-      toast(t('whatsapp.failed'), 'error');
+      dispatch(pushToast({ type: 'error', message: t('whatsapp.failed') }));
     } finally {
       setSaving(false);
     }
@@ -90,7 +67,7 @@ export default function WhatsAppSettings() {
       const statusRes = await settingsApi.getWhatsAppStatus();
       setSettings((prev) => ({ ...prev, status: statusRes?.status }));
     } catch {
-      toast(t('whatsapp.failed'), 'error');
+      dispatch(pushToast({ type: 'error', message: t('whatsapp.failed') }));
     } finally {
       setConnecting(false);
     }
@@ -101,9 +78,9 @@ export default function WhatsAppSettings() {
       await settingsApi.disconnectWhatsApp();
       setSettings((prev) => ({ ...prev, status: 'disconnected' }));
       setQrCode(null);
-      toast(t('whatsapp.disconnected'));
+      dispatch(pushToast({ type: 'success', message: t('whatsapp.disconnected') }));
     } catch {
-      toast(t('whatsapp.failed'), 'error');
+      dispatch(pushToast({ type: 'error', message: t('whatsapp.failed') }));
     }
   }
 
@@ -113,10 +90,10 @@ export default function WhatsAppSettings() {
     setSendingTest(true);
     try {
       await settingsApi.sendTestWhatsApp(testForm);
-      toast(t('whatsapp.sent'));
+      dispatch(pushToast({ type: 'success', message: t('whatsapp.sent') }));
       setTestForm({ to: '', message: '' });
     } catch {
-      toast(t('whatsapp.failed'), 'error');
+      dispatch(pushToast({ type: 'error', message: t('whatsapp.failed') }));
     } finally {
       setSendingTest(false);
     }
@@ -155,10 +132,6 @@ export default function WhatsAppSettings() {
 
   return (
     <div className="space-y-6">
-      {msg && (
-        <Toast message={msg.message} type={msg.type} onClose={() => setMsg(null)} />
-      )}
-
       <Card>
         <div className="mb-4 flex items-center justify-between">
           <div>
