@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import Card from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
 import Spinner from '../../components/ui/Spinner';
+import Modal from '../../components/ui/Modal';
 import { fetchWallet, fetchInstallmentPlans, addTransaction, createInstallmentPlan, payInstallmentPlan, updateInstallmentPlan, resetFormState, resetTransactionState } from './walletSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { canManageBilling, canViewBilling } from '../../lib/roles';
@@ -343,27 +344,27 @@ export default function WalletTab({ patientId }) {
       </Card>
 
       {/* Pay Installment Modal */}
-      {payingPlanId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900">
-            <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">{t('wallet.pay')}</h3>
-            <input type="number" step="0.01" min="0.01" required value={payAmount}
-              onChange={(e) => setPayAmount(e.target.value)}
-              placeholder={t('wallet.amount')}
-              className="mb-4 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500" />
-            <div className="flex gap-2">
-              <button type="button" onClick={() => handlePayInstallment(payingPlanId)} disabled={formStatus === 'loading'}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-                {formStatus === 'loading' ? t('common.saving') : t('wallet.pay')}
-              </button>
-              <button type="button" onClick={() => { setPayingPlanId(null); setPayAmount(''); }}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800">
-                {t('common.cancel')}
-              </button>
-            </div>
-          </div>
+      <Modal
+        open={Boolean(payingPlanId)}
+        onClose={() => { setPayingPlanId(null); setPayAmount(''); }}
+        title={t('wallet.pay')}
+        size="sm"
+      >
+        <input type="number" step="0.01" min="0.01" required value={payAmount}
+          onChange={(e) => setPayAmount(e.target.value)}
+          placeholder={t('wallet.amount')}
+          className="mb-4 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500" />
+        <div className="flex gap-2">
+          <button type="button" onClick={() => handlePayInstallment(payingPlanId)} disabled={formStatus === 'loading'}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+            {formStatus === 'loading' ? t('common.saving') : t('wallet.pay')}
+          </button>
+          <button type="button" onClick={() => { setPayingPlanId(null); setPayAmount(''); }}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800">
+            {t('common.cancel')}
+          </button>
         </div>
-      )}
+      </Modal>
 
       {/* New Installment Plan Form */}
       {showNewPlan && (
@@ -426,33 +427,37 @@ export default function WalletTab({ patientId }) {
       )}
 
       {/* Edit Installment Plan Modal */}
-      {editingPlan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900">
-            <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">{t('wallet.editPlan')}</h3>
-            <input type="text" required value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
-              placeholder={t('wallet.planTitle')}
-              className="mb-4 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500" />
-            <div className="flex gap-2">
-              <button type="button" onClick={handleEditPlan} disabled={formStatus === 'loading' || !editTitle.trim()}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-                {formStatus === 'loading' ? t('common.saving') : t('common.save')}
-              </button>
-              <button type="button" onClick={() => { setEditingPlan(null); setEditTitle(''); }}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800">
-                {t('common.cancel')}
-              </button>
-            </div>
-          </div>
+      <Modal
+        open={Boolean(editingPlan)}
+        onClose={() => { setEditingPlan(null); setEditTitle(''); }}
+        title={t('wallet.editPlan')}
+        size="sm"
+      >
+        <input type="text" required value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
+          placeholder={t('wallet.planTitle')}
+          className="mb-4 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500" />
+        <div className="flex gap-2">
+          <button type="button" onClick={handleEditPlan} disabled={formStatus === 'loading' || !editTitle.trim()}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+            {formStatus === 'loading' ? t('common.saving') : t('common.save')}
+          </button>
+          <button type="button" onClick={() => { setEditingPlan(null); setEditTitle(''); }}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800">
+            {t('common.cancel')}
+          </button>
         </div>
-      )}
+      </Modal>
 
       {/* View Created Plan Dialog */}
-      {viewingPlan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900">
+      <Modal
+        open={Boolean(viewingPlan)}
+        onClose={() => setViewingPlan(null)}
+        title={t('wallet.planDetails')}
+        size="lg"
+      >
+        {viewingPlan && (
+          <>
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{t('wallet.planDetails')}</h3>
               <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PLAN_STATUS_STYLES[viewingPlan.status]}`}>
                 {t(`wallet.planStatus.${viewingPlan.status}`)}
               </span>
@@ -513,9 +518,9 @@ export default function WalletTab({ patientId }) {
                 {t('common.close')}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
     </div>
   );
 }
