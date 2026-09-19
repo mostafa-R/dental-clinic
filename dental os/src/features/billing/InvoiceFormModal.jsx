@@ -297,7 +297,7 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
                   type="button"
                   onClick={() => removeItem(i)}
                   className="col-span-4 rounded-md px-2 text-slate-400 transition hover:bg-slate-100 hover:text-red-600 sm:col-span-12 sm:justify-self-end dark:hover:bg-slate-800"
-                  aria-label="Remove"
+                  aria-label={t('common.remove')}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                     <path d="M18 6 6 18M6 6l12 12" />

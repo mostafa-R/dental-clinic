@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import toast from 'react-hot-toast';
+
 import {
   fetchAppointments,
   fetchQueue,
@@ -11,7 +11,7 @@ import {
   upsertQueueFromSocket,
   callNextPatient,
 } from './appointmentSlice';
-import { showErrorDialog } from '../ui/uiSlice';
+import { pushToast, showErrorDialog } from '../ui/uiSlice';
 import { useSocket } from '../../hooks/useSocket';
 import { subscribeQueue, unsubscribeQueue } from '../../lib/socket';
 import QueueCard from './QueueCard';
@@ -158,11 +158,12 @@ export default function LiveQueue() {
     const body = nextDoctor ? { doctor: nextDoctor } : {};
     try {
       const appointment = await dispatch(callNextPatient(body)).unwrap();
-      toast.success(
-        appointment?.patient
+      dispatch(pushToast({
+        type: 'success',
+        message: appointment?.patient
           ? `${appointment.patient.firstName} ${appointment.patient.lastName}`.trim()
           : t('appointments.queue.called'),
-      );
+      }));
       if (appointment) dispatch(upsertQueueFromSocket(appointment));
     } catch (err) {
       dispatch(showErrorDialog(err));

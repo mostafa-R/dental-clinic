@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import toast from 'react-hot-toast';
+
 
 import Card from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
 import Spinner from '../../components/ui/Spinner';
 import { closeDuplicates, fetchDuplicates, mergePatients } from './patientSlice';
-import { showErrorDialog } from '../ui/uiSlice';
+import { pushToast, showErrorDialog } from '../ui/uiSlice';
 import { formatDate } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 
@@ -29,7 +29,7 @@ export default function DuplicatesPanel() {
       for (const dup of duplicatesToMerge) {
         await dispatch(mergePatients({ duplicateId: dup._id, survivorId })).unwrap();
       }
-      toast.success(t('patients.duplicates.merged'));
+      dispatch(pushToast({ type: 'success', message: t('patients.duplicates.merged') }));
       dispatch(fetchDuplicates());
     } catch (err) {
       dispatch(showErrorDialog(err));

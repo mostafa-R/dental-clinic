@@ -211,7 +211,7 @@ export default function Appointments() {
                 type="button"
                 onClick={() => setAnchor((d) => addDays(d, view === 'week' ? -7 : -1))}
                 className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-                aria-label="Previous"
+                aria-label={t('common.prev')}
               >
                 <svg className="rtl:rotate-180" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m15 18-6-6 6-6" /></svg>
               </button>
@@ -226,7 +226,7 @@ export default function Appointments() {
                 type="button"
                 onClick={() => setAnchor((d) => addDays(d, view === 'week' ? 7 : 1))}
                 className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-                aria-label="Next"
+                aria-label={t('common.next')}
               >
                 <svg className="rtl:rotate-180" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m9 18 6-6-6-6" /></svg>
               </button>
@@ -240,7 +240,7 @@ export default function Appointments() {
                 className={`relative rounded-md border border-slate-200 p-1.5 transition hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800 sm:hidden ${
                   hasActiveFilters ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'
                 }`}
-                aria-label="Filters"
+                aria-label={t('appointments.filters')}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />

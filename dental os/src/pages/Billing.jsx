@@ -260,7 +260,7 @@ export default function Billing() {
       />
 
       {voiding && (
-        <p className="sr-only">Voiding invoice…</p>
+        <p className="sr-only">{t('billing.voiding')}</p>
       )}
 
       <AgingReport open={agingOpen} onClose={() => setAgingOpen(false)} />

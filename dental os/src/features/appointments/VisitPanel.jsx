@@ -375,7 +375,7 @@ export default function VisitPanel({ open, appointment, onClose }) {
                         {formatMoney((Number(it.quantity) || 0) * (Number(it.unitPrice) || 0))}
                       </span>
                       {invItems.length > 1 && (
-                        <button type="button" onClick={() => setInvItems(invItems.filter((_, idx) => idx !== i))} className="p-1 text-slate-300 hover:text-red-500">
+                        <button type="button" aria-label={t('common.remove')} onClick={() => setInvItems(invItems.filter((_, idx) => idx !== i))} className="p-1 text-slate-300 hover:text-red-500">
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
                         </button>
                       )}

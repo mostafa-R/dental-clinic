@@ -140,7 +140,7 @@ export default function ClinicalTimelineTab({ patientId, patient }) {
                         {att.type === 'xray' || att.type === 'photo' ? (
                           <div className="relative h-24 w-24">
                             <img src={att.url} alt={att.caption || ''} className="h-full w-full object-cover transition group-hover:opacity-80" loading="lazy" />
-                            <span className="absolute end-1 top-1 rounded-full bg-emerald-500/80 p-0.5" title="Encrypted">
+                            <span className="absolute end-1 top-1 rounded-full bg-emerald-500/80 p-0.5" title={t('emr.attachment.encrypted')}>
                               <svg width="10" height="10" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
                             </span>
                           </div>
@@ -148,7 +148,7 @@ export default function ClinicalTimelineTab({ patientId, patient }) {
                           <div className="relative flex h-24 w-24 flex-col items-center justify-center gap-1 bg-slate-50 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
                             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></svg>
                             <span className="text-[10px]">{t(`emr.attachment.${att.type}`)}</span>
-                            <span className="absolute end-1 top-1 rounded-full bg-emerald-500/80 p-0.5" title="Encrypted">
+                            <span className="absolute end-1 top-1 rounded-full bg-emerald-500/80 p-0.5" title={t('emr.attachment.encrypted')}>
                               <svg width="8" height="8" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
                             </span>
                           </div>

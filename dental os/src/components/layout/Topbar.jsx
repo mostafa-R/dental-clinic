@@ -241,7 +241,7 @@ export default function Topbar() {
         type="button"
         onClick={() => dispatch(toggleMobileSidebar())}
         className="-ms-2 rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 lg:hidden"
-        aria-label="Toggle menu"
+        aria-label={t("topbar.toggleMenu")}
       >
         <MenuIcon />
       </button>
@@ -323,7 +323,7 @@ export default function Topbar() {
               setShowUserMenu(false);
             }}
             className="relative rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-            aria-label="Notifications"
+            aria-label={t("topbar.notifications")}
           >
             <BellIcon />
             {totalNotif > 0 && (

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { dismissToast } from '../../features/ui/uiSlice';
+import { useT } from '../../lib/i18n';
 
 const styles = {
   success: 'border-emerald-200 dark:border-emerald-500/30',
@@ -29,6 +30,7 @@ const icons = {
 };
 
 function ToastItem({ toast, onClose }) {
+  const { t } = useT();
   useEffect(() => {
     const id = setTimeout(onClose, toast.type === 'error' ? 6000 : 4000);
     return () => clearTimeout(id);
@@ -52,7 +54,7 @@ function ToastItem({ toast, onClose }) {
         type="button"
         onClick={onClose}
         className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-        aria-label="Close"
+        aria-label={t('common.close')}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M18 6 6 18M6 6l12 12" />

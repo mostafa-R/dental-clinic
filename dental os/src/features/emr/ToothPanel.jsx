@@ -136,7 +136,7 @@ export default function ToothPanel({ tooth, onSave, saving, onCancel }) {
           <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
             {t('emr.tooth.title', { n: toothFdi(tooth) ?? meta.universal })}
           </h4>
-          <span className="text-xs text-slate-400 dark:text-slate-500">{meta.name}</span>
+          <span className="text-xs text-slate-400 dark:text-slate-500">{t('emr.toothName.' + meta.palmer)}</span>
         </div>
         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
           <span>{t('emr.numbering.universal')}: <strong className="text-slate-700 dark:text-slate-200">{meta.universal}</strong></span>

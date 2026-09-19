@@ -50,6 +50,7 @@ function surfaceFill(condition) {
 }
 
 function ToothCrown({ tooth, meta, numbering, selected, onSelect, onSurfaceClick, isUpper, planItems }) {
+  const { t } = useT();
   const x = meta.x;
   const y = isUpper ? TOP_Y : BOTTOM_Y;
   const state = tooth?.state || 'sound';
@@ -69,7 +70,7 @@ function ToothCrown({ tooth, meta, numbering, selected, onSelect, onSurfaceClick
       className="cursor-pointer"
       role="button"
       tabIndex={0}
-      aria-label={`Tooth ${meta.fdi}, ${meta.name}`}
+      aria-label={t('emr.tooth.aria', { n: meta.fdi, name: t('emr.toothName.' + meta.palmer) })}
       aria-pressed={selected}
       onClick={() => onSelect(meta.fdi)}
       onFocus={() => onSelect(meta.fdi)}
@@ -310,8 +311,8 @@ export default function DentalChart({ teeth, selectedFdi, onSelect, onSurfaceCli
         </svg>
       </div>
 
-      <div className="border-t border-slate-100 pt-3 dark:border-slate-800" aria-label="Tooth selector">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Teeth</p>
+      <div className="border-t border-slate-100 pt-3 dark:border-slate-800" aria-label={t('emr.tooth.selector')}>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{t('emr.tooth.teeth')}</p>
         <div className="grid grid-cols-8 gap-1 sm:grid-cols-16">
           {[...UPPER_TEETH, ...LOWER_TEETH].map((meta) => (
             <button
@@ -319,7 +320,7 @@ export default function DentalChart({ teeth, selectedFdi, onSelect, onSurfaceCli
               type="button"
               onClick={() => onSelect(meta.fdi)}
               aria-pressed={selectedFdi === meta.fdi}
-              aria-label={`Tooth ${meta.fdi}, ${meta.name}`}
+aria-label={t('emr.tooth.aria', { n: meta.fdi, name: t('emr.toothName.' + meta.palmer) })}
               className={`min-h-8 rounded-md border text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
                 selectedFdi === meta.fdi
                   ? 'border-brand bg-brand text-white'

@@ -442,6 +442,7 @@ export default function WalletTab({ patientId }) {
                     className="w-24 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500" />
                   {planInstallments.length > 1 && (
                     <button type="button" onClick={() => handleRemoveInstallment(idx)}
+                      aria-label={t('common.remove')}
                       className="rounded-lg p-1.5 text-slate-400 hover:text-rose-500">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
                     </button>

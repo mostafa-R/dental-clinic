@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import toast from 'react-hot-toast';
+import { store } from '../app/store';
+import { pushToast } from '../features/ui/uiSlice';
+import { t } from './i18n';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL?.replace(/\/api(\/v1)?$/, '') || '';
 
@@ -36,13 +38,13 @@ export function getSocket() {
   socket.on('error', (data) => {
     if (data?.message?.includes('Session ID unknown')) return;
     console.warn('[socket] server error:', data?.message);
-    toast.error(data?.message || 'Real-time connection error');
+    store.dispatch(pushToast({ type: 'error', message: data?.message || t('socket.connectionError') }));
   });
 
   socket.on('connect_error', (err) => {
     if (isDev) console.debug('[socket] connect_error:', err.message);
     if (err.message?.includes('Unauthorized') || err.message?.includes('Invalid or expired')) {
-      toast.error('Session expired — please log in again');
+      store.dispatch(pushToast({ type: 'error', message: t('socket.sessionExpired') }));
     }
   });
 

@@ -6,19 +6,21 @@ import Topbar from './Topbar';
 import ChatGlobalListener from '../../features/chat/ChatGlobalListener';
 import { applyServerPreferences } from '../../features/preferences/usePreferences';
 import { initNotifications } from '../../lib/notificationSound';
+import { useT } from '../../lib/i18n';
 
 function ImpersonationBanner() {
   const user = useSelector((s) => s.auth.user);
+  const { t } = useT();
   if (!user?._impersonating) return null;
 
   return (
     <div className="bg-red-600 text-white text-sm px-4 py-2 flex items-center justify-between">
       <span>
-        <strong>Impersonation Mode:</strong> You are acting as {user.name || user.email}
-        <span className="ms-2 text-red-200 text-xs"> — All actions are logged</span>
+        <strong>{t('impersonation.title')}</strong> {t('impersonation.actingAs')} {user.name || user.email}
+        <span className="ms-2 text-red-200 text-xs"> — {t('impersonation.logged')}</span>
       </span>
       <span className="text-xs bg-white/20 px-2 py-0.5 rounded">
-        by {user._impersonator || 'Admin'}
+        {t('impersonation.by')} {user._impersonator || t('impersonation.admin')}
       </span>
     </div>
   );

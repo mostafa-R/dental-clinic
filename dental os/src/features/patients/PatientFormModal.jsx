@@ -95,7 +95,7 @@ function ConditionList({ label, items, onChange, addLabel, noneLabel, placeholde
               type="button"
               onClick={() => remove(i)}
               className="rounded-md px-2 text-slate-400 transition hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
-              aria-label="Remove"
+              aria-label={t('common.remove')}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <path d="M18 6 6 18M6 6l12 12" />
@@ -257,7 +257,7 @@ export default function PatientFormModal({ open, patient, onClose, onSaved }) {
               onChange={(v) => setForm((f) => ({ ...f, chronicConditions: v }))}
               addLabel={t('common.add')}
               noneLabel={t('common.none')}
-              placeholder="e.g. Diabetes"
+              placeholder={t('patients.form.chronicPlaceholder')}
             />
             <ConditionList
               label={t('patients.form.allergies')}
@@ -265,7 +265,7 @@ export default function PatientFormModal({ open, patient, onClose, onSaved }) {
               onChange={(v) => setForm((f) => ({ ...f, allergies: v }))}
               addLabel={t('common.add')}
               noneLabel={t('common.none')}
-              placeholder="e.g. Penicillin"
+              placeholder={t('patients.form.allergyPlaceholder')}
             />
           </div>
           <div className="mt-4">
