@@ -202,17 +202,20 @@
 <a name='L137'></a><a href='#L137'>137</a>
 <a name='L138'></a><a href='#L138'>138</a>
 <a name='L139'></a><a href='#L139'>139</a>
-<a name='L140'></a><a href='#L140'>140</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L140'></a><a href='#L140'>140</a>
+<a name='L141'></a><a href='#L141'>141</a>
+<a name='L142'></a><a href='#L142'>142</a>
+<a name='L143'></a><a href='#L143'>143</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -276,8 +279,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -307,9 +310,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -338,14 +341,17 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { Router } from 'express';
-import { protectSite, authorizeSite } from '../../../middleware/siteAuth.js';
-import { validate } from '../../../middleware/validate.js';
 import { z } from 'zod';
-import { getAuditLogs, getAuditActions, verifyAuditLogs } from './siteAudit.controller.js';
+import { authorizeSite, protectSite } from '../../../middleware/siteAuth.js';
+import { validate } from '../../../middleware/validate.js';
+import { getAuditActions, getAuditLogs, verifyAuditLogs } from './siteAudit.controller.js';
 &nbsp;
 const router = Router();
 &nbsp;
@@ -370,7 +376,8 @@ const auditQuerySchema = z.object({
  *     summary: List audit logs
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role. Supports filtering by action, admin, target, and date range.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     parameters:
  *       - $ref: '#/components/parameters/PaginationPage'
  *       - $ref: '#/components/parameters/PaginationLimit'
@@ -425,7 +432,8 @@ router.get('/', authorizeSite('super_admin', 'admin', 'support'), validate(audit
  *     summary: List distinct audit actions
  *     description: Site realm. Requires `super_admin`, `admin`, or `support` role. Useful for building filter dropdowns.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: Distinct actions
@@ -458,7 +466,8 @@ router.get('/actions', authorizeSite('super_admin', 'admin', 'support'), getAudi
  *       entry's HMAC and verifies prev/next linkage, reporting the first
  *       tampered, inserted, or deleted record.
  *     security:
- *       - siteAuth: []
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
  *     responses:
  *       '200':
  *         description: Chain verification result
@@ -487,7 +496,7 @@ export default router;
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-11T17:00:57.398Z
+                at 2026-09-19T00:00:55.203Z
             </div>
         <script src="../../../../prettify.js"></script>
         <script>

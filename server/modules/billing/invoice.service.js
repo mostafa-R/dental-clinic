@@ -666,6 +666,7 @@ export async function addPayment(id, branchFilter, { amount, method, reference, 
   // Publish the fully-paid event AFTER the transaction commits so automation
   // rules never read half-applied state (PRD §12.3). Fire-and-forget.
   if (result.status === 'paid') {
+    const lastPayment = result.payments?.[result.payments.length - 1] || null;
     void publishEvent({
       type: 'invoice.paid',
       tenant: result.tenant,
@@ -677,7 +678,10 @@ export async function addPayment(id, branchFilter, { amount, method, reference, 
         total: result.total,
         paidAmount: result.paidAmount,
         patient: result.patient ? (result.patient?.toJSON ? result.patient.toJSON() : result.patient) : null,
-        payment: result.payments?.[result.payments.length - 1] || null,
+        payment:
+          lastPayment && typeof lastPayment.toJSON === 'function'
+            ? lastPayment.toJSON()
+            : lastPayment,
         invoice: result.toJSON ? result.toJSON() : result,
       },
     });

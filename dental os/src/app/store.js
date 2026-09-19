@@ -9,6 +9,7 @@ import dashboardReducer from '../features/dashboard/dashboardSlice';
 import emrReducer from '../features/emr/emrSlice';
 import inventoryReducer from '../features/inventory/inventorySlice';
 import patientsReducer from '../features/patients/patientSlice';
+import recallsReducer from '../features/recalls/recallSlice';
 import rolesReducer from '../features/roles/rolesSlice';
 import siteAuthReducer from '../features/site/siteAuthSlice';
 import uiReducer from '../features/ui/uiSlice';
@@ -27,6 +28,7 @@ export const store = configureStore({
     emr: emrReducer,
     inventory: inventoryReducer,
     patients: patientsReducer,
+    recalls: recallsReducer,
     roles: rolesReducer,
     siteAuth: siteAuthReducer,
     ui: uiReducer,

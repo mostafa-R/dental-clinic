@@ -1280,10 +1280,22 @@
 <a name='L1215'></a><a href='#L1215'>1215</a>
 <a name='L1216'></a><a href='#L1216'>1216</a>
 <a name='L1217'></a><a href='#L1217'>1217</a>
-<a name='L1218'></a><a href='#L1218'>1218</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L1218'></a><a href='#L1218'>1218</a>
+<a name='L1219'></a><a href='#L1219'>1219</a>
+<a name='L1220'></a><a href='#L1220'>1220</a>
+<a name='L1221'></a><a href='#L1221'>1221</a>
+<a name='L1222'></a><a href='#L1222'>1222</a>
+<a name='L1223'></a><a href='#L1223'>1223</a>
+<a name='L1224'></a><a href='#L1224'>1224</a>
+<a name='L1225'></a><a href='#L1225'>1225</a>
+<a name='L1226'></a><a href='#L1226'>1226</a>
+<a name='L1227'></a><a href='#L1227'>1227</a>
+<a name='L1228'></a><a href='#L1228'>1228</a>
+<a name='L1229'></a><a href='#L1229'>1229</a>
+<a name='L1230'></a><a href='#L1230'>1230</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -2455,20 +2467,32 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -2487,12 +2511,12 @@
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -2826,6 +2850,16 @@ export const options = {
             },
             createdAt: { $ref: "#/components/schemas/DateTime" },
             updatedAt: { $ref: "#/components/schemas/DateTime" },
+          },
+        },
+&nbsp;
+        DayHours: {
+          type: "object",
+          description: "Open/close times for a single weekday. `closed: true` marks an off day.",
+          properties: {
+            open: { type: "string", example: "09:00", nullable: true },
+            close: { type: "string", example: "17:00", nullable: true },
+            closed: { type: "boolean", default: false },
           },
         },
 &nbsp;
@@ -3181,7 +3215,8 @@ export const options = {
           type: "object",
           properties: {
             _id: { $ref: "#/components/schemas/ObjectId" },
-            tooth: { type: "integer", minimum: 1, maximum: 32, nullable: true },
+            tooth: { type: "integer", minimum: 1, maximum: 32, nullable: true, description: "Legacy Universal code" },
+            fdi: { type: "integer", nullable: true, description: "Canonical FDI code, ISO 3950 (11-18, 21-28, 31-38, 41-48)" },
             surfaces: {
               type: "array",
               items: { type: "string", enum: ["mesial", "distal", "buccal", "lingual", "occlusal"] },
@@ -3249,7 +3284,8 @@ export const options = {
         Tooth: {
           type: "object",
           properties: {
-            number: { type: "integer", minimum: 1, maximum: 32 },
+            number: { type: "integer", minimum: 1, maximum: 32, description: "Legacy Universal code" },
+            fdi: { type: "integer", description: "Canonical FDI code, ISO 3950 (11-18, 21-28, 31-38, 41-48)" },
             state: {
               type: "string",
               enum: [
@@ -3721,7 +3757,7 @@ export function setupSwagger(app) {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-11T17:00:57.398Z
+                at 2026-09-19T00:00:55.203Z
             </div>
         <script src="../prettify.js"></script>
         <script>

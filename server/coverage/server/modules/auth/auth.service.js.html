@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">46.66% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/30</span>
+                <span class='fraction'>14/30</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">37.03% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/27</span>
+                <span class='fraction'>10/27</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">50% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/4</span>
+                <span class='fraction'>2/4</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">50% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/28</span>
+                <span class='fraction'>14/28</span>
             </div>
         
             
@@ -145,42 +145,42 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -216,43 +216,43 @@ import {
   resetFailedLogins,
 } from '../../utils/loginThrottle.js';
 &nbsp;
-export async function <span class="fstat-no" title="function not covered" >assertTenantActive(</span>tenantId) {
-<span class="cstat-no" title="statement not covered" >  if (!tenantId) <span class="cstat-no" title="statement not covered" >return;</span></span>
-  const tenant = <span class="cstat-no" title="statement not covered" >await Tenant.findById(tenantId).select('status isActive');</span>
-<span class="cstat-no" title="statement not covered" >  if (!tenant) {</span>
+export async function assertTenantActive(tenantId) {
+  <span class="missing-if-branch" title="if path not taken" >I</span>if (!tenantId) <span class="cstat-no" title="statement not covered" >return;</span>
+  const tenant = await Tenant.findById(tenantId).select('status isActive');
+  <span class="missing-if-branch" title="if path not taken" >I</span>if (!tenant) {
 <span class="cstat-no" title="statement not covered" >    throw ApiError.forbidden('Your clinic account no longer exists');</span>
   }
-<span class="cstat-no" title="statement not covered" >  if (!tenant.isActive || tenant.status === 'suspended' || tenant.status === 'cancelled') {</span>
+  <span class="missing-if-branch" title="if path not taken" >I</span>if (!tenant.isActive || tenant.status === 'suspended' || tenant.status === 'cancelled') {
 <span class="cstat-no" title="statement not covered" >    throw ApiError.forbidden('Your clinic subscription is suspended. Contact your platform administrator.');</span>
   }
 }
 &nbsp;
-export async function <span class="fstat-no" title="function not covered" >authenticateUser(</span>emailOrUsername, password) {
-  const identifier = <span class="cstat-no" title="statement not covered" >String(emailOrUsername || '').trim().toLowerCase();</span>
-<span class="cstat-no" title="statement not covered" >  await assertNotLocked(identifier);</span>
+export async function authenticateUser(emailOrUsername, password) {
+  const identifier = String(emailOrUsername || <span class="branch-1 cbranch-no" title="branch not covered" >'')</span>.trim().toLowerCase();
+  await assertNotLocked(identifier);
 &nbsp;
   // PRD §6.1: login accepts either the email address or the username.
-  const user = <span class="cstat-no" title="statement not covered" >await User.findOne({</span>
+  const user = await User.findOne({
     $or: [{ email: identifier }, { username: identifier }],
   })
     .select('+password')
     .populate('branch');
-<span class="cstat-no" title="statement not covered" >  if (!user) {</span>
+  <span class="missing-if-branch" title="if path not taken" >I</span>if (!user) {
     // No lockout state for unknown accounts (avoids lockout-DoS via account
     // enumeration); the per-IP/per-account rate limiters still apply.
 <span class="cstat-no" title="statement not covered" >    throw ApiError.unauthorized('Invalid email or password');</span>
   }
-<span class="cstat-no" title="statement not covered" >  if (!user.isActive) {</span>
+  <span class="missing-if-branch" title="if path not taken" >I</span>if (!user.isActive) {
 <span class="cstat-no" title="statement not covered" >    throw ApiError.forbidden('Account is disabled');</span>
   }
-  const ok = <span class="cstat-no" title="statement not covered" >await user.comparePassword(password);</span>
-<span class="cstat-no" title="statement not covered" >  if (!ok) {</span>
+  const ok = await user.comparePassword(password);
+  <span class="missing-if-branch" title="if path not taken" >I</span>if (!ok) {
 <span class="cstat-no" title="statement not covered" >    await recordFailedLogin(identifier);</span>
 <span class="cstat-no" title="statement not covered" >    throw ApiError.unauthorized('Invalid email or password');</span>
   }
-<span class="cstat-no" title="statement not covered" >  await resetFailedLogins(identifier);</span>
-<span class="cstat-no" title="statement not covered" >  await assertTenantActive(user.tenant);</span>
-<span class="cstat-no" title="statement not covered" >  return user;</span>
+  await resetFailedLogins(identifier);
+  await assertTenantActive(user.tenant);
+  return user;
 }
 &nbsp;
 export async function <span class="fstat-no" title="function not covered" >getUserWithTenant(</span>userId) {
@@ -286,7 +286,7 @@ export async function <span class="fstat-no" title="function not covered" >getUs
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-11T17:00:57.398Z
+                at 2026-09-19T00:00:55.203Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

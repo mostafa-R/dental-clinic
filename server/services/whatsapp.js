@@ -1,4 +1,6 @@
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import ApiError from '../utils/ApiError.js';
 import WhatsAppSetting from '../modules/whatsapp/whatsappSetting.model.js';
 
@@ -103,6 +105,7 @@ export async function updateWhatsAppSettings(tenantId, data) {
 function getChromePath() {
   const paths = [
     process.env.CHROME_PATH,
+    findPuppeteerCachedChrome(),
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files\\Chromium\\Application\\chrome.exe',
@@ -116,6 +119,39 @@ function getChromePath() {
     try {
       if (fs.existsSync(p)) return p;
     } catch {}
+  }
+  return undefined;
+}
+
+/**
+ * whatsapp-web.js drives its browser through puppeteer, which downloads its own
+ * Chrome via `npx puppeteer browsers install chrome` into ~/.cache/puppeteer.
+ * Production hosts frequently have no system-wide Chrome, so fall back to that
+ * managed browser instead of failing with "Chrome/Chromium not found".
+ */
+function findPuppeteerCachedChrome() {
+  const cacheRoot = path.join(os.homedir(), '.cache', 'puppeteer', 'chrome');
+  const relativePaths = [
+    path.join('chrome-win64', 'chrome.exe'),
+    path.join('chrome-win32', 'chrome.exe'),
+    path.join('chrome-linux64', 'chrome'),
+    path.join('chrome-linux', 'chrome'),
+    path.join('chrome-mac-x64', 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing'),
+    path.join('chrome-mac-arm64', 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing'),
+  ];
+  let versions = [];
+  try {
+    versions = fs.readdirSync(cacheRoot);
+  } catch {
+    return undefined;
+  }
+  for (const version of versions) {
+    for (const rel of relativePaths) {
+      const candidate = path.join(cacheRoot, version, rel);
+      try {
+        if (fs.existsSync(candidate)) return candidate;
+      } catch {}
+    }
   }
   return undefined;
 }

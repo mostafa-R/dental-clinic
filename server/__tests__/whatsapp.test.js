@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const wa = vi.hoisted(() => {
   const clientEvents = {};
   const localAuthOpts = [];
+  const clientOpts = [];
   const instances = [];
   const destroyedLog = [];
   class MockClient {
-    constructor() {
+    constructor(opts) {
       this.info = { wid: { user: "20123456789" } };
+      clientOpts.push(opts);
     }
     on(ev, cb) {
       clientEvents[ev] = cb;
@@ -28,7 +30,7 @@ const wa = vi.hoisted(() => {
       localAuthOpts.push(opts);
     }
   }
-  return { clientEvents, localAuthOpts, instances, destroyedLog, MockClient, MockLocalAuth };
+  return { clientEvents, localAuthOpts, clientOpts, instances, destroyedLog, MockClient, MockLocalAuth };
 });
 
 vi.mock("whatsapp-web.js", () => ({
@@ -51,12 +53,19 @@ vi.mock("../modules/whatsapp/whatsappSetting.model.js", () => ({
 }));
 
 import fs from "fs";
+import os from "os";
+import path from "path";
 import {
   connectWhatsApp,
   disconnectWhatsApp,
   sendWhatsAppMessage,
   updateWhatsAppSettings,
   normalizeE164,
+  getWhatsAppSettings,
+  getWhatsAppStatus,
+  disposeWhatsAppForTenant,
+  disconnectAllWhatsAppClients,
+  sendViaCloudApi,
 } from "../services/whatsapp.js";
 import WhatsAppSetting from "../modules/whatsapp/whatsappSetting.model.js";
 
@@ -104,6 +113,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   wa.clientEvents = {};
   wa.localAuthOpts.length = 0;
+  wa.clientOpts.length = 0;
   wa.instances.length = 0;
   wa.destroyedLog.length = 0;
   modelState.doc = null;
@@ -182,6 +192,25 @@ describe("connectWhatsApp (whatsapp_web)", () => {
     vi.spyOn(fs, "existsSync").mockImplementation(() => false);
 
     await expect(connectWhatsApp("t1")).rejects.toMatchObject({ statusCode: 500 });
+  });
+
+  it("falls back to puppeteer's managed Chrome when no system Chrome exists", async () => {
+    delete process.env.CHROME_PATH;
+    const cached = path.join(
+      os.homedir(),
+      ".cache",
+      "puppeteer",
+      "chrome",
+      "win64-146.0",
+      "chrome-win64",
+      "chrome.exe",
+    );
+    vi.spyOn(fs, "readdirSync").mockReturnValue(["win64-146.0"]);
+    vi.spyOn(fs, "existsSync").mockImplementation((p) => p === cached);
+
+    await connectWhatsApp("t1");
+
+    expect(wa.clientOpts[0].puppeteer.executablePath).toBe(cached);
   });
 
   it("rejects a new connection over the concurrent cap", async () => {
@@ -567,5 +596,109 @@ describe("whatsapp.controller", () => {
         expect.objectContaining({ statusCode: 429 }),
       );
     });
+  });
+});
+
+describe("getWhatsAppSettings", () => {
+  it("creates a default settings row when none exists", async () => {
+    WhatsAppSetting.findOne.mockReturnValue({ select: vi.fn(async () => null) });
+    WhatsAppSetting.create.mockResolvedValue(makeDoc({ tenant: "t1" }));
+    const settings = await getWhatsAppSettings("t1");
+    expect(WhatsAppSetting.create).toHaveBeenCalledWith({ tenant: "t1" });
+    expect(settings).toBeDefined();
+  });
+
+  it("returns the existing settings when present", async () => {
+    setDoc({ tenant: "t1" });
+    const settings = await getWhatsAppSettings("t1");
+    expect(settings.tenant).toBe("t1");
+  });
+});
+
+describe("getWhatsAppStatus", () => {
+  it("reports cloud_api connected states", async () => {
+    setDoc({ provider: "cloud_api", status: "connected" });
+    const status = await getWhatsAppStatus("t1");
+    expect(status).toMatchObject({ provider: "cloud_api", status: "connected", connected: true });
+  });
+
+  it("reports a web client as connected only when a live client exists", async () => {
+    setDoc({ provider: "whatsapp_web", status: "connected" });
+    expect((await getWhatsAppStatus("t1")).connected).toBe(false);
+    await connectWhatsApp("t1");
+    expect((await getWhatsAppStatus("t1")).ready).toBe(true);
+  });
+});
+
+describe("sendViaCloudApi", () => {
+  it("builds the correct Graph API request", async () => {
+    const json = vi.fn().mockResolvedValue({ message: "ok" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json, text: async () => "" }));
+    const result = await sendViaCloudApi(
+      { accessToken: "tok", phoneNumberId: "pid" },
+      "20123456789",
+      "hello",
+    );
+    expect(result).toEqual({ message: "ok" });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const [url, opts] = globalThis.fetch.mock.calls[0];
+    expect(url).toBe("https://graph.facebook.com/v21.0/pid/messages");
+    expect(opts.headers.Authorization).toBe("Bearer tok");
+  });
+
+  it("throws 400 when the Graph API rejects the credentials", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}), text: async () => "unauth" }));
+    await expect(
+      sendViaCloudApi({ accessToken: "tok", phoneNumberId: "pid" }, "20123456789", "hi"),
+    ).rejects.toMatchObject({ statusCode: 500 });
+  });
+
+  it("throws 400 when config is missing", async () => {
+    await expect(sendViaCloudApi({}, "20123456789", "hi")).rejects.toMatchObject({ statusCode: 400 });
+  });
+});
+
+describe("dispose/disconnect-all", () => {
+  it("disposes a client without touching the database", async () => {
+    setDoc({ enabled: true });
+    await connectWhatsApp("t1");
+    expect(wa.instances.length).toBe(1);
+    await disposeWhatsAppForTenant("t1");
+  });
+
+  it("disconnectAllWhatsAppClients destroys every live client", async () => {
+    setDoc({ enabled: true });
+    await connectWhatsApp("t1");
+    await connectWhatsApp("t2");
+    expect(wa.instances.length).toBe(2);
+    await disconnectAllWhatsAppClients();
+  });
+});
+
+describe("sendWhatsAppMessage failure paths (whatsapp_web)", () => {
+  it("treats a fatal engine error (t) as a broken client", async () => {
+    setDoc({ enabled: true });
+    await connectWhatsApp("t1");
+    const client = wa.instances[0];
+    client.sendMessage = async () => { throw new Error("t"); };
+
+    await expect(sendWhatsAppMessage("t1", "20123456789", "hi")).rejects.toMatchObject({
+      statusCode: 500,
+    });
+  });
+
+  it("propagates non-fatal send errors as 500", async () => {
+    setDoc({ enabled: true });
+    await connectWhatsApp("t1");
+    const client = wa.instances[0];
+    client.sendMessage = async () => { throw new Error("wa blocked"); };
+
+    await expect(sendWhatsAppMessage("t1", "20123456789", "hi")).rejects.toThrow("wa blocked");
+  });
+
+  it("rejects an invalid recipient before touching the client", async () => {
+    setDoc({ enabled: true });
+    await connectWhatsApp("t1");
+    await expect(sendWhatsAppMessage("t1", "!!", "hi")).rejects.toMatchObject({ statusCode: 400 });
   });
 });

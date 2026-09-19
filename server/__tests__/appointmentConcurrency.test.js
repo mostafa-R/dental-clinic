@@ -51,11 +51,21 @@ import { canonicalChairKey } from '../modules/appointments/chairKey.js';
 
 const DB = 'mongodb://127.0.0.1:27017/dental_os_appointment_concurrency_test';
 
-// Tuesday 2026-09-15, 09:00–09:30. Within the doctor's Mon–Fri 09:00–17:00
+// Slots are derived from "now" so the suite never rots as real time passes:
+// the slot must sit on a Tuesday inside the doctor's Mon–Fri 09:00–17:00
 // working hours AND inside the (now+1h, now+90d] advance-booking window, so
-// the only thing that can reject a request is the double-booking guard.
-const SLOT_START = new Date(Date.UTC(2026, 8, 15, 9, 0, 0));
-const SLOT_END = new Date(Date.UTC(2026, 8, 15, 9, 30, 0));
+// the only thing that can reject a request is the double-booking guard
+// (previously hardcoded 2026-09-15 dates quickly became a date-bomb).
+function nextTuesdayAt(hour) {
+  const now = new Date();
+  const start = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 2, hour, 0, 0),
+  );
+  start.setUTCDate(start.getUTCDate() + ((2 - start.getUTCDay() + 7) % 7));
+  return start;
+}
+const SLOT_START = nextTuesdayAt(9);
+const SLOT_END = new Date(SLOT_START.getTime() + 30 * 60000);
 
 describe('Appointment double-booking guards (real concurrency)', () => {
   let Tenant;
@@ -262,8 +272,8 @@ describe('Appointment double-booking guards (real concurrency)', () => {
       patient: patients[1]._id,
       doctor: doctors[1]._id,
       chair: 'Chair 01',
-      start: new Date(Date.UTC(2026, 8, 15, 10, 0, 0)),
-      end: new Date(Date.UTC(2026, 8, 15, 10, 30, 0)),
+      start: new Date(SLOT_START.getTime() + 60 * 60000),
+      end: new Date(SLOT_START.getTime() + 90 * 60000),
       status: 'scheduled',
     });
     expect(later).toBeDefined();
@@ -288,8 +298,8 @@ describe('Appointment double-booking guards (real concurrency)', () => {
       doctor: doctors[7],
       patient: patients[7],
       chair: 'Sanity Chair',
-      start: new Date(Date.UTC(2026, 8, 15, 11, 0, 0)),
-      end: new Date(Date.UTC(2026, 8, 15, 11, 30, 0)),
+      start: new Date(SLOT_START.getTime() + 120 * 60000),
+      end: new Date(SLOT_START.getTime() + 150 * 60000),
     })();
     expect(single.res.statusCode).toBe(201);
     const saved = await Appointment.findById(single.res.body.data.appointment._id)

@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">52% </span>
+                <span class="strong">60% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>13/25</span>
+                <span class='fraction'>15/25</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">46.66% </span>
+                <span class="strong">63.33% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>14/30</span>
+                <span class='fraction'>19/30</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">57.89% </span>
+                <span class="strong">63.15% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>11/19</span>
+                <span class='fraction'>12/19</span>
             </div>
         
             
@@ -139,35 +139,35 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">51x</span>
+<span class="cline-any cline-yes">80x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">51x</span>
+<span class="cline-any cline-yes">80x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">51x</span>
-<span class="cline-any cline-yes">51x</span>
+<span class="cline-any cline-yes">80x</span>
+<span class="cline-any cline-yes">80x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">51x</span>
-<span class="cline-any cline-yes">51x</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">80x</span>
+<span class="cline-any cline-yes">80x</span>
+<span class="cline-any cline-yes">29x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -219,9 +219,9 @@ export function hostPolicy(req, _res, next) {
   const hostname = String(req.hostname || <span class="branch-1 cbranch-no" title="branch not covered" >'')</span>.toLowerCase().replace(/^\[|\]$/g, '');
   <span class="missing-if-branch" title="if path not taken" >I</span>if (!hostname || hostname === 'localhost') <span class="cstat-no" title="statement not covered" >return next();</span>
 &nbsp;
-  const isBareIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || <span class="branch-1 cbranch-no" title="branch not covered" >hostname === '::1';</span>
-  <span class="missing-if-branch" title="else path not taken" >E</span>if (isBareIp) return next();
-<span class="cstat-no" title="statement not covered" >  if (hostname === APP_DOMAIN || hostname.endsWith(`.${APP_DOMAIN}`)) <span class="cstat-no" title="statement not covered" >return next();</span></span>
+  const isBareIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname === '::1';
+  if (isBareIp) return next();
+  <span class="missing-if-branch" title="else path not taken" >E</span>if (hostname === APP_DOMAIN || hostname.endsWith(`.${APP_DOMAIN}`)) return next();
 <span class="cstat-no" title="statement not covered" >  if (EXTRA_HOSTS.includes(hostname)) <span class="cstat-no" title="statement not covered" >return next();</span></span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  return next(ApiError.badRequest('Unrecognized Host header'));</span>
@@ -232,7 +232,7 @@ export function hostPolicy(req, _res, next) {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-11T17:00:57.398Z
+                at 2026-09-19T00:00:55.203Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

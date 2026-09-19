@@ -23,6 +23,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Patients = lazy(() => import('./pages/Patients'));
 const PatientEmr = lazy(() => import('./pages/PatientEmr'));
 const Appointments = lazy(() => import('./pages/Appointments'));
+const Recalls = lazy(() => import('./pages/Recalls'));
 const Branches = lazy(() => import('./pages/Branches'));
 const Billing = lazy(() => import('./pages/Billing'));
 const Accounting = lazy(() => import('./pages/Accounting'));
@@ -73,6 +74,7 @@ function App() {
             <Route path="patients" element={<RequirePermission module="patients"><Patients /></RequirePermission>} />
             <Route path="patients/:id/emr" element={<RequirePermission module="emr"><PatientEmr /></RequirePermission>} />
             <Route path="appointments" element={<RequirePermission module="appointments"><Appointments /></RequirePermission>} />
+            <Route path="recalls" element={<RequirePermission module="appointments"><Recalls /></RequirePermission>} />
             <Route path="branches" element={<RequirePermission module="branches"><Branches /></RequirePermission>} />
             <Route path="billing" element={<RequirePermission module="billing"><Billing /></RequirePermission>} />
             <Route path="accounting" element={<RequirePermission module="accounting"><Accounting /></RequirePermission>} />

@@ -47,9 +47,29 @@ vi.spyOn(eventBus, 'publishEvent').mockResolvedValue(undefined);
 
 const DB = 'mongodb://127.0.0.1:27017/dental_os_default_end_test';
 
-// A September 2026 weekday inside the (now+1h, now+90d] advance window and the
-// Mon–Fri 09:00–17:00 working hours. 09:00–(09:00+45min)=09:45 stays inside.
-const BASE_START = new Date(Date.UTC(2026, 8, 16, 9, 0, 0)); // Wednesday
+// All slots derive from a future Wednesday 09:00 UTC seeded from "now", so the
+// suite never rots as real time passes: every start sits on a Mon–Fri 09:00–17:00
+// working day inside the (now+1h, now+90d] advance-booking window, and
+// 09:00–(09:00+45min)=09:45 stays inside working hours (previously hardcoded
+// 2026-09-16 dates quickly became a date-bomb once that day passed).
+function nextWeekdayUtc(weekday, hour, minDaysAhead = 2) {
+  const now = new Date();
+  const start = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + minDaysAhead, hour, 0, 0),
+  );
+  start.setUTCDate(start.getUTCDate() + ((weekday - start.getUTCDay() + 7) % 7));
+  return start;
+}
+const MINUTE = 60000;
+const HOUR = 3600 * 1000;
+const DAY = 24 * HOUR;
+const BASE_START = nextWeekdayUtc(3, 9); // Wednesday 09:00
+const WED_10 = new Date(BASE_START.getTime() + 60 * MINUTE); // Wed 10:00 (slots: 2 test)
+const THU_09 = new Date(BASE_START.getTime() + DAY); // Thursday 09:00
+const FRI_09 = new Date(BASE_START.getTime() + 2 * DAY); // Friday 09:00
+const FRI_09_45 = new Date(FRI_09.getTime() + 45 * MINUTE); // Friday 09:45
+const FRI_13 = new Date(FRI_09.getTime() + 4 * HOUR); // Friday 13:00
+const MON_09 = new Date(BASE_START.getTime() + 5 * DAY); // Monday 09:00
 
 describe('default appointment end-time (guards must never be skipped)', () => {
   let Tenant;
@@ -231,7 +251,7 @@ describe('default appointment end-time (guards must never be skipped)', () => {
   it('create with start + slots=x resolves end = start + slotDuration × x', async () => {
     const { res } = await run(
       controller.createAppointment,
-      makeReq({ validatedBody: createRequestBody({ chair: 'Slots Chair', start: new Date(Date.UTC(2026, 8, 16, 10, 0, 0)), slots: 2 }) }),
+      makeReq({ validatedBody: createRequestBody({ chair: 'Slots Chair', start: WED_10, slots: 2 }) }),
       makeRes(),
     );
     expect(res.statusCode).toBe(201);
@@ -248,7 +268,7 @@ describe('default appointment end-time (guards must never be skipped)', () => {
       makeReq({
         validatedBody: createRequestBody({
           chair: 'Endless Chair',
-          start: new Date(Date.UTC(2026, 8, 17, 9, 0, 0)),
+          start: THU_09,
         }),
       }),
       makeRes(),
@@ -266,7 +286,7 @@ describe('default appointment end-time (guards must never be skipped)', () => {
         makeReq({
           validatedBody: createRequestBody({
             chair: 'Endless Chair',
-            start: new Date(Date.UTC(2026, 8, 17, 9, 0, 0)),
+            start: THU_09,
             doctorId: otherDoctor._id,
             patientId: otherPatient._id,
           }),
@@ -311,8 +331,8 @@ describe('default appointment end-time (guards must never be skipped)', () => {
       patient: patient._id,
       doctor: doctor._id,
       chair: 'Length Chair',
-      start: new Date(Date.UTC(2026, 8, 18, 9, 0, 0)),
-      end: new Date(Date.UTC(2026, 8, 18, 9, 45, 0)),
+      start: FRI_09,
+      end: FRI_09_45,
       status: 'scheduled',
     });
 
@@ -320,14 +340,14 @@ describe('default appointment end-time (guards must never be skipped)', () => {
       controller.updateAppointment,
       makeReq({
         params: { id: String(created._id) },
-        validatedBody: { start: new Date(Date.UTC(2026, 8, 18, 13, 0, 0)).toISOString() },
+        validatedBody: { start: FRI_13.toISOString() },
       }),
       makeRes(),
     );
     expect(res.statusCode).toBe(200);
     const saved = await Appointment.findById(created._id).select('start end').lean();
-    expect(saved.start.toISOString()).toBe('2026-09-18T13:00:00.000Z');
-    expect(saved.end.toISOString()).toBe('2026-09-18T13:45:00.000Z');
+    expect(saved.start.toISOString()).toBe(FRI_13.toISOString());
+    expect(saved.end.toISOString()).toBe(new Date(FRI_13.getTime() + 45 * MINUTE).toISOString());
   });
 
   it('update of a legacy end-less row heals it: end resolved and persisted', async () => {
@@ -339,7 +359,7 @@ describe('default appointment end-time (guards must never be skipped)', () => {
       patient: patient._id,
       doctor: doctor._id,
       chair: 'Legacy Chair',
-      start: new Date(Date.UTC(2026, 8, 21, 9, 0, 0)), // Monday 2026-09-21
+      start: MON_09,
       status: 'scheduled',
     });
     expect(legacy.end).toBeUndefined();

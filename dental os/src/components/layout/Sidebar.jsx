@@ -33,6 +33,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/patients', labelKey: 'nav.patients', module: 'patients', icon: PatientsIcon },
       { to: '/appointments', labelKey: 'nav.appointments', module: 'appointments', icon: AppointmentsIcon },
+      { to: '/recalls', labelKey: 'nav.recalls', module: 'appointments', icon: AppointmentsIcon },
     ],
   },
   {

@@ -39,12 +39,16 @@ const auditLogSchema = new mongoose.Schema(
         'quarantine.set', 'quarantine.remove', 'impersonation.start', 'impersonation.end',
         'user.role_change', 'user.password_reset', 'user.deactivate', 'user.activate',
         'role.permissions_change', 'auth.recovery_attempt',
+        'recall.create', 'recall.update', 'recall.contacted', 'recall.postpone',
+        'recall.schedule', 'recall.complete', 'recall.dismiss', 'recall.auto_create',
       ],
     },
     target: {
-      type: { type: String, enum: ['tenant', 'branch', 'admin', 'subscription', 'plan', 'platform', 'user', 'role'] },
+      type: { type: String, enum: ['tenant', 'branch', 'admin', 'subscription', 'plan', 'platform', 'user', 'role', 'recall', 'appointment', 'patient'] },
       id: { type: mongoose.Schema.Types.ObjectId },
       name: { type: String },
+      patient: { type: mongoose.Schema.Types.ObjectId },
+      status: { type: String },
     },
     details: { type: mongoose.Schema.Types.Mixed, default: {} },
     requestId: { type: String, default: null },
@@ -55,7 +59,7 @@ const auditLogSchema = new mongoose.Schema(
     prevHash: { type: String, default: '' },
     hash: { type: String, default: '' },
   },
-  { timestamps: true },
+  { timestamps: true, minimize: false },
 );
 
 auditLogSchema.index({ createdAt: -1 });

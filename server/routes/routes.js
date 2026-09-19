@@ -15,6 +15,7 @@ import dentalChartRoutes from "../modules/emr/dentalChart.routes.js";
 import prescriptionRoutes from "../modules/emr/prescription.routes.js";
 import treatmentPlanRoutes from "../modules/emr/treatmentPlan.routes.js";
 import inventoryRoutes from "../modules/inventory/inventory.routes.js";
+import recallRoutes from "../modules/recalls/recall.routes.js";
 import automationRoutes from "../modules/automation/automation.routes.js";
 import installmentPlanRoutes from "../modules/patients/installmentPlan.routes.js";
 import patientRoutes from "../modules/patients/patient.routes.js";
@@ -123,6 +124,7 @@ v1.use("/chat", chatRoutes);
 v1.use("/search", searchRoutes);
 v1.use("/patients/:patientId/wallet", walletRoutes);
 v1.use("/patients/:patientId/installments", installmentPlanRoutes);
+v1.use("/recalls", recallRoutes);
 v1.use("/whatsapp", whatsappRoutes);
 
 // Site routes

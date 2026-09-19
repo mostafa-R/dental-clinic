@@ -35,6 +35,7 @@ export const TRIGGER_TYPES = [
   { key: 'queue.position_changed', label: 'Queue position changed' },
   { key: 'queue.near_turn', label: 'Queue near turn' },
   { key: 'queue.turn_now', label: 'Queue turn now' },
+  { key: 'recall.due', label: 'Recall due (follow-up reminder)' },
 ];
 
 export const TRIGGER_KEYS = TRIGGER_TYPES.map((t) => t.key);
@@ -245,6 +246,29 @@ export const DEFAULT_TEMPLATES = [
             `مرحباً {{patient.firstName}}،`,
             `لديك قسط متأخر بقيمة {{overdueAmount}} على خطة "{{planTitle}}".`,
             'يرجى السداد في أقرب فرصة — شكراً لتعاونك.',
+          ].join('\n'),
+        },
+      },
+    ],
+    cooldownMinutes: 1440,
+  },
+  {
+    key: 'recall-reminder',
+    name: 'Recall reminder (WhatsApp)',
+    description: 'Remind the patient of a due follow-up recall (hygiene, review, post-procedure).',
+    trigger: { type: 'recall.due' },
+    conditions: [],
+    actions: [
+      {
+        type: 'send_whatsapp',
+        config: {
+          to: '{{patient.phone}}',
+          message: [
+            'موعد المتابعة 🦷',
+            '',
+            `مرحباً {{patient.firstName}}،`,
+            'حان موعد المتابعة الخاص بك في عيادتنا.',
+            'يسعدنا حجز موعد مناسب لك — تواصل معنا.',
           ].join('\n'),
         },
       },

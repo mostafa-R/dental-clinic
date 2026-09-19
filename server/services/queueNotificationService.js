@@ -193,7 +193,14 @@ function getPhone(appointment) {
 }
 
 function publishQueueEvent(tenantId, branchId, type, data) {
-  void publishEvent({ type, tenant: tenantId, branch: branchId, data });
+  // Resolve populated (sub)docs down to their ids — the event bus requires a
+  // plain ObjectId for the tenant/branch scoping fields.
+  void publishEvent({
+    type,
+    tenant: tenantId?._id ?? tenantId,
+    branch: branchId?._id ?? branchId,
+    data,
+  });
 }
 
 function serializePayload(appointment, extra = {}) {

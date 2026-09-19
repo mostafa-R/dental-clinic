@@ -12,12 +12,14 @@ import { startInstallmentCron, stopInstallmentCron } from "./services/installmen
 import { startInventoryCron, stopInventoryCron } from "./services/inventoryCron.js";
 import { startConsentExpiryCron, stopConsentExpiryCron } from "./services/consentExpiryCron.js";
 import { startNoShowCron, stopNoShowCron } from "./services/noShowCron.js";
+import { startRecallCron, stopRecallCron } from "./services/recallCron.js";
 import { startQueueNotifyCron, stopQueueNotifyCron } from "./services/queueNotifyCron.js";
 import { startSuspensionCron, stopSuspensionCron } from "./services/suspensionCron.js";
 import { disconnectAllWhatsAppClients } from "./services/whatsapp.js";
 import { startWhatsAppReminderCron, stopWhatsAppReminderCron } from "./services/whatsappReminderCron.js";
 import { startEventBus } from "./services/eventBus.js";
 import { startAutomationEngine } from "./services/automationEngine.js";
+import { startRecallEngine, stopRecallEngine } from "./services/recallEngine.js";
 import { getIO, initSocket } from "./socket/index.js";
 
 const PORT = Number(process.env.PORT || 5000);
@@ -82,12 +84,14 @@ async function start() {
   });
   startInstallmentCron();
   startNoShowCron();
+  startRecallCron();
   startQueueNotifyCron();
   startInventoryCron();
   startConsentExpiryCron();
 
   startEventBus();
   startAutomationEngine();
+  startRecallEngine();
 
   const shutdown = async (signal) => {
     console.log(`\n${signal} received. Shutting down gracefully...`);
@@ -99,6 +103,7 @@ async function start() {
     stopBackupCron();
     stopInstallmentCron();
     stopNoShowCron();
+    stopRecallCron();
     stopQueueNotifyCron();
     stopInventoryCron();
     stopConsentExpiryCron();

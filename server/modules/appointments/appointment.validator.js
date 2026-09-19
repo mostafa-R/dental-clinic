@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { APPOINTMENT_STATUS } from './appointment.model.js';
+import { RECALL_TYPES } from '../recalls/recall.model.js';
 
 const objectIdSchema = z.string().length(24, 'Invalid id');
 
@@ -66,6 +67,14 @@ export const transitionSchema = z.object({
   // (PRD §6.2). Only meaningful when status === 'completed'; the controller
   // persists it via notifyVisitCompleted.
   nextAppointmentId: objectIdSchema.optional(),
+  // Optional recall instruction for the recall engine (Phase 2). Only read
+  // when status === 'completed'; at least one of the two date sources makes
+  // the engine create a recall, otherwise the visit closes with no recall.
+  // No default interval is invented — staff opt in explicitly per visit.
+  recallAfterDays: z.number().int().min(1).max(730).optional(),
+  recallDueDate: dateTimeSchema.optional(),
+  recallType: z.enum(RECALL_TYPES).optional(),
+  recallReason: z.string().max(500).optional(),
 });
 
 export const callNextSchema = z.object({

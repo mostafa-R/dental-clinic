@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">23.07% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>3/13</span>
+                <span class='fraction'>13/13</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/8</span>
+                <span class='fraction'>8/8</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/3</span>
+                <span class='fraction'>3/3</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">23.07% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>3/13</span>
+                <span class='fraction'>13/13</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line low'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -92,48 +92,48 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
 <span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import ApiError from "../../../utils/ApiError.js";
 import asyncHandler from "../../../utils/asyncHandler.js";
 import { sendSuccess } from "../../../utils/sendSuccess.js";
 import { performBackup, listBackups, getBackupById } from "../../../services/backup.js";
 &nbsp;
-export const getBackups = asyncHandler(<span class="fstat-no" title="function not covered" >async </span>(req, res) =&gt; {
-  const page = <span class="cstat-no" title="statement not covered" >parseInt(req.query.page, 10) || 1;</span>
-  const limit = <span class="cstat-no" title="statement not covered" >Math.min(parseInt(req.query.limit, 10) || 20, 100);</span>
-  const result = <span class="cstat-no" title="statement not covered" >await listBackups(page, limit);</span>
-<span class="cstat-no" title="statement not covered" >  return sendSuccess(res, result);</span>
+export const getBackups = asyncHandler(async (req, res) =&gt; {
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+  const result = await listBackups(page, limit);
+  return sendSuccess(res, result);
 });
 &nbsp;
-export const getBackup = asyncHandler(<span class="fstat-no" title="function not covered" >async </span>(req, res) =&gt; {
-  const log = <span class="cstat-no" title="statement not covered" >await getBackupById(req.params.id);</span>
-<span class="cstat-no" title="statement not covered" >  if (!log) {</span>
-<span class="cstat-no" title="statement not covered" >    throw ApiError.notFound("Backup log not found");</span>
+export const getBackup = asyncHandler(async (req, res) =&gt; {
+  const log = await getBackupById(req.params.id);
+  if (!log) {
+    throw ApiError.notFound("Backup log not found");
   }
-<span class="cstat-no" title="statement not covered" >  return sendSuccess(res, log);</span>
+  return sendSuccess(res, log);
 });
 &nbsp;
-export const triggerManualBackup = asyncHandler(<span class="fstat-no" title="function not covered" >async </span>(req, res) =&gt; {
-  const log = <span class="cstat-no" title="statement not covered" >await performBackup("manual", req.siteAdmin?._id || null);</span>
-<span class="cstat-no" title="statement not covered" >  return sendSuccess(res, log);</span>
+export const triggerManualBackup = asyncHandler(async (req, res) =&gt; {
+  const log = await performBackup("manual", req.siteAdmin?._id || null);
+  return sendSuccess(res, log);
 });
 &nbsp;</pre></td></tr></table></pre>
 
@@ -142,7 +142,7 @@ export const triggerManualBackup = asyncHandler(<span class="fstat-no" title="fu
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-11T17:00:57.398Z
+                at 2026-09-19T00:00:55.203Z
             </div>
         <script src="../../../../prettify.js"></script>
         <script>

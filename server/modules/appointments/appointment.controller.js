@@ -45,12 +45,12 @@ function emitAppointment(branchId, event, appointment) {
  * Publish a business event on the Event Bus so automation rules can react
  * (PRD §12.3). Fire-and-forget — `publishEvent` never throws to callers.
  */
-function publishAppointmentEvent(appointment, type) {
+function publishAppointmentEvent(appointment, type, extra = {}) {
   const json = appointment.toJSON ? appointment.toJSON() : appointment;
   void publishEvent({
     type,
-    tenant: appointment.tenant,
-    branch: appointment.branch,
+    tenant: appointment.tenant?._id ?? appointment.tenant,
+    branch: appointment.branch?._id ?? appointment.branch,
     data: {
       id: String(appointment._id),
       status: appointment.status,
@@ -59,6 +59,7 @@ function publishAppointmentEvent(appointment, type) {
       chair: appointment.chair || '',
       patient: json.patient || null,
       appointment: json,
+      ...extra,
     },
   });
 }
@@ -690,7 +691,20 @@ export const transitionAppointment = asyncHandler(async (req, res) => {
     no_show: 'appointment.no_show',
   };
   const eventType = EVENT_BY_STATUS[nextStatus];
-  if (eventType) publishAppointmentEvent(appointment, eventType);
+  if (eventType) {
+    // Phase 2: opt-in recall instruction for the recall engine. Only attached
+    // on completion; the engine ignores visits without an explicit window.
+    const recallInstruction = nextStatus === 'completed'
+      ? {
+          ...(req.validatedBody.recallAfterDays !== undefined
+            ? { recallAfterDays: req.validatedBody.recallAfterDays } : {}),
+          ...(req.validatedBody.recallDueDate ? { recallDueDate: req.validatedBody.recallDueDate } : {}),
+          ...(req.validatedBody.recallType ? { recallType: req.validatedBody.recallType } : {}),
+          ...(req.validatedBody.recallReason ? { recallReason: req.validatedBody.recallReason } : {}),
+        }
+      : undefined;
+    publishAppointmentEvent(appointment, eventType, recallInstruction);
+  }
 
   // Live-queue patient notifications (PRD §6.2).
   if (nextStatus === 'in_progress') notifyTurnNow(appointment);
