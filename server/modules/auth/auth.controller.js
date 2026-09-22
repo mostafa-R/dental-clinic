@@ -82,7 +82,30 @@ export const getMe = asyncHandler(async (req, res) => {
 export const getMyPermissions = asyncHandler(async (req, res) => {
   const resolved = await resolveRole(req);
   const { isSystemAdmin, permissionMap } = resolved;
-  return sendSuccess(res, { isSystemAdmin, permissions: permissionMap() });
+  // System admins bypass the plan gate everywhere (see checkPermission).
+  if (isSystemAdmin) {
+    return sendSuccess(res, { isSystemAdmin, permissions: permissionMap() });
+  }
+  // Intersect role permissions with the tenant's plan modules so the clinic
+  // frontend (Sidebar / RequirePermission) automatically hides modules the
+  // plan does not include. Without this the UI showed everything the role
+  // allowed and only the API 403'd — looking like "the plan is ignored".
+  // A missing tenant for a non-admin is deny-all, never full access.
+  const { planIncludesModule } = await import('../../constants/plans.js');
+  const tenant = req.user?.tenant || null;
+  const raw = permissionMap();
+  const permissions = Object.fromEntries(
+    Object.entries(raw).map(([mod, actions]) => [
+      mod,
+      tenant && planIncludesModule(tenant, mod) ? actions : [],
+    ]),
+  );
+  return sendSuccess(res, {
+    isSystemAdmin,
+    permissions,
+    plan: tenant?.plan ?? null,
+    planModules: tenant?.planModules ?? [],
+  });
 });
 
 export const updatePreferences = asyncHandler(async (req, res) => {

@@ -23,9 +23,11 @@ vi.mock("../modules/site/tenant/tenant.model.js", () => ({ default: mocks.tenant
 vi.mock("../utils/healthMonitor.js", () => ({ getSystemHealth: mocks.health.getSystemHealth }));
 vi.mock("../utils/perfMonitor.js", () => ({ getPerfStats: mocks.perf.getPerfStats }));
 vi.mock("../services/abuseDetection.js", () => ({ getAbuseStatsForTenants: mocks.abuse.getAbuseStatsForTenants }));
+vi.mock("../socket/index.js", () => ({ emitToAdmins: vi.fn() }));
 
 import SiteAlert from "../modules/site/alert/alert.model.js";
 import Tenant from "../modules/site/tenant/tenant.model.js";
+import { emitToAdmins } from "../socket/index.js";
 import { getSystemHealth } from "../utils/healthMonitor.js";
 import { getPerfStats } from "../utils/perfMonitor.js";
 import { getAbuseStatsForTenants } from "../services/abuseDetection.js";
@@ -127,6 +129,14 @@ describe("raiseAlert", () => {
     expect(openDoc.occurrenceCount).toBe(2);
     expect(openDoc.severity).toBe("critical");
     expect(mocks.alertModel.create).toHaveBeenCalledTimes(1);
+    // Realtime push fires exactly once per created row — bumps stay silent.
+    await vi.waitFor(() => {
+      expect(emitToAdmins).toHaveBeenCalledTimes(1);
+    });
+    expect(emitToAdmins).toHaveBeenCalledWith(
+      "admin:alerts-changed",
+      expect.objectContaining({ type: "memory", severity: "critical" }),
+    );
   });
 
   it("survives a unique-index race by returning the existing row", async () => {

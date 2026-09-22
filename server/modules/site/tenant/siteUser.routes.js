@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authorizeSite, protectSite, requireTenantAccess } from '../../../middleware/siteAuth.js';
-import { getUsersByTenant } from './siteUser.controller.js';
+import { getUsersByTenant, searchUsers } from './siteUser.controller.js';
 
 const router = Router();
 
@@ -46,5 +46,44 @@ router.use(protectSite);
  *         $ref: '#/components/responses/NotFound'
  */
 router.get('/by-tenant/:tenantId', authorizeSite('super_admin', 'admin'), requireTenantAccess, getUsersByTenant);
+
+/**
+ * @swagger
+ * /api/v1/site/users:
+ *   get:
+ *     tags: [Site Users]
+ *     summary: Search users across tenants
+ *     description: Site realm. Requires `super_admin`, `admin`, or `support` role. Returns a capped list of matching users with their tenant.
+ *     security:
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 6, maximum: 20 }
+ *     responses:
+ *       '200':
+ *         description: Matching users
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     users:
+ *                       type: array
+ *                       items: { $ref: '#/components/schemas/User' }
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ */
+router.get('/', authorizeSite('super_admin', 'admin', 'support'), searchUsers);
 
 export default router;

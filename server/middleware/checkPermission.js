@@ -127,11 +127,15 @@ export function checkPermission(module, action) {
 
       // System admins bypass both the plan gate and the permission matrix
       // (e.g. a clinic owner must never be locked out of role management by a
-      // missing 'roles' plan module).
+      // missing 'roles' plan module). ONLY system admins bypass — a missing
+      // tenant for a regular user is deny, never full access.
       if (isSystemAdmin) return next();
+      if (!req.user.tenant) {
+        return next(ApiError.forbidden('Clinic context is missing. Please log in again.'));
+      }
 
       // Plan gate: even if the role grants access, the tenant's plan must
-      // include the module. Platform admin (no tenant) always passes.
+      // include the module.
       if (!planIncludesModule(req.user.tenant, module)) {
         return next(
           ApiError.forbidden(
@@ -178,6 +182,9 @@ export function checkAnyPermission(pairs) {
       const { isSystemAdmin, permissionMap } = req._roleResolved;
       // System admins bypass the plan gate and the permission matrix.
       if (isSystemAdmin) return next();
+      if (!req.user.tenant) {
+        return next(ApiError.forbidden('Clinic context is missing. Please log in again.'));
+      }
 
       const planAllowed = pairs.some(([mod]) =>
         planIncludesModule(req.user.tenant, mod),

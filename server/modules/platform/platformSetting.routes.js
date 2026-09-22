@@ -16,7 +16,7 @@ const platformSettingSchema = z.object({
   emailNotifications: z.boolean().optional(),
   allowedDomains: z.array(z.string().max(100)).max(50).optional(),
   maxTenants: z.number().int().min(1).max(100000).optional(),
-  defaultPlan: z.enum(["starter", "professional", "enterprise"]).optional(),
+  defaultPlan: z.string().min(1).optional().or(z.literal("")),
   trialDays: z.number().int().min(1).max(365).optional(),
   backupEnabled: z.boolean().optional(),
   backupRetentionDays: z.number().int().min(1).max(365).optional(),

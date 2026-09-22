@@ -932,7 +932,7 @@ export const options = {
             slug: { type: "string", maxLength: 120 },
             email: { type: "string", format: "email" },
             phone: { type: "string", maxLength: 30 },
-            plan: { type: "string", default: "starter" },
+            plan: { type: "string" },
             planId: { $ref: "#/components/schemas/ObjectId" },
             planModules: { type: "array", items: { type: "string" } },
             status: {
@@ -949,10 +949,10 @@ export const options = {
             settings: {
               type: "object",
               properties: {
-                maxBranches: { type: "number", default: 1 },
-                maxDoctors: { type: "number", default: 3 },
-                maxPatients: { type: "number", default: 500 },
-                storageLimit: { type: "number", description: "In MB", default: 5120 },
+                maxBranches: { type: "number" },
+                maxDoctors: { type: "number" },
+                maxPatients: { type: "number" },
+                storageLimit: { type: "number", description: "In MB" },
               },
             },
             isActive: { type: "boolean", default: true },
@@ -1028,7 +1028,7 @@ export const options = {
             emailNotifications: { type: "boolean", default: true },
             allowedDomains: { type: "array", items: { type: "string" } },
             maxTenants: { type: "number", default: 1000 },
-            defaultPlan: { type: "string", enum: ["starter", "professional", "enterprise"] },
+            defaultPlan: { type: "string" },
             trialDays: { type: "number", default: 14 },
             backupEnabled: { type: "boolean", default: true },
             backupRetentionDays: { type: "number", default: 30 },

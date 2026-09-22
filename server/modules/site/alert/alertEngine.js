@@ -52,6 +52,22 @@ function cooledDown(fingerprint) {
 }
 
 /**
+ * Push a newly created alert to connected site admins. Realtime is
+ * best-effort: socket.io may be uninitialized (tests, workers) — never throw.
+ */
+function notifyAdmins(payload) {
+  import("../../../socket/index.js").then(({ emitToAdmins }) => {
+    try {
+      emitToAdmins("admin:alerts-changed", payload);
+    } catch {
+      /* realtime optional */
+    }
+  }).catch(() => {
+    /* realtime optional */
+  });
+}
+
+/**
  * Create — or bump — an alert for `fingerprint`. Never throws; returns the
  * resulting document plus whether a new alert row was created.
  */
@@ -103,6 +119,7 @@ export async function raiseAlert({
       lastSeenAt: now,
       meta: meta && typeof meta === "object" ? meta : {},
     });
+    notifyAdmins({ type, severity, title, tenantId });
     return { alert, created: true, deduplicated: false };
   } catch (err) {
     if (err && err.code === 11000) {

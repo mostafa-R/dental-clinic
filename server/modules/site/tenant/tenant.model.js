@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { parseStorageToMB } from "../../platform/plan.utils.js";
 
 export const TENANT_STATUS = {
   ACTIVE: "active",
@@ -38,16 +39,20 @@ const tenantSchema = new mongoose.Schema(
     },
     plan: {
       type: String,
-      default: "starter",
+      required: true,
     },
     planId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Plan",
-      default: null,
+      required: true,
     },
     planModules: {
       type: [String],
-      default: ["dashboard", "patients", "appointments", "billing"],
+      required: true,
+      validate: {
+        validator: (v) => Array.isArray(v) && v.length > 0,
+        message: "planModules must contain at least one module",
+      },
     },
     status: {
       type: String,
@@ -103,19 +108,19 @@ const tenantSchema = new mongoose.Schema(
     settings: {
       maxBranches: {
         type: Number,
-        default: 1,
+        required: true,
       },
       maxDoctors: {
         type: Number,
-        default: 3,
+        required: true,
       },
       maxPatients: {
         type: Number,
-        default: 500,
+        required: true,
       },
       storageLimit: {
         type: Number, // in MB
-        default: 5120, // 5GB
+        required: true,
       },
     },
     isActive: {
@@ -147,30 +152,43 @@ tenantSchema.pre("save", function generateSlug() {
   }
 });
 
-// Update settings based on plan
+// Update settings based on plan — strict, no fallbacks.
+// planDoc is required and must carry explicit limits + modules.
 tenantSchema.methods.updatePlanSettings = function updatePlanSettings(planDoc) {
-  if (planDoc) {
-    this.settings.maxBranches = planDoc.limits?.maxBranches ?? this.settings.maxBranches;
-    this.settings.maxDoctors = planDoc.limits?.maxDoctors ?? this.settings.maxDoctors;
-    this.settings.maxPatients = planDoc.limits?.maxPatients ?? this.settings.maxPatients;
-    this.settings.storageLimit = planDoc.limits?.storageLimit
-      ?? (typeof planDoc.limits?.storage === 'string'
-        ? parseInt(planDoc.limits.storage) * 1024 || this.settings.storageLimit
-        : planDoc.limits?.storage)
-      ?? this.settings.storageLimit;
-    this.plan = planDoc.key || planDoc.name?.toLowerCase().replace(/\s+/g, "_") || this.plan;
-    this.planId = planDoc._id;
-    this.planModules = planDoc.modules || this.planModules;
-  } else {
-    // Hardcoded fallback when no Plan doc exists (legacy)
-    const fallback = {
-      starter: { maxBranches: 1, maxDoctors: 3, maxPatients: 500, storageLimit: 5120 },
-      professional: { maxBranches: 5, maxDoctors: 10, maxPatients: 5000, storageLimit: 51200 },
-      enterprise: { maxBranches: 999, maxDoctors: 999, maxPatients: 999999, storageLimit: 0 },
-    };
-    const s = fallback[this.plan] || fallback.starter;
-    Object.assign(this.settings, s);
+  if (!planDoc) {
+    throw new Error("Plan is required — tenant cannot be created without an explicit Plan");
   }
+  if (planDoc.limits?.maxBranches === undefined) {
+    throw new Error("Plan.limits.maxBranches is required");
+  }
+  if (planDoc.limits?.maxDoctors === undefined) {
+    throw new Error("Plan.limits.maxDoctors is required");
+  }
+  if (planDoc.limits?.maxPatients === undefined) {
+    throw new Error("Plan.limits.maxPatients is required");
+  }
+  const rawStorage = planDoc.limits?.storageLimit ?? planDoc.limits?.storage;
+  if (rawStorage === undefined || rawStorage === null || rawStorage === '') {
+    throw new Error("Plan.limits.storage is required");
+  }
+  if (!Array.isArray(planDoc.modules) || planDoc.modules.length === 0) {
+    throw new Error("Plan.modules must contain at least one module");
+  }
+  this.settings.maxBranches = planDoc.limits.maxBranches;
+  this.settings.maxDoctors = planDoc.limits.maxDoctors;
+  this.settings.maxPatients = planDoc.limits.maxPatients;
+  // Plan stores storage as "5GB"/"500MB"/"1TB" (string) or MB (number);
+  // Tenant stores settings.storageLimit in MB.
+  this.settings.storageLimit = parseStorageToMB(rawStorage);
+  if (this.settings.storageLimit === undefined) {
+    throw new Error("Plan.limits.storage is invalid");
+  }
+  this.plan = planDoc.key || planDoc.name?.toLowerCase().replace(/\s+/g, "_");
+  if (!this.plan) {
+    throw new Error("Plan key/name is required");
+  }
+  this.planId = planDoc._id;
+  this.planModules = planDoc.modules;
 };
 
 const Tenant = mongoose.model("Tenant", tenantSchema);

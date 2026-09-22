@@ -3,8 +3,19 @@ import jwt from "jsonwebtoken";
 
 export const ACCESS_COOKIE = "access_token";
 export const REFRESH_COOKIE = "refresh_token";
-const SITE_ACCESS_COOKIE = "site_access";
+export const SITE_ACCESS_COOKIE = "site_access";
 export const SITE_REFRESH_COOKIE = "site_refresh";
+export const CSRF_COOKIE = "_csrf";
+
+// Every cookie that can carry sensitive session data. Logout must expire all
+// of them so no JWT / CSRF material survives in the browser after logout.
+export const SENSITIVE_COOKIES = [
+  ACCESS_COOKIE,
+  REFRESH_COOKIE,
+  SITE_ACCESS_COOKIE,
+  SITE_REFRESH_COOKIE,
+  CSRF_COOKIE,
+];
 
 function secrets() {
   const access = process.env.JWT_SECRET;
@@ -110,20 +121,44 @@ export function setCsrfCookie(res) {
   }
 }
 
-export function clearAuthCookies(res, type = "clinic") {
-  if (type === "site") {
-    res.clearCookie(SITE_ACCESS_COOKIE, cookieOptions);
-    res.clearCookie(SITE_REFRESH_COOKIE, cookieOptions);
-  } else {
-    res.clearCookie(ACCESS_COOKIE, cookieOptions);
-    res.clearCookie(REFRESH_COOKIE, cookieOptions);
-  }
-  res.clearCookie("_csrf", {
+export function clearAuthCookies(res, _type = "clinic") {
+  // Always expire every sensitive cookie regardless of realm: a browser may
+  // hold clinic + site cookies at once (e.g. "login as" / impersonation
+  // flows), and leaving any of them behind keeps session material alive
+  // after logout. `_type` is kept for backward compatibility but ignored.
+  res.clearCookie(ACCESS_COOKIE, cookieOptions);
+  res.clearCookie(REFRESH_COOKIE, cookieOptions);
+  res.clearCookie(SITE_ACCESS_COOKIE, cookieOptions);
+  res.clearCookie(SITE_REFRESH_COOKIE, cookieOptions);
+  const csrfClearOptions = {
     httpOnly: false,
     sameSite: "strict",
     secure: res.req?.secure ?? process.env.NODE_ENV === "production",
     path: "/",
+  };
+  res.clearCookie(CSRF_COOKIE, csrfClearOptions);
+  // Defensive: also expire with the flipped `secure` flag so the cookie is
+  // removed even when the logout request arrives over a different scheme
+  // (http vs https) than the login that set it.
+  res.clearCookie(CSRF_COOKIE, {
+    ...csrfClearOptions,
+    secure: !csrfClearOptions.secure,
   });
+  // Belt-and-suspenders: overwrite HttpOnly session cookies with an
+  // immediately-expired empty value (correct path + flags) in case an
+  // intermediary strips one of the `Set-Cookie: Expires=1970` headers above.
+  for (const name of [
+    ACCESS_COOKIE,
+    REFRESH_COOKIE,
+    SITE_ACCESS_COOKIE,
+    SITE_REFRESH_COOKIE,
+  ]) {
+    res.cookie(name, "", {
+      ...cookieOptions,
+      maxAge: 0,
+      expires: new Date(0),
+    });
+  }
 }
 
 function msFromExpiry(expiry) {

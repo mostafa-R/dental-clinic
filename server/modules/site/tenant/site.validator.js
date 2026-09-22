@@ -4,21 +4,29 @@ const baseFields = {
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
   phone: z.string().optional(),
+  // plan accepts a plan key ("pro_plus", case/space insensitive) or a plan
+  // ObjectId — resolved strictly, unknown/inactive values are rejected.
   plan: z.string().optional(),
+  planId: z.string().optional(),
   status: z.enum(["trial", "active"]).optional(),
   address: z.string().optional(),
   city: z.string().optional(),
   country: z.string().optional(),
 };
 
-export const tenantSchema = z.object({
-  ...baseFields,
-  // Required: the platform admin sets the clinic admin's initial password
-  // at provisioning time. The API never returns a generated plaintext
-  // password, so we must not allow creating an account with an
-  // auto-generated one that would have no secure delivery channel.
-  adminPassword: z.string().min(8, "Admin password must be at least 8 characters"),
-});
+export const tenantSchema = z
+  .object({
+    ...baseFields,
+    // Required: the platform admin sets the clinic admin's initial password
+    // at provisioning time. The API never returns a generated plaintext
+    // password, so we must not allow creating an account with an
+    // auto-generated one that would have no secure delivery channel.
+    adminPassword: z.string().min(8, "Admin password must be at least 8 characters"),
+  })
+  .refine((v) => v.plan || v.planId, {
+    message: "Plan is required",
+    path: ["plan"],
+  });
 
 export const tenantUpdateSchema = z.object({
   ...baseFields,
@@ -26,6 +34,7 @@ export const tenantUpdateSchema = z.object({
 
 export const subscriptionSchema = z.object({
   plan: z.string().optional(),
+  planId: z.string().optional(),
   billingCycle: z.enum(["monthly", "yearly"]).optional(),
   status: z.enum(["active", "pending", "past_due", "cancelled"]).optional(),
 });

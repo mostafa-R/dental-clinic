@@ -29,6 +29,7 @@ import whatsappRoutes from "../modules/whatsapp/whatsapp.routes.js";
 // Platform routes
 import platformPlanRoutes from "../modules/platform/plan.routes.js";
 import platformSettingRoutes from "../modules/platform/platformSetting.routes.js";
+import publicPlanRoutes from "../modules/platform/publicPlan.routes.js";
 
 // Site routes
 import siteAnalyticsRoutes from "../modules/site/analytics/siteAnalytics.routes.js";
@@ -127,6 +128,9 @@ v1.use("/patients/:patientId/wallet", walletRoutes);
 v1.use("/patients/:patientId/installments", installmentPlanRoutes);
 v1.use("/recalls", recallRoutes);
 v1.use("/whatsapp", whatsappRoutes);
+
+// Public marketing routes (no authentication)
+v1.use("/public", publicPlanRoutes);
 
 // Site routes
 v1.use("/site/auth", siteAuthRoutes);

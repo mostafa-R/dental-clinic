@@ -81,12 +81,13 @@ describe("updatePlan", () => {
       storage: "5GB",
     });
     expect(Tenant.updateMany).toHaveBeenCalledWith(
-      { planId: "p1" },
+      { $or: [{ planId: "p1" }, { plan: "pro" }] },
       {
         $set: {
           "settings.maxBranches": 1,
           "settings.maxDoctors": 10,
           "settings.maxPatients": 500,
+          "settings.storageLimit": 5120,
           plan: "pro",
           planId: "p1",
           planModules: plan.modules,
@@ -134,6 +135,17 @@ describe("updatePlan", () => {
     await expect(updatePlan("missing", { name: "X" })).rejects.toMatchObject({
       statusCode: 404,
     });
+    expect(Tenant.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects renaming an immutable plan key", async () => {
+    const plan = makePlan();
+    vi.mocked(Plan.findById).mockResolvedValue(plan);
+
+    await expect(updatePlan("p1", { key: "renamed" })).rejects.toMatchObject({
+      statusCode: 400,
+    });
+    expect(plan.save).not.toHaveBeenCalled();
     expect(Tenant.updateMany).not.toHaveBeenCalled();
   });
 });

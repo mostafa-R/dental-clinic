@@ -2,13 +2,17 @@ import ApiError from '../../../utils/ApiError.js';
 import { cacheDel, invalidateTenant } from '../../../utils/cache.js';
 import { round2 } from '../../../constants/accounting.js';
 import { withTransaction } from '../../../core/transaction.js';
-import Plan from '../../platform/plan.model.js';
+import { planKeyOf, resolvePlanDoc } from '../../platform/plan.utils.js';
 import Subscription from '../tenant/subscription.model.js';
 import Tenant from '../tenant/tenant.model.js';
 
 export async function getPlanPrice(planKey, billingCycle) {
-  const planDoc = await Plan.findOne({ key: planKey, isActive: true }).lean();
-  const price = planDoc?.price ?? 99;
+  // Strict: plan is required, no 99 fallback.
+  const planDoc = await resolvePlanDoc(planKey);
+  if (planDoc?.price === undefined || planDoc?.price === null) {
+    throw ApiError.badRequest('Plan price is required', { plan: 'price required' });
+  }
+  const price = planDoc.price;
 
   if (billingCycle === 'yearly') {
     // Always store yearly as 12x monthly so MRR calculation (amount / 12) is correct
@@ -107,23 +111,31 @@ export async function getRevenueStats() {
   };
 }
 
-export async function updateSubscription(id, { plan, billingCycle, status }) {
+export async function updateSubscription(id, { plan, planId, billingCycle, status }) {
   const subscription = await Subscription.findById(id).populate('tenant');
   if (!subscription) throw ApiError.notFound('Subscription not found');
 
-  if (plan) subscription.plan = plan;
+  const planRef = plan ?? planId ?? null;
+  let planDoc = null;
+  if (planRef) {
+    // Throws 400 on unknown/inactive plan — never silently keep the old
+    // amount while stamping a plan key that has no limits/modules behind it.
+    // Legacy keys on an unseeded DB resolve to null (hardcoded fallback).
+    planDoc = await resolvePlanDoc(planRef);
+    subscription.plan = planKeyOf(planDoc) || String(planRef).trim().toLowerCase().replace(/\s+/g, '_');
+  }
   if (billingCycle) subscription.billingCycle = billingCycle;
-  if (plan || billingCycle) {
+  if (planRef || billingCycle) {
     subscription.amount = await getPlanPrice(subscription.plan, subscription.billingCycle);
   }
   if (status) subscription.status = status;
 
   await subscription.save();
 
-  if (plan && subscription.tenant) {
-    const planDoc = await Plan.findOne({ key: plan, isActive: true }).lean();
+  if (planRef && subscription.tenant) {
     const tenant = await Tenant.findById(subscription.tenant._id);
     if (tenant) {
+      if (!planDoc) tenant.plan = subscription.plan;
       tenant.updatePlanSettings(planDoc);
       await tenant.save();
       // The cached tenant config (protect middleware) and module flag are

@@ -8,7 +8,7 @@ const platformSettingSchema = new mongoose.Schema(
     allowedDomains: [{ type: String }],
     allowedSiteIps: { type: String, default: "" },
     maxTenants: { type: Number, default: 1000 },
-    defaultPlan: { type: String, default: "starter" },
+    defaultPlan: { type: String },
     trialDays: { type: Number, default: 14 },
     backupEnabled: { type: Boolean, default: true },
     backupRetentionDays: { type: Number, default: 30 },

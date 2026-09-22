@@ -6,6 +6,7 @@ import Tenant from '../modules/site/tenant/tenant.model.js';
 import Branch from '../modules/users/branch.model.js';
 import Role from '../modules/users/role.model.js';
 import User from '../modules/users/user.model.js';
+import SiteAdmin from '../modules/site/admin/admin.model.js';
 import { verifyAccessToken } from '../utils/jwt.js';
 
 let io = null;
@@ -79,6 +80,10 @@ export function initSocket(httpServer) {
     if (!raw && cookie && typeof cookie === 'string') {
       const match = cookie.match(/access_token=([^;]+)/);
       raw = match ? match[1] : null;
+      if (!raw) {
+        const siteMatch = cookie.match(/site_access=([^;]+)/);
+        raw = siteMatch ? siteMatch[1] : null;
+      }
     }
 
     if (!raw) {
@@ -90,6 +95,32 @@ export function initSocket(httpServer) {
       decoded = verifyAccessToken(raw);
     } catch {
       return next(new Error('Invalid or expired token'));
+    }
+
+    // Site-admin (dashboard) sessions authenticate with a `type: "site"`
+    // token: they join the admin room so platform alerts reach them live.
+    if (decoded.type === 'site') {
+      SiteAdmin.findById(decoded.sub)
+        .then((admin) => {
+          if (!admin || !admin.isActive) {
+            return next(new Error('Admin no longer valid'));
+          }
+          if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== admin.tokenVersion) {
+            return next(new Error('Token revoked — please log in again'));
+          }
+          socket.user = {
+            _id: admin._id.toString(),
+            name: admin.name,
+            branch: null,
+            tenant: null,
+            isSystemAdmin: admin.role === 'super_admin',
+            siteRole: admin.role,
+            siteAdmin: true,
+          };
+          next();
+        })
+        .catch((err) => next(err));
+      return;
     }
 
     User.findById(decoded.sub)
@@ -238,6 +269,19 @@ export function initSocket(httpServer) {
 export function getIO() {
   if (!io) throw new Error('Socket.io not initialized');
   return io;
+}
+
+/**
+ * Emit a platform event to every connected site admin (dashboard sessions
+ * join the `admin` room at handshake). Silent no-op when sockets are down.
+ */
+export function emitToAdmins(event, payload) {
+  if (!io) return;
+  try {
+    io.to(ADMIN_ROOM).emit(event, payload);
+  } catch (err) {
+    console.error('[Socket] emitToAdmins failed:', err.message);
+  }
 }
 
 /**

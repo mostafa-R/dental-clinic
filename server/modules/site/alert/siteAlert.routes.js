@@ -31,12 +31,32 @@ router.use(protectSite);
  *     description: Site realm. Requires super_admin or admin role with `monitoring:alerts:view`.
  *     security: [{ bearerAuth: [] }, { siteCookieAuth: [] }]
  *     parameters:
- *       - in: query, name: status, schema: { type: string, enum: [active, acknowledged, resolved] }
- *       - in: query, name: severity, schema: { type: string, enum: [critical, warning, info] }
- *       - in: query, name: type, schema: { type: string }
- *       - in: query, name: tenantId, schema: { type: string }
- *       - in: query, name: page, schema: { type: integer }
- *       - in: query, name: limit, schema: { type: integer }
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [active, acknowledged, resolved]
+ *       - in: query
+ *         name: severity
+ *         schema:
+ *           type: string
+ *           enum: [critical, warning, info]
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: tenantId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
  *     responses:
  *       '200': { description: List of alerts }
  *       '401': { $ref: '#/components/responses/Unauthorized' }
@@ -89,7 +109,11 @@ router.post("/read-all", authorizeSite("super_admin", "admin"), requireSitePermi
  *     summary: Get alert by id
  *     security: [{ bearerAuth: [] }, { siteCookieAuth: [] }]
  *     parameters:
- *       - in: path, name: id, required: true, schema: { $ref: '#/components/schemas/ObjectId' }
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           $ref: '#/components/schemas/ObjectId'
  *     responses:
  *       '200': { description: Alert }
  *       '404': { $ref: '#/components/responses/NotFound' }
@@ -105,7 +129,11 @@ router.get("/:id", authorizeSite("super_admin", "admin"), requireSitePermission(
  *     description: Requires `monitoring:alerts:manage`. Audited.
  *     security: [{ bearerAuth: [] }, { siteCookieAuth: [] }]
  *     parameters:
- *       - in: path, name: id, required: true, schema: { $ref: '#/components/schemas/ObjectId' }
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           $ref: '#/components/schemas/ObjectId'
  *     responses:
  *       '200': { description: Alert acknowledged }
  *       '404': { $ref: '#/components/responses/NotFound' }
@@ -121,7 +149,11 @@ router.post("/:id/acknowledge", authorizeSite("super_admin", "admin"), requireSi
  *     description: Requires `monitoring:alerts:manage`. Audited.
  *     security: [{ bearerAuth: [] }, { siteCookieAuth: [] }]
  *     parameters:
- *       - in: path, name: id, required: true, schema: { $ref: '#/components/schemas/ObjectId' }
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           $ref: '#/components/schemas/ObjectId'
  *     responses:
  *       '200': { description: Alert resolved }
  *       '404': { $ref: '#/components/responses/NotFound' }

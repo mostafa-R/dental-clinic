@@ -1,13 +1,11 @@
 import Tenant from '../tenant/tenant.model.js';
 import ApiError from '../../../utils/ApiError.js';
 import { cacheGet, cacheSet, cacheDel, invalidateTenant } from '../../../utils/cache.js';
+import { MODULE_KEYS } from '../../../constants/permissions.js';
 
-const AVAILABLE_MODULES = [
-  'dashboard', 'patients', 'appointments', 'billing',
-  'accounting', 'emr', 'prescriptions', 'users',
-  'branches', 'inventory', 'roles', 'settings',
-  'chat', 'search',
-];
+// Canonical module list — single source of truth is
+// server/constants/permissions.js so plans, roles and feature flags never drift.
+const AVAILABLE_MODULES = MODULE_KEYS;
 
 export async function getTenantModules(tenantId) {
   let tenant = await cacheGet('modules', tenantId);
@@ -27,7 +25,11 @@ export async function getTenantModules(tenantId) {
 
 export async function toggleModule(tenantId, { module, enabled }) {
   if (!AVAILABLE_MODULES.includes(module)) {
-    throw ApiError.badRequest(`Invalid module. Must be one of: ${AVAILABLE_MODULES.join(', ')}`);
+    // Legacy keys (e.g. `search`) may still be stored on old tenants:
+    // allow disabling them for cleanup, but never re-enabling.
+    if (enabled) {
+      throw ApiError.badRequest(`Invalid module. Must be one of: ${AVAILABLE_MODULES.join(', ')}`);
+    }
   }
 
   const tenant = await Tenant.findById(tenantId);

@@ -34,15 +34,15 @@ describe("planIncludesModule", () => {
     expect(planIncludesModule(tenant, "inventory")).toBe(false);
   });
 
-  it("falls back to the plan map when planModules is empty", () => {
+  it("denies all modules when planModules is empty (strict, no fallback)", () => {
     const tenant = { plan: "professional", planModules: [] };
-    expect(planIncludesModule(tenant, "accounting")).toBe(true);
+    expect(planIncludesModule(tenant, "accounting")).toBe(false);
     expect(planIncludesModule(tenant, "inventory")).toBe(false);
   });
 
-  it("falls back to the starter plan for unknown plans", () => {
+  it("denies all modules for unknown plans without stamped modules", () => {
     const tenant = { plan: "mystery", planModules: [] };
-    expect(planIncludesModule(tenant, "billing")).toBe(true);
+    expect(planIncludesModule(tenant, "billing")).toBe(false);
     expect(planIncludesModule(tenant, "roles")).toBe(false);
   });
 });
@@ -187,7 +187,7 @@ describe("checkPermission middleware", () => {
       permissions: [{ module: "billing", actions: ["read", "create", "update"] }],
     });
     const next = vi.fn();
-    const req = makeReq({ roleId: "r1", tenant: null });
+    const req = makeReq({ roleId: "r1", tenant: { _id: "t1", plan: "starter", planModules: ["billing"] } });
     await checkPermission("billing", "create")(req, res, next);
     expect(next).toHaveBeenCalledTimes(1);
     expect(next.mock.calls[0][0]).toBeUndefined();
@@ -201,10 +201,24 @@ describe("checkPermission middleware", () => {
       permissions: [{ module: "billing", actions: ["read"] }],
     });
     const next = vi.fn();
-    const req = makeReq({ roleId: "r1", tenant: null });
+    const req = makeReq({ roleId: "r1", tenant: { _id: "t1", planModules: ["billing"] } });
     await checkPermission("billing", "delete")(req, res, next);
     expect(next.mock.calls[0][0]).toMatchObject({ statusCode: 403 });
     expect(next.mock.calls[0][0].message).toContain("You do not have permission to delete billing");
+  });
+
+  it("denies a non-admin with missing tenant context (no plan bypass)", async () => {
+    vi.mocked(getCachedRole).mockResolvedValue({
+      _id: "r1",
+      tenant: null,
+      isSystemAdmin: false,
+      permissions: [{ module: "billing", actions: ["read", "create"] }],
+    });
+    const next = vi.fn();
+    const req = makeReq({ roleId: "r1", tenant: null });
+    await checkPermission("billing", "read")(req, res, next);
+    expect(next.mock.calls[0][0]).toMatchObject({ statusCode: 403 });
+    expect(next.mock.calls[0][0].message).toContain("Clinic context is missing");
   });
 
   it("bypasses permission checks for system admins", async () => {
@@ -234,6 +248,72 @@ describe("checkPermission middleware", () => {
     expect(next.mock.calls[0][0]).toBeUndefined();
   });
 
+  describe("subscription entitlement (free plan بدون_تكلفة)", () => {
+    const FREE_MODULES = [
+      "dashboard",
+      "patients",
+      "appointments",
+      "billing",
+      "emr",
+      "treatment_plans",
+      "dental_chart",
+      "users",
+      "roles",
+    ];
+    function freeTenant() {
+      return { _id: "t-free", plan: "free", planModules: FREE_MODULES };
+    }
+    function roleWith(...modules) {
+      return {
+        _id: "r1",
+        tenant: null,
+        isSystemAdmin: false,
+        permissions: modules.map((m) => ({ module: m, actions: ["read", "create", "update", "delete"] })),
+      };
+    }
+
+    it("free plan + role allows inventory => 403 (plan gate first)", async () => {
+      vi.mocked(getCachedRole).mockResolvedValue(roleWith("inventory"));
+      const next = vi.fn();
+      await checkPermission("inventory", "read")(makeReq({ roleId: "r1", tenant: freeTenant() }), res, next);
+      expect(next.mock.calls[0][0]).toMatchObject({ statusCode: 403 });
+      expect(next.mock.calls[0][0].message).toContain("does not include the inventory module");
+    });
+
+    it("free plan + role allows accounting => 403", async () => {
+      vi.mocked(getCachedRole).mockResolvedValue(roleWith("accounting"));
+      const next = vi.fn();
+      await checkPermission("accounting", "read")(makeReq({ roleId: "r1", tenant: freeTenant() }), res, next);
+      expect(next.mock.calls[0][0]).toMatchObject({ statusCode: 403 });
+    });
+
+    it("free plan + role allows patients => 200", async () => {
+      vi.mocked(getCachedRole).mockResolvedValue(roleWith("patients"));
+      const next = vi.fn();
+      await checkPermission("patients", "read")(makeReq({ roleId: "r1", tenant: freeTenant() }), res, next);
+      expect(next.mock.calls[0][0]).toBeUndefined();
+    });
+
+    it("plan with inventory + role allows inventory => 200", async () => {
+      vi.mocked(getCachedRole).mockResolvedValue(roleWith("inventory"));
+      const next = vi.fn();
+      const tenant = { _id: "t-ent", plan: "ent", planModules: [...FREE_MODULES, "inventory"] };
+      await checkPermission("inventory", "read")(makeReq({ roleId: "r1", tenant }), res, next);
+      expect(next.mock.calls[0][0]).toBeUndefined();
+    });
+
+    it("empty planModules => deny all (no fallback)", async () => {
+      vi.mocked(getCachedRole).mockResolvedValue(roleWith("patients"));
+      const next = vi.fn();
+      await checkPermission("patients", "read")(
+        makeReq({ roleId: "r1", tenant: { _id: "t1", plan: "free", planModules: [] } }),
+        res,
+        next,
+      );
+      expect(next.mock.calls[0][0]).toMatchObject({ statusCode: 403 });
+    });
+  });
+
   it("caches the resolved role on the request for reuse", async () => {
     vi.mocked(getCachedRole).mockClear();
     vi.mocked(cacheRole).mockClear();
@@ -244,7 +324,7 @@ describe("checkPermission middleware", () => {
       permissions: [{ module: "billing", actions: ["read", "create"] }],
     });
     const next = vi.fn();
-    const req = makeReq({ roleId: "r1", tenant: null });
+    const req = makeReq({ roleId: "r1", tenant: { _id: "t1", planModules: ["billing"] } });
     await checkPermission("billing", "read")(req, res, next);
     await checkPermission("billing", "create")(req, res, next);
     expect(req._roleResolved).toBeDefined();
@@ -325,12 +405,26 @@ describe("checkAnyPermission middleware", () => {
       _id: "r1",
       tenant: null,
       isSystemAdmin: false,
-      permissions: [{ module: "refunds", actions: ["approve"] }],
+      permissions: [{ module: "billing", actions: ["read"] }],
+    });
+    const next = vi.fn();
+    const req = makeReq({ roleId: "r1", tenant: { _id: "t1", planModules: ["billing"] } });
+    await checkAnyPermission([["billing", "read"], ["roles", "read"]])(req, res, next);
+    expect(next.mock.calls[0][0]).toBeUndefined();
+    expect(req._roleResolved).toBeDefined();
+  });
+
+  it("denies checkAnyPermission for non-admin with missing tenant", async () => {
+    vi.mocked(getCachedRole).mockResolvedValue({
+      _id: "r1",
+      tenant: null,
+      isSystemAdmin: false,
+      permissions: [{ module: "billing", actions: ["read"] }],
     });
     const next = vi.fn();
     const req = makeReq({ roleId: "r1", tenant: null });
-    await checkAnyPermission([["refunds", "approve"], ["roles", "read"]])(req, res, next);
-    expect(next.mock.calls[0][0]).toBeUndefined();
-    expect(req._roleResolved).toBeDefined();
+    await checkAnyPermission([["billing", "read"], ["roles", "read"]])(req, res, next);
+    expect(next.mock.calls[0][0]).toMatchObject({ statusCode: 403 });
+    expect(next.mock.calls[0][0].message).toContain("Clinic context is missing");
   });
 });

@@ -3,6 +3,7 @@ import {
   createPlan,
   deletePlan,
   getPlan,
+  getPlanModules,
   getPlans,
   updatePlan,
 } from "./plan.controller.js";
@@ -18,19 +19,17 @@ router.use(protectSite);
 const planSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   price: z.number().min(0, "Price must be positive"),
-  interval: z.enum(["month", "year"]).optional(),
-  modules: z.array(z.string()).optional(),
-  limits: z
-    .object({
-      maxBranches: z.number().min(0).optional(),
-      maxDoctors: z.number().min(0).optional(),
-      maxPatients: z.number().min(0).optional(),
-      storage: z.union([z.string(), z.number()]).optional(),
-    })
-    .optional(),
+  interval: z.enum(["month", "year"], { required_error: "Interval is required" }),
+  modules: z.array(z.string()).min(1, "At least one module is required"),
+  limits: z.object({
+    maxBranches: z.number().min(0, "maxBranches is required"),
+    maxDoctors: z.number().min(0, "maxDoctors is required"),
+    maxPatients: z.number().min(0, "maxPatients is required"),
+    storage: z.union([z.string(), z.number()]),
+  }),
   support: z.string().optional(),
   features: z.array(z.string()).optional(),
-  isActive: z.boolean().optional(),
+  isActive: z.boolean({ required_error: "isActive is required" }),
 });
 
 /**
@@ -64,6 +63,43 @@ const planSchema = z.object({
  *         $ref: '#/components/responses/Forbidden'
  */
 router.get("/", authorizeSite("super_admin", "admin", "support"), getPlans);
+
+/**
+ * @swagger
+ * /api/v1/site/plans/modules:
+ *   get:
+ *     tags: [Platform Plans]
+ *     summary: List all assignable plan modules
+ *     description: Site realm. Returns the canonical module catalog (key + label) from `server/constants/permissions.js` for the Plans "modules (app access)" checkboxes. Requires `super_admin`, `admin`, or `support` role.
+ *     security:
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
+ *     responses:
+ *       '200':
+ *         description: Module catalog
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     modules:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           key: { type: string }
+ *                           label: { type: string }
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ */
+// Static route — must stay before /:id so Express does not treat "modules" as an id.
+router.get("/modules", authorizeSite("super_admin", "admin", "support"), getPlanModules);
 
 /**
  * @swagger
@@ -216,7 +252,25 @@ router.post("/", authorizeSite("super_admin"), require2faSuperAdmin, validate(pl
  *       '404':
  *         $ref: '#/components/responses/NotFound'
  */
-router.put("/:id", authorizeSite("super_admin"), require2faSuperAdmin, validate(planSchema), updatePlan);
+const planUpdateSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").optional(),
+  price: z.number().min(0, "Price must be positive").optional(),
+  interval: z.enum(["month", "year"]).optional(),
+  modules: z.array(z.string()).min(1, "At least one module is required").optional(),
+  limits: z
+    .object({
+      maxBranches: z.number().min(0).optional(),
+      maxDoctors: z.number().min(0).optional(),
+      maxPatients: z.number().min(0).optional(),
+      storage: z.union([z.string(), z.number()]).optional(),
+    })
+    .optional(),
+  support: z.string().optional(),
+  features: z.array(z.string()).optional(),
+  isActive: z.boolean().optional(),
+});
+
+router.put("/:id", authorizeSite("super_admin"), require2faSuperAdmin, validate(planUpdateSchema), updatePlan);
 
 /**
  * @swagger

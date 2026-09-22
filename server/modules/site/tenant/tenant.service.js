@@ -6,6 +6,7 @@ import ApiError from '../../../utils/ApiError.js';
 import { cacheDel, cacheDelPattern, invalidateTenant, invalidateTenantRoles } from '../../../utils/cache.js';
 import { withTransaction } from '../../../core/transaction.js';
 import Counter from '../../../core/counters.js';
+import { planKeyOf, resolvePlanDoc } from '../../platform/plan.utils.js';
 import { getPlanPrice } from '../subscription/subscription.service.js';
 import OwnerDrawing from '../../accounting/ownerDrawing.model.js';
 import Expense from '../../accounting/expense.model.js';
@@ -26,7 +27,6 @@ import Inventory from '../../inventory/inventory.model.js';
 import Patient from '../../patients/patient.model.js';
 import Installment from '../../patients/installment.model.js';
 import Wallet from '../../patients/wallet.model.js';
-import Plan from '../../platform/plan.model.js';
 import PlatformSetting from '../../platform/platformSetting.model.js';
 import ErrorLog from '../../site/errorLog/errorLog.model.js';
 import Branch from '../../users/branch.model.js';
@@ -127,7 +127,7 @@ export async function getTenantById(id) {
   return { ...tenant, branchesCount, usersCount, patientsCount, appointmentsCount };
 }
 
-export async function createTenant({ name, email, phone, plan, status, address, city, country, adminPassword }) {
+export async function createTenant({ name, email, phone, plan, planId, status, address, city, country, adminPassword }) {
   const existingTenant = await Tenant.findOne({ email });
   if (existingTenant) {
     throw ApiError.conflict('A tenant with this email already exists');
@@ -138,7 +138,12 @@ export async function createTenant({ name, email, phone, plan, status, address, 
     throw ApiError.conflict('A user with this email already exists; the tenant email must be unique');
   }
 
-  const planDoc = plan ? await Plan.findOne({ key: plan, isActive: true }).lean() : null;
+  // Strict: plan is required and must resolve to a real, active Plan doc.
+  // No silent starter fallback.
+  if (!plan && !planId) {
+    throw ApiError.badRequest('Plan is required', { plan: 'required' });
+  }
+  const planDoc = await resolvePlanDoc(plan ?? planId);
   const platformSettings = await PlatformSetting.findOne().lean();
   const trialDays = platformSettings?.trialDays ?? 14;
 
@@ -156,9 +161,13 @@ export async function createTenant({ name, email, phone, plan, status, address, 
   const now = new Date();
   const trialEndsAt = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
 
+  // Plan.interval is "month" | "year"; Subscription.billingCycle is
+  // "monthly" | "yearly". The old code read planDoc.billingCycle (which does
+  // not exist on the Plan model) so every tenant silently got a 30-day period
+  // even on yearly plans.
+  const billingCycle = planDoc?.interval === 'year' ? 'yearly' : 'monthly';
   let subscriptionEndsAt = null;
   if (tenantStatus === 'active') {
-    const billingCycle = planDoc?.billingCycle === 'yearly' ? 'yearly' : 'monthly';
     const periodDays = billingCycle === 'yearly' ? 365 : 30;
     subscriptionEndsAt = new Date(now.getTime() + periodDays * 24 * 60 * 60 * 1000);
   }
@@ -256,11 +265,22 @@ export async function createTenant({ name, email, phone, plan, status, address, 
       isActive: true,
     }], { session });
 
-    const amount = planDoc?.price ?? 99;
+    // Price follows the same rule as getPlanPrice so the subscription row
+    // matches what billing reports charge: yearly = 12x monthly, and a plan
+    // with interval "year" billed monthly stores its monthly equivalent.
+    // Strict: planDoc is required, no 99 fallback.
+    if (planDoc.price === undefined || planDoc.price === null) {
+      throw ApiError.badRequest('Plan price is required', { plan: 'price required' });
+    }
+    const price = Number(planDoc.price);
+    let amount;
+    if (billingCycle === 'yearly') amount = Math.round(price * 12 * 100) / 100;
+    else amount = Math.round((planDoc.interval === 'year' ? price / 12 : price) * 100) / 100;
     await Subscription.create([{
       tenant: tenant._id,
       plan: tenant.plan,
       status: tenantStatus === 'active' ? 'active' : 'pending',
+      billingCycle,
       amount,
       currentPeriodStart: new Date(),
       currentPeriodEnd: subscriptionEndsAt || tenant.trialEndsAt,
@@ -281,7 +301,7 @@ export async function createTenant({ name, email, phone, plan, status, address, 
   };
 }
 
-export async function updateTenant(id, { name, email, phone, plan, status, address, city, country }) {
+export async function updateTenant(id, { name, email, phone, plan, planId, status, address, city, country }) {
   const tenant = await Tenant.findById(id);
   if (!tenant) throw ApiError.notFound('Tenant not found');
 
@@ -295,8 +315,10 @@ export async function updateTenant(id, { name, email, phone, plan, status, addre
   if (name) tenant.name = name;
   if (email) tenant.email = email;
   if (phone !== undefined) tenant.phone = phone;
-  if (plan) {
-    const planDoc = await Plan.findOne({ key: plan, isActive: true }).lean();
+  const planRef = plan ?? planId ?? null;
+  if (planRef) {
+    // Strict: unknown/inactive plan throws, no legacy fallback.
+    const planDoc = await resolvePlanDoc(planRef);
     tenant.updatePlanSettings(planDoc);
 
     // Keep the tenant's subscription in sync so a plan change via this route
@@ -304,10 +326,16 @@ export async function updateTenant(id, { name, email, phone, plan, status, addre
     // reports and the payment/activation flows read).
     const subscription = await Subscription.findOne({ tenant: id });
     if (subscription) {
-      subscription.plan = plan;
-      subscription.amount = await getPlanPrice(plan, subscription.billingCycle);
+      const canonicalKey = planKeyOf(planDoc) || tenant.plan;
+      subscription.plan = canonicalKey;
+      subscription.amount = await getPlanPrice(canonicalKey, subscription.billingCycle);
       await subscription.save();
     }
+    // Plan reassignment must invalidate the cached tenant config immediately.
+    // `protect` serves req.user.tenant from Redis (2-min TTL) and
+    // getMyPermissions intersects from it — without this, the clinic keeps
+    // the OLD planModules until the TTL expires ("plan is ignored").
+    await invalidateTenant(String(id));
     await cacheDel('modules', String(id));
   }
   if (status && status !== tenant.status) {
@@ -315,8 +343,14 @@ export async function updateTenant(id, { name, email, phone, plan, status, addre
     if (status === 'active') {
       tenant.isActive = true;
       if (!tenant.subscriptionEndsAt) {
-        const billingCycle = tenant.plan === 'enterprise' ? 'yearly' : 'monthly';
-        const periodDays = billingCycle === 'yearly' ? 365 : 30;
+        // Derive the period from the tenant's actual subscription billing
+        // cycle (which mirrors the plan interval) instead of hardcoding
+        // "enterprise => yearly". Falls back to monthly when unknown.
+        let periodDays = 30;
+        try {
+          const sub = await Subscription.findOne({ tenant: id }).select('billingCycle').lean();
+          if (sub?.billingCycle === 'yearly') periodDays = 365;
+        } catch { /* keep monthly default */ }
         tenant.subscriptionEndsAt = new Date(Date.now() + periodDays * 24 * 60 * 60 * 1000);
       }
       tenant.trialEndsAt = null;
