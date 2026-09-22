@@ -1,12 +1,12 @@
-import { useEffect } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
-import { useSelector } from 'react-redux';
-import Sidebar from './Sidebar';
-import Topbar from './Topbar';
-import ChatGlobalListener from '../../features/chat/ChatGlobalListener';
-import { applyServerPreferences } from '../../features/preferences/usePreferences';
-import { initNotifications } from '../../lib/notificationSound';
-import { useT } from '../../lib/i18n';
+import { useEffect } from "react";
+import { Outlet, useLocation } from "react-router-dom";
+import { useSelector } from "react-redux";
+import Sidebar from "./Sidebar";
+import Topbar from "./Topbar";
+import ChatGlobalListener from "../../features/chat/ChatGlobalListener";
+import { applyServerPreferences } from "../../features/preferences/usePreferences";
+import { initNotifications } from "../../lib/notificationSound";
+import { useT } from "../../lib/i18n";
 
 function ImpersonationBanner() {
   const user = useSelector((s) => s.auth.user);
@@ -16,11 +16,15 @@ function ImpersonationBanner() {
   return (
     <div className="bg-red-600 text-white text-sm px-4 py-2 flex items-center justify-between">
       <span>
-        <strong>{t('impersonation.title')}</strong> {t('impersonation.actingAs')} {user.name || user.email}
-        <span className="ms-2 text-red-200 text-xs"> — {t('impersonation.logged')}</span>
+        <strong>{t("impersonation.title")}</strong>{" "}
+        {t("impersonation.actingAs")} {user.name || user.email}
+        <span className="ms-2 text-red-200 text-xs">
+          {" "}
+          — {t("impersonation.logged")}
+        </span>
       </span>
       <span className="text-xs bg-white/20 px-2 py-0.5 rounded">
-        {t('impersonation.by')} {user._impersonator || t('impersonation.admin')}
+        {t("impersonation.by")} {user._impersonator || t("impersonation.admin")}
       </span>
     </div>
   );
@@ -41,10 +45,10 @@ export default function AppLayout() {
   useEffect(() => {
     const handler = () => {
       initNotifications();
-      document.removeEventListener('click', handler);
+      document.removeEventListener("click", handler);
     };
-    document.addEventListener('click', handler);
-    return () => document.removeEventListener('click', handler);
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
   }, []);
 
   return (
