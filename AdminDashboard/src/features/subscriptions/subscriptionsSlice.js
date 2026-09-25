@@ -29,6 +29,20 @@ export const fetchRevenueStats = createAsyncThunk(
   },
 );
 
+export const createSubscription = createAsyncThunk(
+  "subscriptions/createSubscription",
+  async ({ tenantId, data }, { rejectWithValue }) => {
+    try {
+      const response = await api.post(`/subscriptions/${tenantId}`, data);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to create subscription",
+      );
+    }
+  },
+);
+
 export const updateSubscription = createAsyncThunk(
   "subscriptions/updateSubscription",
   async ({ id, data }, { rejectWithValue }) => {
@@ -114,12 +128,24 @@ const subscriptionsSlice = createSlice({
           state.items[index] = action.payload;
         }
       })
+      .addCase(updateSubscription.rejected, (state, action) => {
+        state.error = action.payload;
+      })
+      .addCase(createSubscription.fulfilled, (state, action) => {
+        state.items.unshift(action.payload);
+      })
+      .addCase(createSubscription.rejected, (state, action) => {
+        state.error = action.payload;
+      })
       .addCase(processPayment.fulfilled, (state, action) => {
         const updated = action.payload.subscription;
         const index = state.items.findIndex((s) => s._id === updated?._id);
         if (index !== -1 && updated) {
           state.items[index] = updated;
         }
+      })
+      .addCase(processPayment.rejected, (state, action) => {
+        state.error = action.payload;
       });
   },
 });

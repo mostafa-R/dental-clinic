@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { unwrapResult } from "@reduxjs/toolkit";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
@@ -12,43 +13,115 @@ import {
   ExclamationTriangleIcon,
 } from "../components/ui/icons";
 import {
+  clearError,
+  createSubscription,
   fetchRevenueStats,
   fetchSubscriptions,
   updateSubscription,
   processPayment,
 } from "../features/subscriptions/subscriptionsSlice";
 import { fetchPlans } from "../features/plans/plansSlice";
+import { fetchTenants } from "../features/tenants/tenantsSlice";
 import { formatCurrency, formatDate } from "../lib/format";
 import { t } from "../lib/i18n";
 import { canUserAccess } from "../lib/permissions";
 
 export default function Billing() {
   const dispatch = useDispatch();
-  const { items, revenueStats, loading } = useSelector((state) => state.subscriptions);
+  const { items, revenueStats, loading, error } = useSelector(
+    (state) => state.subscriptions,
+  );
   const { items: plans } = useSelector((state) => state.plans);
+  const { items: tenants } = useSelector((state) => state.tenants);
   const { language } = useSelector((state) => state.ui);
   const { user } = useSelector((state) => state.auth);
   const [paymentModal, setPaymentModal] = useState(null);
   const [editModal, setEditModal] = useState(null);
+  const [createModal, setCreateModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [editPlan, setEditPlan] = useState("");
+  const [newTenantId, setNewTenantId] = useState("");
+  const [newPlan, setNewPlan] = useState("");
+  const [newCycle, setNewCycle] = useState("monthly");
+  const [newStatus, setNewStatus] = useState("pending");
   const [actionLoading, setActionLoading] = useState(false);
+  // Failures used to vanish: dispatch() on a rejected thunk RESOLVES with the
+  // rejected action, so the modals closed as if the write had succeeded and the
+  // user never learned why their plan change did not take effect. Every action
+  // below now unwraps and reports instead.
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
     dispatch(fetchRevenueStats());
     dispatch(fetchSubscriptions());
     dispatch(fetchPlans());
+    // 100 is the server's hard cap (site.controller.js clamps limit to 100).
+    dispatch(fetchTenants({ limit: 100 }));
   }, [dispatch]);
+
+  const closeAll = () => {
+    setPaymentModal(null);
+    setEditModal(null);
+    setCreateModal(false);
+    setFormError("");
+    dispatch(clearError());
+  };
+
+  /**
+   * Run a subscription action, surfacing any failure. Returns true on success
+   * so the caller only closes its modal when the write actually landed.
+   */
+  const runAction = async (thunk) => {
+    setActionLoading(true);
+    setFormError("");
+    try {
+      await dispatch(thunk).then(unwrapResult);
+      return true;
+    } catch (err) {
+      setFormError(typeof err === "string" ? err : t("actionFailed", language));
+      return false;
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   if (loading && !revenueStats.totalRevenue) {
     return <PageLoader />;
   }
 
   const can = (key) => canUserAccess(user, key);
+  // A clinic with no subscription row cannot be edited — it has to be created
+  // first, which is what the "New Subscription" action is for.
+  const subscribedTenantIds = new Set(
+    (items || []).map((s) => String(s.tenant?._id || s.tenant)),
+  );
+  const unsubscribed = (tenants || []).filter(
+    (t2) => !subscribedTenantIds.has(String(t2._id)),
+  );
 
   return (
     <div className="p-6">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+          {t("billing", language)}
+        </h2>
+        {can("billing.update") && (
+          <Button onClick={() => { setCreateModal(true); setFormError(""); }}>
+            {t("newSubscription", language)}
+          </Button>
+        )}
+      </div>
+
+      {error && !formError && (
+        <div
+          role="alert"
+          className="mb-6 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-300"
+        >
+          {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatCard
           title={t("totalRevenueLabel", language)}
@@ -201,10 +274,7 @@ export default function Billing() {
 
       <Modal
         isOpen={!!editModal}
-        onClose={() => {
-          setEditModal(null);
-          setEditPlan("");
-        }}
+        onClose={closeAll}
         title={t("edit", language)}
         size="sm"
       >
@@ -225,27 +295,30 @@ export default function Billing() {
               ))}
             </select>
           </div>
+          {formError && (
+            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+              {formError}
+            </p>
+          )}
           <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={() => setEditModal(null)}>
+            <Button variant="secondary" onClick={closeAll}>
               {t("cancel", language)}
             </Button>
             <Button
               loading={actionLoading}
               onClick={async () => {
                 if (!editModal) return;
-                setActionLoading(true);
-                try {
-                  await dispatch(updateSubscription({
+                const ok = await runAction(
+                  updateSubscription({
                     id: editModal._id,
                     data: {
                       plan: editPlan,
                       status: editModal.status,
                     },
-                  }));
-                  setEditModal(null);
-                } finally {
-                  setActionLoading(false);
-                }
+                  }),
+                );
+                // Only close once the server confirmed the write.
+                if (ok) closeAll();
               }}
             >
               {t("save", language)}
@@ -256,11 +329,7 @@ export default function Billing() {
 
       <Modal
         isOpen={!!paymentModal}
-        onClose={() => {
-          setPaymentModal(null);
-          setPaymentAmount("");
-          setPaymentMethod("cash");
-        }}
+        onClose={closeAll}
         title={t("processPayment", language)}
         size="sm"
       >
@@ -292,30 +361,150 @@ export default function Billing() {
               <option value="bank_transfer">{t("paymentBankTransfer", language)}</option>
             </select>
           </div>
+          {formError && (
+            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+              {formError}
+            </p>
+          )}
           <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={() => setPaymentModal(null)}>
+            <Button variant="secondary" onClick={closeAll}>
               {t("cancel", language)}
             </Button>
             <Button
               loading={actionLoading}
               onClick={async () => {
                 if (!paymentModal) return;
-                setActionLoading(true);
-                try {
-                  await dispatch(processPayment({
+                const ok = await runAction(
+                  processPayment({
                     tenantId: paymentModal.tenant?._id || paymentModal.tenant,
                     data: {
                       amount: Number(paymentAmount || paymentModal.amount || 0),
                       paymentMethod,
                     },
-                  }));
-                  setPaymentModal(null);
-                } finally {
-                  setActionLoading(false);
-                }
+                  }),
+                );
+                if (ok) closeAll();
               }}
             >
               {t("processPayment", language)}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={createModal}
+        onClose={closeAll}
+        title={t("newSubscription", language)}
+        size="sm"
+      >
+        <div className="space-y-4">
+          {unsubscribed.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {t("allClinicsSubscribed", language)}
+            </p>
+          ) : (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  {t("selectClinic", language)}
+                </label>
+                <select
+                  value={newTenantId}
+                  onChange={(e) => setNewTenantId(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                >
+                  <option value="">—</option>
+                  {unsubscribed.map((t2) => (
+                    <option key={t2._id} value={t2._id}>
+                      {t2.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  {t("plan", language)}
+                </label>
+                <select
+                  value={newPlan}
+                  onChange={(e) => setNewPlan(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                >
+                  <option value="">—</option>
+                  {plans.map((plan) => (
+                    <option key={plan._id} value={plan.key}>
+                      {plan.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  {t("billingCycle", language)}
+                </label>
+                <select
+                  value={newCycle}
+                  onChange={(e) => setNewCycle(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                >
+                  <option value="monthly">{t("monthly", language)}</option>
+                  <option value="yearly">{t("yearly", language)}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  {t("subscriptionStatus", language)}
+                </label>
+                <select
+                  value={newStatus}
+                  onChange={(e) => setNewStatus(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                >
+                  <option value="pending">{t("startPending", language)}</option>
+                  <option value="active">{t("startActiveNow", language)}</option>
+                </select>
+              </div>
+            </>
+          )}
+          {formError && (
+            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+              {formError}
+            </p>
+          )}
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={closeAll}>
+              {t("cancel", language)}
+            </Button>
+            <Button
+              loading={actionLoading}
+              onClick={async () => {
+                if (!newTenantId) {
+                  setFormError(t("selectClinicFirst", language));
+                  return;
+                }
+                if (!newPlan) {
+                  setFormError(t("selectPlanFirst", language));
+                  return;
+                }
+                const ok = await runAction(
+                  createSubscription({
+                    tenantId: newTenantId,
+                    data: {
+                      plan: newPlan,
+                      billingCycle: newCycle,
+                      status: newStatus,
+                    },
+                  }),
+                );
+                if (ok) {
+                  setNewTenantId("");
+                  setNewPlan("");
+                  closeAll();
+                }
+              }}
+            >
+              {t("subscribeClinic", language)}
             </Button>
           </div>
         </div>

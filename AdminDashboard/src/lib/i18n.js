@@ -165,6 +165,22 @@ export const translations = {
     fromLastMonth: "+12% from last month",
     tenants_count: "({count} tenants)",
 
+    // Subscribing a clinic
+    newSubscription: "New Subscription",
+    subscribeClinic: "Subscribe Clinic",
+    selectClinic: "Select clinic",
+    billingCycle: "Billing Cycle",
+    monthly: "Monthly",
+    yearly: "Yearly",
+    startActiveNow: "Activate clinic immediately",
+    startPending: "Leave pending until payment",
+    subscriptionCreated: "Subscription created. The plan's modules and limits were applied to the clinic.",
+    actionFailed: "Action failed",
+    clinicsWithoutSubscription: "Clinics without a subscription",
+    allClinicsSubscribed: "Every clinic has a subscription.",
+    selectClinicFirst: "Select a clinic first",
+    selectPlanFirst: "Select a plan first",
+
     // Analytics
     tenantGrowth: "Tenant Growth",
     revenueGrowth: "Revenue Growth",
@@ -833,6 +849,22 @@ export const translations = {
     overdue: "متأخر",
     fromLastMonth: "+12% عن الشهر الماضي",
     tenants_count: "({count} مشترك)",
+
+    // Subscribing a clinic
+    newSubscription: "اشتراك جديد",
+    subscribeClinic: "اشتراك عيادة",
+    selectClinic: "اختر العيادة",
+    billingCycle: "دورة الفوترة",
+    monthly: "شهري",
+    yearly: "سنوي",
+    startActiveNow: "تفعيل العيادة فوراً",
+    startPending: "يبقى معلق حتى الدفع",
+    subscriptionCreated: "تم إنشاء الاشتراك، وتم تطبيق موديولز وحدود الخطة على العيادة.",
+    actionFailed: "فشل تنفيذ العملية",
+    clinicsWithoutSubscription: "عيادات بدون اشتراك",
+    allClinicsSubscribed: "كل العيادات لها اشتراك.",
+    selectClinicFirst: "اختر عيادة أولاً",
+    selectPlanFirst: "اختر خطة أولاً",
 
     // Analytics
     tenantGrowth: "نمو المشتركين",

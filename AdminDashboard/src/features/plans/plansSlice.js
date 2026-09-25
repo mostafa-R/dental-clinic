@@ -131,9 +131,15 @@ const plansSlice = createSlice({
           state.selectedPlan = action.payload;
         }
       })
+      .addCase(updatePlan.rejected, (state, action) => {
+        state.error = action.payload;
+      })
       // Delete plan
       .addCase(deletePlan.fulfilled, (state, action) => {
         state.items = state.items.filter((p) => p._id !== action.payload);
+      })
+      .addCase(deletePlan.rejected, (state, action) => {
+        state.error = action.payload;
       })
       // Plan modules catalog (server source of truth)
       .addCase(fetchPlanModules.pending, (state) => {

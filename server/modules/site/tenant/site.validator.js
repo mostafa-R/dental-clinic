@@ -39,6 +39,21 @@ export const subscriptionSchema = z.object({
   status: z.enum(["active", "pending", "past_due", "cancelled"]).optional(),
 });
 
+// Creating a subscription is the only place a plan can be omitted-and-defaulted
+// nowhere: without a plan there is nothing to stamp onto the clinic, so it is
+// required here (updateSubscription allows plan-less status-only edits).
+export const createSubscriptionSchema = z
+  .object({
+    plan: z.string().optional(),
+    planId: z.string().optional(),
+    billingCycle: z.enum(["monthly", "yearly"]).optional(),
+    status: z.enum(["active", "pending"]).optional(),
+  })
+  .refine((v) => v.plan || v.planId, {
+    message: "Plan is required",
+    path: ["plan"],
+  });
+
 export const paymentSchema = z.object({
   amount: z.number().positive("Amount must be positive"),
   paymentMethod: z.string().min(1, "Payment method is required"),

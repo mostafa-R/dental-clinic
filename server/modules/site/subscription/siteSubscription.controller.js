@@ -12,6 +12,14 @@ export const getRevenueStats = asyncHandler(async (_req, res) => {
   return sendSuccess(res, stats);
 });
 
+export const createSubscription = asyncHandler(async (req, res) => {
+  const subscription = await subscriptionService.createSubscription(
+    req.params.tenantId,
+    req.validatedBody,
+  );
+  return sendSuccess(res, subscription.toObject(), 201);
+});
+
 export const updateSubscription = asyncHandler(async (req, res) => {
   const subscription = await subscriptionService.updateSubscription(req.params.id, req.validatedBody);
   return sendSuccess(res, subscription.toObject());

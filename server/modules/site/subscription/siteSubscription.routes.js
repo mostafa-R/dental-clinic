@@ -2,8 +2,9 @@ import { Router } from 'express';
 import { require2fa } from '../../../middleware/require2fa.js';
 import { authorizeSite, protectSite } from '../../../middleware/siteAuth.js';
 import { validate } from '../../../middleware/validate.js';
-import { paymentSchema, subscriptionSchema } from '../tenant/site.validator.js';
+import { paymentSchema, createSubscriptionSchema, subscriptionSchema } from '../tenant/site.validator.js';
 import {
+  createSubscription,
   getRevenueStats,
   getSubscriptions,
   processPayment,
@@ -131,6 +132,67 @@ router.get(
  *       '404':
  *         $ref: '#/components/responses/NotFound'
  */
+/**
+ * @swagger
+ * /api/v1/site/subscriptions/{tenantId}:
+ *   post:
+ *     tags: [Site Subscriptions]
+ *     summary: Subscribe a clinic
+ *     description: >
+ *       Creates the subscription for a clinic that does not have one yet and
+ *       stamps the plan's modules and limits onto the clinic. Previously the only
+ *       way a subscription existed was as a side-effect of creating a new clinic
+ *       (POST /tenants), so an existing clinic could never be subscribed.
+ *       Requires `super_admin` role and 2FA confirmation. Returns 409 if the
+ *       clinic already has a subscription — edit that one instead.
+ *     security:
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: tenantId
+ *         required: true
+ *         schema: { $ref: '#/components/schemas/ObjectId' }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [plan]
+ *             properties:
+ *               plan: { type: string, description: 'Plan key or ObjectId' }
+ *               billingCycle: { type: string, enum: [monthly, yearly] }
+ *               status: { type: string, enum: [active, pending], default: pending }
+ *     responses:
+ *       '201':
+ *         description: Subscription created and plan stamped onto the clinic
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data: { $ref: '#/components/schemas/Subscription' }
+ *       '400':
+ *         $ref: '#/components/responses/ValidationError'
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ *       '404':
+ *         $ref: '#/components/responses/NotFound'
+ *       '409':
+ *         description: Clinic already has a subscription
+ */
+router.post(
+  '/:tenantId',
+  authorizeSite('super_admin'),
+  require2fa,
+  validate(createSubscriptionSchema),
+  createSubscription
+);
+
 router.put(
   '/:id',
   authorizeSite('super_admin'),

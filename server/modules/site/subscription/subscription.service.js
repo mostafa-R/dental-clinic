@@ -111,41 +111,137 @@ export async function getRevenueStats() {
   };
 }
 
-export async function updateSubscription(id, { plan, planId, billingCycle, status }) {
-  const subscription = await Subscription.findById(id).populate('tenant');
-  if (!subscription) throw ApiError.notFound('Subscription not found');
-
+/**
+ * Create a subscription for a clinic that does not have one yet.
+ *
+ * Until now the ONLY way a Subscription document came into existence was as a
+ * side-effect of createTenant (POST /tenants), so an existing clinic could
+ * never be subscribed from the billing screen — there was no POST route and no
+ * createSubscription service function. Subscriptions are looked up by
+ * `findOne({ tenant })` (see processPayment), so a silent second row would make
+ * every payment/activation ambiguous: hence the explicit 409.
+ */
+export async function createSubscription(tenantId, { plan, planId, billingCycle, status }) {
+  // Plan resolution happens before the transaction so a bad plan ref fails
+  // fast with a 400 and never opens a session.
   const planRef = plan ?? planId ?? null;
-  let planDoc = null;
-  if (planRef) {
-    // Throws 400 on unknown/inactive plan — never silently keep the old
-    // amount while stamping a plan key that has no limits/modules behind it.
-    // Legacy keys on an unseeded DB resolve to null (hardcoded fallback).
-    planDoc = await resolvePlanDoc(planRef);
-    subscription.plan = planKeyOf(planDoc) || String(planRef).trim().toLowerCase().replace(/\s+/g, '_');
+  if (!planRef) {
+    throw ApiError.badRequest('Plan is required', { plan: 'required' });
   }
-  if (billingCycle) subscription.billingCycle = billingCycle;
-  if (planRef || billingCycle) {
-    subscription.amount = await getPlanPrice(subscription.plan, subscription.billingCycle);
-  }
-  if (status) subscription.status = status;
+  const planDoc = await resolvePlanDoc(planRef);
+  const cycle = billingCycle ?? 'monthly';
+  const amount = await getPlanPrice(planKeyOf(planDoc), cycle);
 
-  await subscription.save();
+  const subscription = await withTransaction(async (session) => {
+    const tenant = await Tenant.findById(tenantId).session(session);
+    if (!tenant) throw ApiError.notFound('Tenant not found');
 
-  if (planRef && subscription.tenant) {
-    const tenant = await Tenant.findById(subscription.tenant._id);
-    if (tenant) {
-      if (!planDoc) tenant.plan = subscription.plan;
-      tenant.updatePlanSettings(planDoc);
-      await tenant.save();
-      // The cached tenant config (protect middleware) and module flag are
-      // stale after a plan reassignment — drop both.
-      await invalidateTenant(String(tenant._id));
-      await cacheDel('modules', String(tenant._id));
+    const existing = await Subscription.findOne({ tenant: tenantId }).session(session);
+    if (existing) {
+      throw ApiError.conflict(
+        'This clinic already has a subscription. Edit the existing one to change its plan.',
+      );
     }
-  }
+
+    // Stamp the plan onto the clinic: planModules + settings.* limits + planId.
+    // This is the step the caller actually cares about — without it the clinic
+    // keeps whatever modules it had before and the new plan looks "ignored".
+    tenant.updatePlanSettings(planDoc);
+
+    const nextStatus = status ?? 'pending';
+    const periodEnd =
+      nextStatus === 'active'
+        ? new Date(
+            Date.now() + (cycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000,
+          )
+        : null;
+
+    if (nextStatus === 'active') {
+      tenant.status = 'active';
+      tenant.isActive = true;
+      tenant.subscriptionEndsAt = periodEnd;
+      tenant.trialEndsAt = null;
+    }
+    await tenant.save({ session });
+
+    const [created] = await Subscription.create(
+      [
+        {
+          tenant: tenant._id,
+          plan: planKeyOf(planDoc),
+          status: nextStatus,
+          billingCycle: cycle,
+          amount,
+          currentPeriodStart: nextStatus === 'active' ? new Date() : null,
+          currentPeriodEnd: periodEnd,
+          nextPaymentAt: periodEnd,
+        },
+      ],
+      { session },
+    );
+
+    // Populate the clinic on the way out so the response matches what
+    // listSubscriptions returns. Without this the caller gets a bare ObjectId
+    // for `tenant` and has to re-fetch the whole list just to render a name.
+    return created.populate('tenant', 'name email plan status');
+  });
+
+  // Cache invalidation stays outside the transaction (see updateSubscription).
+  await invalidateTenant(String(tenantId));
+  await cacheDel('modules', String(tenantId));
 
   return subscription;
+}
+
+export async function updateSubscription(id, { plan, planId, billingCycle, status }) {
+  // Subscription + tenant plan stamping land in ONE transaction. Saving the
+  // subscription first and stamping the tenant afterwards left a real failure
+  // mode: if updatePlanSettings threw (e.g. a plan with no limits.storage), the
+  // plan key and the new amount were already persisted while the clinic kept
+  // the old planModules — and the API returned 500, so the retry re-applied
+  // nothing. Now either both land or neither does.
+  return withTransaction(async (session) => {
+    const subscription = await Subscription.findById(id)
+      .populate('tenant')
+      .session(session);
+    if (!subscription) throw ApiError.notFound('Subscription not found');
+
+    const planRef = plan ?? planId ?? null;
+    // resolvePlanDoc throws 400 on unknown/inactive plan — never silently keep
+    // the old amount while stamping a plan key that has no limits/modules.
+    const planDoc = planRef ? await resolvePlanDoc(planRef) : null;
+    if (planDoc) subscription.plan = planKeyOf(planDoc);
+    if (billingCycle) subscription.billingCycle = billingCycle;
+    if (planDoc || billingCycle) {
+      subscription.amount = await getPlanPrice(subscription.plan, subscription.billingCycle);
+    }
+    if (status) subscription.status = status;
+
+    await subscription.save({ session });
+
+    if (planDoc) {
+      if (!subscription.tenant) {
+        throw ApiError.badRequest(
+          'Subscription has no clinic attached — reassign the subscription before changing its plan.',
+        );
+      }
+      const tenant = await Tenant.findById(subscription.tenant._id).session(session);
+      if (!tenant) throw ApiError.notFound('Tenant not found');
+      tenant.updatePlanSettings(planDoc);
+      await tenant.save({ session });
+    }
+
+    return subscription;
+  }).then(async (subscription) => {
+    // The cached tenant config (protect middleware) and module flag are stale
+    // after a plan reassignment — drop both. Cache writes are deliberately
+    // outside the transaction: a Redis failure must not roll back Mongo.
+    if (plan || planId) {
+      await invalidateTenant(String(subscription.tenant._id));
+      await cacheDel('modules', String(subscription.tenant._id));
+    }
+    return subscription;
+  });
 }
 
 export async function processPayment(tenantId, { amount }) {
