@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
@@ -10,7 +10,7 @@ import { showErrorDialog, pushToast } from '../features/ui/uiSlice';
 import { requestConfirm } from '../features/ui/confirmDialog';
 import { useSocketEvent } from '../lib/socket';
 import { useT } from '../lib/i18n';
-import { canManageUsers, roleLabel } from '../lib/roles';
+import { useCanManageUsers, roleLabel } from '../lib/roles';
 import UserFormModal from '../features/users/UserFormModal';
 
 export default function Users() {
@@ -22,7 +22,7 @@ export default function Users() {
   const [editing, setEditing] = useState(null);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
-  const canManage = canManageUsers();
+  const canManage = useCanManageUsers();
 
   useEffect(() => {
     dispatch(fetchUsers());

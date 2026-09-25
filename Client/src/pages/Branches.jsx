@@ -11,7 +11,7 @@ import { showErrorDialog, pushToast } from '../features/ui/uiSlice';
 import { requestConfirm } from '../features/ui/confirmDialog';
 import { useSocketEvent } from '../lib/socket';
 import { useT } from '../lib/i18n';
-import { canManageBranches } from '../lib/roles';
+import { useCanManageBranches } from '../lib/roles';
 
 export default function Branches() {
   const dispatch = useDispatch();
@@ -20,7 +20,7 @@ export default function Branches() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
-  const canManage = canManageBranches();
+  const canManage = useCanManageBranches();
 
   useEffect(() => {
     dispatch(fetchBranches());

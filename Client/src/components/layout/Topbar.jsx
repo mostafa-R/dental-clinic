@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { authApi, clearClientSessionTraces } from "../../features/auth/authApi";
@@ -7,7 +7,13 @@ import PreferencesControls from "../../features/preferences/PreferencesControls"
 import GlobalSearch from "../../features/search/GlobalSearch";
 import { toggleMobileSidebar } from "../../features/ui/uiSlice";
 import { useT } from "../../lib/i18n";
-import { roleLabel } from "../../lib/roles";
+import {
+  roleLabel,
+  usePermission,
+  useCanCreatePatients,
+  useCanCreateAppointments,
+  useCanCreateInvoices,
+} from "../../lib/roles";
 import { disconnectSocket } from "../../lib/socket";
 
 function MenuIcon() {
@@ -205,6 +211,11 @@ export default function Topbar() {
   const notifRef = useRef(null);
   const chatUnread = useSelector((s) => s.chat.unread);
   const mobileOpen = useSelector((s) => s.ui.mobileSidebarOpen);
+  // Quick-action entitlements, resolved once per render.
+  const canNewPatient = useCanCreatePatients();
+  const canNewAppointment = useCanCreateAppointments();
+  const canViewAppointments = usePermission("appointments", "read");
+  const canNewInvoice = useCanCreateInvoices();
   const totalNotif = useMemo(
     () => Object.values(chatUnread).reduce((sum, n) => sum + n, 0),
     [chatUnread],
@@ -219,7 +230,7 @@ export default function Topbar() {
     try {
       await authApi.logout();
     } catch {
-      /* ignore server errors — always clear the local session below */
+      /* ignore server errors - always clear the local session below */
     } finally {
       const { resetPermissions } = await import("../../features/users/userSlice");
       dispatch(resetPermissions());
@@ -274,40 +285,50 @@ export default function Topbar() {
 
       <div className="hidden border-s border-slate-200 ps-4 dark:border-slate-700 sm:block" />
 
-      {/* Quick action shortcuts */}
+      {/* Quick action shortcuts - each gated on its module's `create`
+          permission so a read-only role never sees an entry point it cannot
+          use. The live-queue shortcut is a read action, hence `read`. */}
       <div className="hidden items-center gap-1 sm:flex">
-        <button
-          type="button"
-          onClick={() => navigate("/patients?new=1")}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors duration-150 hover:border-brand/30 hover:bg-brand/5 hover:text-brand-dark dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-brand dark:hover:bg-slate-800 dark:hover:text-brand-light"
-        >
-          <UserPlusIcon />
-          {t("topbar.newPatient")}
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate("/appointments?new=1")}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors duration-150 hover:border-brand/30 hover:bg-brand/5 hover:text-brand-dark dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-brand dark:hover:bg-slate-800 dark:hover:text-brand-light"
-        >
-          <CalendarPlusIcon />
-          {t("topbar.newAppointment")}
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate("/appointments?tab=queue")}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors duration-150 hover:border-brand/30 hover:bg-brand/5 hover:text-brand-dark dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-brand dark:hover:bg-slate-800 dark:hover:text-brand-light"
-        >
-          <QueueIcon />
-          {t("topbar.liveQueue")}
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate("/billing?new=1")}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors duration-150 hover:border-brand/30 hover:bg-brand/5 hover:text-brand-dark dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-brand dark:hover:bg-slate-800 dark:hover:text-brand-light"
-        >
-          <InvoiceIcon />
-          {t("topbar.newInvoice")}
-        </button>
+        {canNewPatient && (
+          <button
+            type="button"
+            onClick={() => navigate("/patients?new=1")}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors duration-150 hover:border-brand/30 hover:bg-brand/5 hover:text-brand-dark dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-brand dark:hover:bg-slate-800 dark:hover:text-brand-light"
+          >
+            <UserPlusIcon />
+            {t("topbar.newPatient")}
+          </button>
+        )}
+        {canNewAppointment && (
+          <button
+            type="button"
+            onClick={() => navigate("/appointments?new=1")}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors duration-150 hover:border-brand/30 hover:bg-brand/5 hover:text-brand-dark dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-brand dark:hover:bg-slate-800 dark:hover:text-brand-light"
+          >
+            <CalendarPlusIcon />
+            {t("topbar.newAppointment")}
+          </button>
+        )}
+        {canViewAppointments && (
+          <button
+            type="button"
+            onClick={() => navigate("/appointments?tab=queue")}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors duration-150 hover:border-brand/30 hover:bg-brand/5 hover:text-brand-dark dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-brand dark:hover:bg-slate-800 dark:hover:text-brand-light"
+          >
+            <QueueIcon />
+            {t("topbar.liveQueue")}
+          </button>
+        )}
+        {canNewInvoice && (
+          <button
+            type="button"
+            onClick={() => navigate("/billing?new=1")}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors duration-150 hover:border-brand/30 hover:bg-brand/5 hover:text-brand-dark dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-brand dark:hover:bg-slate-800 dark:hover:text-brand-light"
+          >
+            <InvoiceIcon />
+            {t("topbar.newInvoice")}
+          </button>
+        )}
       </div>
 
       <div className="flex-1" />

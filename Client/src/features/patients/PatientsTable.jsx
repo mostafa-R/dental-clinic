@@ -6,7 +6,7 @@ import DataTable from '../../components/ui/DataTable';
 import { archivePatient } from './patientSlice';
 import { showErrorDialog, pushToast } from '../ui/uiSlice';
 import { requestConfirm } from '../ui/confirmDialog';
-import { canManagePatients, canViewEmr } from '../../lib/roles';
+import { useCanManagePatients, useCanViewEmr } from '../../lib/roles';
 import { formatDate } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { PhiField } from '../../hooks/usePhi';
@@ -29,8 +29,8 @@ export default function PatientsTable({ onView, onEdit, loading }) {
   const navigate = useNavigate();
   const { t } = useT();
   const { items } = useSelector((s) => s.patients);
-  const canManage = canManagePatients();
-  const canOpenEmr = canViewEmr();
+  const canManage = useCanManagePatients();
+  const canOpenEmr = useCanViewEmr();
   const [archivingId, setArchivingId] = useState(null);
 
   const onArchive = async (patient) => {

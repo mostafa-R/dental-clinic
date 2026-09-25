@@ -1,5 +1,5 @@
+import { useSelector } from 'react-redux';
 import { t } from './i18n';
-import { store } from '../app/store';
 
 const ROLE_LABELS = {
   site_admin: 'Site Admin',
@@ -24,84 +24,137 @@ export function defaultRouteFor(role) {
   }
 }
 
-function hasModuleAction(module, ...actions) {
-  const state = store.getState();
-  const mp = state.users?.myPermissions;
-  if (!mp) return false;
-  if (mp.isSystemAdmin) return true;
-  // Subscription gate first: hidden buttons/operations for modules outside
-  // the plan, even if the role document technically grants them.
-  if (Array.isArray(mp.planModules) && !mp.planModules.includes(module)) return false;
-  const perms = mp.permissions?.[module];
+/**
+ * Pure permission predicate — the single source of truth for every
+ * "can the current user do X" decision in the clinic UI.
+ *
+ * Mirrors the server gate in `middleware/checkPermission.js`: a role grant is
+ * necessary but not sufficient, the tenant's plan must also include the module.
+ *
+ * @param {object|null} myPermissions - `state.users.myPermissions`
+ * @param {string} module - module key from `server/constants/permissions.js`
+ * @param {...string} actions - required actions. Omit for "any action on the
+ *   module" (read-only visibility). When one or more are given the user needs
+ *   **at least one** of them — a role granted only `create` must still see the
+ *   controls it was actually granted, so this is `some`, never `every`.
+ * @returns {boolean}
+ */
+export function checkModuleAccess(myPermissions, module, ...actions) {
+  if (!myPermissions) return false;
+  if (myPermissions.isSystemAdmin) return true;
+  // Subscription entitlement first: a module outside the tenant's plan stays
+  // hidden even when the role document technically grants it.
+  if (Array.isArray(myPermissions.planModules) && module && !myPermissions.planModules.includes(module)) {
+    return false;
+  }
+  const perms = myPermissions.permissions?.[module];
   if (!perms || perms.length === 0) return false;
-  if (actions.length === 0) return perms.length > 0;
-  return actions.every((a) => perms.includes(a));
+  if (actions.length === 0) return true;
+  return actions.some((a) => perms.includes(a));
 }
 
-export function canManagePatients() {
-  return hasModuleAction('patients', 'create', 'update', 'delete');
+/**
+ * Reactive permission check. Subscribes to the store so a component re-renders
+ * the moment `myPermissions` resolves (or is refreshed after a plan downgrade)
+ * instead of waiting for an unrelated state change to force a repaint.
+ */
+export function usePermission(module, ...actions) {
+  const myPermissions = useSelector((s) => s.users?.myPermissions);
+  return checkModuleAccess(myPermissions, module, ...actions);
 }
 
-export function canViewBilling() {
-  return hasModuleAction('billing');
+/* ---------------------------------------------------------------------------
+ * Named permission hooks.
+ *
+ * Each is a thin wrapper over `usePermission`, so it obeys the rules of hooks:
+ * call it unconditionally at the top level of a component, never inside a
+ * callback, an effect, a loop, or a JSX expression. Hoist the result into a
+ * variable and put that variable in the effect dependency array instead
+ * (see `pages/Billing.jsx` for the reference pattern).
+ *
+ * They are named with a `use` prefix precisely so lint and the compiler can
+ * treat them as hooks rather than as ordinary helpers.
+ * ------------------------------------------------------------------------- */
+
+export function useCanManagePatients() {
+  return usePermission('patients', 'create', 'update', 'delete');
 }
 
-export function canManageBilling() {
-  return hasModuleAction('billing', 'create', 'update', 'delete');
+export function useCanViewBilling() {
+  return usePermission('billing');
 }
 
-export function canVoidBilling() {
-  return hasModuleAction('billing', 'delete');
+export function useCanManageBilling() {
+  return usePermission('billing', 'create', 'update', 'delete');
 }
 
-export function canViewEmr() {
-  return hasModuleAction('emr');
+export function useCanVoidBilling() {
+  return usePermission('billing', 'delete');
 }
 
-export function canManageEmr() {
-  return hasModuleAction('emr', 'create', 'update', 'delete');
+export function useCanViewEmr() {
+  return usePermission('emr');
 }
 
-export function canManagePrescriptions() {
-  return hasModuleAction('prescriptions', 'create', 'update', 'delete');
+export function useCanManageEmr() {
+  return usePermission('emr', 'create', 'update', 'delete');
 }
 
-export function canManageAppointments() {
-  return hasModuleAction('appointments', 'create', 'update', 'delete');
+export function useCanManagePrescriptions() {
+  return usePermission('prescriptions', 'create', 'update', 'delete');
 }
 
-export function canViewAccounting() {
-  return hasModuleAction('accounting');
+export function useCanManageAppointments() {
+  return usePermission('appointments', 'create', 'update', 'delete');
 }
 
-export function canManageAccounting() {
-  return hasModuleAction('accounting', 'create', 'update', 'delete');
+export function useCanViewAccounting() {
+  return usePermission('accounting');
 }
 
-export function canViewInventory() {
-  return hasModuleAction('inventory');
+export function useCanManageAccounting() {
+  return usePermission('accounting', 'create', 'update', 'delete');
 }
 
-export function canManageInventory() {
-  return hasModuleAction('inventory', 'create', 'update', 'delete');
+export function useCanViewInventory() {
+  return usePermission('inventory');
 }
 
-export function canViewRoles() {
-  return hasModuleAction('roles');
+export function useCanManageInventory() {
+  return usePermission('inventory', 'create', 'update', 'delete');
 }
 
-export function canManageRoles() {
-  return hasModuleAction('roles', 'create', 'update', 'delete');
+export function useCanViewRoles() {
+  return usePermission('roles');
 }
 
-export function canViewUsers() {
-  return hasModuleAction('users');
+export function useCanManageRoles() {
+  return usePermission('roles', 'create', 'update', 'delete');
 }
 
-export function canManageUsers() {
-  return hasModuleAction('users', 'create', 'update', 'delete');
+export function useCanViewUsers() {
+  return usePermission('users');
 }
 
-export function canManageBranches() {
-  return hasModuleAction('branches', 'create', 'update', 'delete');
+export function useCanManageUsers() {
+  return usePermission('users', 'create', 'update', 'delete');
+}
+
+export function useCanManageBranches() {
+  return usePermission('branches', 'create', 'update', 'delete');
+}
+
+/* Create-only checks — used to gate "new record" entry points, which a
+ * create-only role must be able to reach. */
+
+export function useCanCreatePatients() {
+  return usePermission('patients', 'create');
+}
+
+export function useCanCreateAppointments() {
+  return usePermission('appointments', 'create');
+}
+
+export function useCanCreateInvoices() {
+  return usePermission('billing', 'create');
 }

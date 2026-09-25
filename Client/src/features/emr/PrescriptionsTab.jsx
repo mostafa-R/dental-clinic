@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Card from '../../components/ui/Card';
@@ -9,7 +9,7 @@ import { deletePrescription, fetchPrescriptions } from './emrSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { requestConfirm } from '../ui/confirmDialog';
 import { useSocketEvent } from '../../lib/socket';
-import { canManagePrescriptions } from '../../lib/roles';
+import { useCanManagePrescriptions } from '../../lib/roles';
 import { formatDate } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { PhiField } from '../../hooks/usePhi';
@@ -18,7 +18,7 @@ export default function PrescriptionsTab({ patientId, patient }) {
   const dispatch = useDispatch();
   const { t } = useT();
   const { items: prescriptions, status, error } = useSelector((s) => s.emr.prescriptions);
-  const canManage = canManagePrescriptions();
+  const canManage = useCanManagePrescriptions();
 
   const [formOpen, setFormOpen] = useState(false);
 

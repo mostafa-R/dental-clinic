@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import PageHeader from '../components/ui/PageHeader';
@@ -15,7 +15,7 @@ import {
 } from '../features/recalls/recallSlice';
 import { showErrorDialog, pushToast } from '../features/ui/uiSlice';
 import { requestConfirm } from '../features/ui/confirmDialog';
-import { canManageAppointments } from '../lib/roles';
+import { useCanManageAppointments } from '../lib/roles';
 import { useT } from '../lib/i18n';
 
 const STATUSES = ['', 'due', 'contacted', 'scheduled', 'postponed', 'completed', 'dismissed'];
@@ -42,7 +42,7 @@ export default function Recalls() {
   const dispatch = useDispatch();
   const { t } = useT();
   const { items, total, page, limit, status, error } = useSelector((s) => s.recalls);
-  const canManage = canManageAppointments();
+  const canManage = useCanManageAppointments();
 
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');

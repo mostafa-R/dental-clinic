@@ -6,7 +6,7 @@ import Modal from '../../components/ui/Modal';
 import MedicalFileUpload from './MedicalFileUpload';
 import { createNote, updateNote, resetFormState } from './emrSlice';
 import { showErrorDialog } from '../ui/uiSlice';
-import { ATTACHMENT_TYPES } from './dental';
+import { ATTACHMENT_TYPES, isValidAttachmentUrl } from './dental';
 import { useT } from '../../lib/i18n';
 
 function emptyAttachment() {
@@ -93,6 +93,15 @@ export default function ClinicalNoteFormModal({ open, patientId, patient, note, 
     const cleanAttachments = attachments
       .filter((a) => a.url.trim())
       .map((a) => ({ type: a.type, url: a.url.trim(), caption: a.caption?.trim() || undefined }));
+
+    // Catch an unusable reference before the round-trip: the server enforces
+    // the same rule but only after a save attempt, which reads as a generic
+    // failure to the clinician.
+    const badUrl = cleanAttachments.find((a) => !isValidAttachmentUrl(a.url));
+    if (badUrl) {
+      dispatch(showErrorDialog({ message: t('emr.note.invalidAttachmentUrl') }));
+      return;
+    }
 
     try {
       if (note) {

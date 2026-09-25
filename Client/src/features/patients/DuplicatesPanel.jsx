@@ -9,6 +9,7 @@ import { closeDuplicates, fetchDuplicates, mergePatients } from './patientSlice'
 import { pushToast, showErrorDialog } from '../ui/uiSlice';
 import { formatDate } from '../../lib/format';
 import { useT } from '../../lib/i18n';
+import { PhiField } from '../../hooks/usePhi';
 
 export default function DuplicatesPanel() {
   const dispatch = useDispatch();
@@ -104,7 +105,7 @@ export default function DuplicatesPanel() {
                               )}
                             </p>
                             <p className="text-xs text-slate-400 dark:text-slate-500">
-                              {p.patientId} · {p.phone || '—'} · {formatDate(p.createdAt)}
+                              {p.patientId} · <PhiField>{p.phone || '—'}</PhiField> · {formatDate(p.createdAt)}
                             </p>
                           </div>
                         </div>

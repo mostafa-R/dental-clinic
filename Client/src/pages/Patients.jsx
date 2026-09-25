@@ -12,7 +12,7 @@ import Button from '../components/ui/Button';
 import PageHeader from '../components/ui/PageHeader';
 import EmptyState from '../components/ui/EmptyState';
 import Pagination from '../components/ui/Pagination';
-import { canManagePatients } from '../lib/roles';
+import { useCanCreatePatients } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useSocketEvent } from '../lib/socket';
 
@@ -21,7 +21,7 @@ export default function Patients() {
   const { t } = useT();
   const [searchParams, setSearchParams] = useSearchParams();
   const { items, pagination, query, status, error } = useSelector((s) => s.patients);
-  const canManage = canManagePatients();
+  const canCreate = useCanCreatePatients();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -29,12 +29,15 @@ export default function Patients() {
   const duplicatesOpen = useSelector((s) => s.patients.duplicates.open);
 
   useEffect(() => {
+    // A `?new=1` deep link must not bypass the create permission: drop the
+    // param and stay on the list when the role has no `patients:create`.
     if (searchParams.get('new') === '1') {
+      setSearchParams({}, { replace: true });
+      if (!canCreate) return;
       setEditing(null);
       setFormOpen(true);
-      setSearchParams({}, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, canCreate]);
 
   useEffect(() => {
     dispatch(fetchPatients(query));
@@ -76,7 +79,7 @@ export default function Patients() {
             <Button variant="outline" size="sm" onClick={() => dispatch(openDuplicates())}>
               {t('patients.checkDuplicates')}
             </Button>
-            {canManage && (
+            {canCreate && (
               <Button size="sm" onClick={openCreate}>
                 {t('patients.new')}
               </Button>

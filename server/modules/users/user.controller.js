@@ -191,9 +191,11 @@ export const listUsers = asyncHandler(async (req, res) => {
 
 /**
  * GET /api/users/doctors
- * Lightweight endpoint — only requires appointments:create permission (since the
- * doctor list is needed when booking an appointment). Separate from the main
- * users list so receptionists/doctors don't need full users:read.
+ * Lightweight endpoint — deliberately narrower than the main users list so
+ * receptionists and EMR clinicians don't need full `users:read`. Authorization
+ * is handled by the route: any of `users:read`, `appointments:read`,
+ * `appointments:create` or `emr:read` is enough, since booking and the EMR
+ * forms both need to attribute a record to a doctor.
  */
 export const listDoctors = asyncHandler(async (req, res) => {
   const filter = { ...filterByBranch(req) };

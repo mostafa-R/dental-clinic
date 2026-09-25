@@ -1,9 +1,9 @@
-﻿import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import Modal from '../../components/ui/Modal';
 import EmptyState from '../../components/ui/EmptyState';
 import { formatDate } from '../../lib/format';
 import { useT } from '../../lib/i18n';
-import { canViewEmr } from '../../lib/roles';
+import { useCanViewEmr } from '../../lib/roles';
 import { PhiField } from '../../hooks/usePhi';
 
 function genderLabel(gender, t) {
@@ -55,7 +55,7 @@ function ConditionSection({ title, items, noneLabel, phi }) {
 export default function PatientDetailModal({ open, patient, onClose }) {
   const { t } = useT();
   const navigate = useNavigate();
-  const canOpenEmr = canViewEmr();
+  const canOpenEmr = useCanViewEmr();
 
   const openEmr = () => {
     onClose?.();

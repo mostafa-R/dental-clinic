@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../../components/ui/Modal';
@@ -9,7 +9,7 @@ import StatusBadge from './StatusBadge';
 import { nextStatusOptions, statusTKey } from './statuses';
 import { useT } from '../../lib/i18n';
 import { PhiField } from '../../hooks/usePhi';
-import { canViewEmr } from '../../lib/roles';
+import { useCanViewEmr } from '../../lib/roles';
 import api from '../../lib/axios';
 import { formatMoney, formatTime } from '../../lib/format';
 
@@ -25,6 +25,9 @@ export default function VisitPanel({ open, appointment, onClose }) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { t } = useT();
+  // Resolved unconditionally at the top of the component — `useCanViewEmr` is a
+  // hook, so it cannot be called from inside the JSX below.
+  const canOpenEmr = useCanViewEmr();
 
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
@@ -210,7 +213,7 @@ export default function VisitPanel({ open, appointment, onClose }) {
         <div className="flex items-center gap-3">
           <span className="truncate">{patient?.fullName || t('appointments.patientFallback')}</span>
           <StatusBadge status={appointment.status} />
-          {canViewEmr() && patient?._id && (
+          {canOpenEmr && patient?._id && (
             <button
               type="button"
               onClick={() => navigate(`/patients/${patient._id}/emr`)}

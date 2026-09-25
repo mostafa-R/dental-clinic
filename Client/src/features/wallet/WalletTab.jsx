@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Card from '../../components/ui/Card';
@@ -8,7 +8,7 @@ import Modal from '../../components/ui/Modal';
 import { Field, TextInput, Select } from '../../components/ui/Field';
 import { fetchWallet, fetchInstallmentPlans, addTransaction, createInstallmentPlan, payInstallmentPlan, updateInstallmentPlan, resetFormState, resetTransactionState } from './walletSlice';
 import { showErrorDialog } from '../ui/uiSlice';
-import { canManageBilling, canViewBilling } from '../../lib/roles';
+import { useCanManageBilling, useCanViewBilling } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
 import { useSocketEvent } from '../../lib/socket';
 import { formatMoney, formatDate } from '../../lib/format';
@@ -29,8 +29,8 @@ export default function WalletTab({ patientId }) {
   const dispatch = useDispatch();
   const { t } = useT();
   const { wallet, walletStatus, plans, transactionStatus, formStatus } = useSelector((s) => s.wallet);
-  const canManage = canManageBilling();
-  const canView = canViewBilling();
+  const canManage = useCanManageBilling();
+  const canView = useCanViewBilling();
 
   const [showAddFunds, setShowAddFunds] = useState(false);
   const [showNewPlan, setShowNewPlan] = useState(false);

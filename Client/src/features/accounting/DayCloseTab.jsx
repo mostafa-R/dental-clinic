@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Card from '../../components/ui/Card';
@@ -6,7 +6,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import Spinner from '../../components/ui/Spinner';
 import { fetchDayClose, fetchDayCloses, submitCloseDay } from './accountingSlice';
 import { showErrorDialog } from '../ui/uiSlice';
-import { canManageAccounting } from '../../lib/roles';
+import { useCanManageAccounting } from '../../lib/roles';
 import { formatDate, formatMoney } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { useSocketEvent } from '../../lib/socket';
@@ -22,7 +22,7 @@ export default function DayCloseTab() {
   const dispatch = useDispatch();
   const { t } = useT();
   const { dayClose, dayCloses, closeStatus } = useSelector((s) => s.accounting);
-  const canManage = canManageAccounting();
+  const canManage = useCanManageAccounting();
   const preview = dayClose.preview;
 
   const [date, setDate] = useState(() => dateInputValue(new Date()));

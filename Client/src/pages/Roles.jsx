@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Card from '../components/ui/Card';
@@ -20,7 +20,7 @@ import { requestConfirm } from '../features/ui/confirmDialog';
 import { useSocketEvent } from '../lib/socket';
 import { CRUD_ACTIONS, CRUD_SHORT, MODULES as LOCAL_MODULES } from '../features/roles/permissions';
 import { useT } from '../lib/i18n';
-import { canManageRoles } from '../lib/roles';
+import { useCanManageRoles } from '../lib/roles';
 
 export default function Roles() {
   const dispatch = useDispatch();
@@ -31,7 +31,7 @@ export default function Roles() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [matrixOpen, setMatrixOpen] = useState(false);
-  const canManage = canManageRoles();
+  const canManage = useCanManageRoles();
 
   useEffect(() => {
     dispatch(fetchRoles());

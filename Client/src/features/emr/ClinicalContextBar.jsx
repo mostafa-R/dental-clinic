@@ -4,7 +4,7 @@ import { useSelector } from 'react-redux';
 import { emrApi } from './emrApi';
 import { appointmentApi } from '../appointments/appointmentApi';
 import { accountingApi } from '../accounting/accountingApi';
-import { canViewBilling } from '../../lib/roles';
+import { useCanViewBilling } from '../../lib/roles';
 import { formatDate, formatMoney } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 
@@ -18,7 +18,7 @@ export default function ClinicalContextBar({ patient }) {
   const { t } = useT();
   const navigate = useNavigate(); const permissions = useSelector((s) => s.users.myPermissions);
   const [plans, setPlans] = useState([]); const [wallet, setWallet] = useState(null); const [todayVisit, setTodayVisit] = useState(null);
-  const canAppointments = hasRead(permissions, 'appointments'); const canBilling = canViewBilling();
+  const canAppointments = hasRead(permissions, 'appointments'); const canBilling = useCanViewBilling();
   useEffect(() => {
     let active = true;
     emrApi.listPlans(patient._id, { status: 'active', limit: 100 }).then((data) => active && setPlans(data.plans || [])).catch(() => active && setPlans([]));

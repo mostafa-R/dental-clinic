@@ -26,7 +26,7 @@ import {
 } from '../features/accounting/accountingSlice';
 import { showErrorDialog } from '../features/ui/uiSlice';
 import { requestConfirm } from '../features/ui/confirmDialog';
-import { canManageAccounting } from '../lib/roles';
+import { useCanManageAccounting } from '../lib/roles';
 import {
   COMMISSION_STATUS_STYLES,
 } from '../features/accounting/accounting';
@@ -47,7 +47,7 @@ export default function Accounting() {
   const dispatch = useDispatch();
   const { t } = useT();
   const { summary, summaryStatus, expenses, drawings, commissions } = useSelector((s) => s.accounting);
-  const canManage = canManageAccounting();
+  const canManage = useCanManageAccounting();
 
   const [tab, setTab] = useState('summary');
   const [expenseModal, setExpenseModal] = useState(false);

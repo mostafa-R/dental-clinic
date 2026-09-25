@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { createUser, deleteUser, getUser, listDoctors, listUsers, toggleUserActive, updateUser } from './user.controller.js';
 import { protect } from '../../middleware/auth.js';
-import { checkPermission } from '../../middleware/checkPermission.js';
+import { checkPermission, checkAnyPermission } from '../../middleware/checkPermission.js';
 import { validate } from '../../middleware/validate.js';
 import { createUserSchema, updateUserSchema } from './user.validator.js';
 import { z } from 'zod';
@@ -68,7 +68,7 @@ router.get('/', protect, checkPermission('users', 'read'), validate(listUsersQue
  *   get:
  *     tags: [Users]
  *     summary: List doctors
- *     description: Lightweight doctor list for booking appointments. Requires `appointments:create`.
+ *     description: Lightweight doctor list for booking appointments and for EMR forms that attribute a record to a doctor. Requires any of `users:read`, `appointments:read`, `appointments:create` or `emr:read`.
  *     security:
  *       - cookieAuth: []
  *     responses:
@@ -91,7 +91,24 @@ router.get('/', protect, checkPermission('users', 'read'), validate(listUsersQue
  *       '403':
  *         $ref: '#/components/responses/Forbidden'
  */
-router.get('/doctors', protect, checkPermission('appointments', 'create'), listDoctors);
+// The doctor list is read-only but is consumed from two independent domains:
+// the booking flow (appointments) and the EMR forms that attribute a record to
+// a doctor (notes, prescriptions, treatment plans). Gating it on a single
+// module meant an EMR-only clinician got a 403 in a form they were entitled to
+// use, while an `appointments:create` grant — a write permission — was the only
+// way to read a list. Accept any of the reading permissions that actually need
+// it, and keep the full user directory gated separately by `users:read`.
+router.get(
+  '/doctors',
+  protect,
+  checkAnyPermission([
+    ['users', 'read'],
+    ['appointments', 'read'],
+    ['appointments', 'create'],
+    ['emr', 'read'],
+  ]),
+  listDoctors,
+);
 
 /**
  * @swagger

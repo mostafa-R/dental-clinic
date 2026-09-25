@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Card from '../../components/ui/Card';
@@ -9,7 +9,7 @@ import { deleteNote, fetchNotes } from './emrSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { requestConfirm } from '../ui/confirmDialog';
 import { useSocketEvent } from '../../lib/socket';
-import { canManageEmr } from '../../lib/roles';
+import { useCanManageEmr } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
 import { formatDate } from '../../lib/format';
 import { PhiField } from '../../hooks/usePhi';
@@ -28,7 +28,7 @@ export default function ClinicalTimelineTab({ patientId, patient }) {
   const dispatch = useDispatch();
   const { t } = useT();
   const { items: notes, status, error } = useSelector((s) => s.emr.notes);
-  const canManage = canManageEmr();
+  const canManage = useCanManageEmr();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingNote, setEditingNote] = useState(null);
@@ -134,12 +134,17 @@ export default function ClinicalTimelineTab({ patientId, patient }) {
                         key={i}
                         href={att.url}
                         target="_blank"
-                        rel="noreferrer"
+                        rel="noreferrer noopener"
+                        referrerPolicy="no-referrer"
                         className="group block overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700"
                       >
                         {att.type === 'xray' || att.type === 'photo' ? (
                           <div className="relative h-24 w-24">
-                            <img src={att.url} alt={att.caption || ''} className="h-full w-full object-cover transition group-hover:opacity-80" loading="lazy" />
+                            {/* Uploaded files resolve to the server's authenticated
+                                encrypted-download route. Externally hosted links are
+                                rendered too, so suppress the Referer to avoid telling a
+                                third-party host when and from where an X-ray was viewed. */}
+                            <img src={att.url} alt={att.caption || ''} className="h-full w-full object-cover transition group-hover:opacity-80" loading="lazy" referrerPolicy="no-referrer" />
                             <span className="absolute end-1 top-1 rounded-full bg-emerald-500/80 p-0.5" title={t('emr.attachment.encrypted')}>
                               <svg width="10" height="10" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
                             </span>

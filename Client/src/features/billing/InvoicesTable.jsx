@@ -1,14 +1,14 @@
-﻿import { useSelector } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { statusStyle, statusTKey } from './statuses';
 import { formatDate, formatMoney } from '../../lib/format';
-import { canManageBilling, canVoidBilling } from '../../lib/roles';
+import { useCanManageBilling, useCanVoidBilling } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
 
 export default function InvoicesTable({ onView, onPay, onVoid }) {
   const { t } = useT();
   const { items } = useSelector((s) => s.billing);
-  const canManage = canManageBilling();
-  const canVoid = canVoidBilling();
+  const canManage = useCanManageBilling();
+  const canVoid = useCanVoidBilling();
 
   if (!items.length) {
     return (

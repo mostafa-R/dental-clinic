@@ -25,7 +25,7 @@ import { INVENTORY_CATEGORIES } from '../features/inventory/inventory';
 import { formatDate, formatMoney } from '../lib/format';
 import { useT } from '../lib/i18n';
 import { useSocketEvent } from '../lib/socket';
-import { canManageInventory } from '../lib/roles';
+import { useCanManageInventory } from '../lib/roles';
 
 export default function Inventory() {
   const dispatch = useDispatch();
@@ -35,7 +35,7 @@ export default function Inventory() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [adjustItem, setAdjustItem] = useState(null);
-  const canManage = canManageInventory();
+  const canManage = useCanManageInventory();
 
   useEffect(() => {
     dispatch(fetchItems(query));

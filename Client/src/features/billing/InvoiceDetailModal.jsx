@@ -1,7 +1,7 @@
-﻿import Modal from '../../components/ui/Modal';
+import Modal from '../../components/ui/Modal';
 import { statusStyle, statusTKey, paymentMethodTKey } from './statuses';
 import { formatMoney, formatDate } from '../../lib/format';
-import { canManageBilling, canVoidBilling } from '../../lib/roles';
+import { useCanManageBilling, useCanVoidBilling } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
 
 function Row({ label, value }) {
@@ -20,14 +20,17 @@ function formatDateSafe(d) {
 
 export default function InvoiceDetailModal({ open, invoice, onClose, onPay, onEdit, onVoid, onRefund }) {
   const { t } = useT();
+  // Permission hooks must be resolved before any early return, otherwise the
+  // hook order changes between the "no invoice" and "invoice loaded" renders.
+  const canVoidBilling = useCanVoidBilling();
+  const canManageBilling = useCanManageBilling();
   if (!invoice) return null;
 
   const balance = Number(invoice.balance ?? invoice.total - invoice.paidAmount);
-  const canVoid = canVoidBilling() && invoice.status !== 'void';
-  const canManage = canManageBilling();
-  const canPay = canManage && invoice.status !== 'void' && balance > 0.001;
-  const canEditInvoice = canManage && invoice.status !== 'void';
-  const canRefund = canManage && invoice.status !== 'void' && invoice.paidAmount > 0.001;
+  const canVoid = canVoidBilling && invoice.status !== 'void';
+  const canPay = canManageBilling && invoice.status !== 'void' && balance > 0.001;
+  const canEditInvoice = canManageBilling && invoice.status !== 'void';
+  const canRefund = canManageBilling && invoice.status !== 'void' && invoice.paidAmount > 0.001;
 
   const isPercentage = invoice.discountType === 'percentage';
   const discountLabel = isPercentage

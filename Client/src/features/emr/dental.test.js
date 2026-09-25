@@ -11,6 +11,8 @@ import {
   describeTooth,
   fdiToUniversal,
   formatToothLabel,
+  isExternalAttachmentUrl,
+  isValidAttachmentUrl,
   isValidFdi,
   toothChartPayload,
   toothFdi,
@@ -130,5 +132,43 @@ describe('display helpers', () => {
     expect(values).toContain(18);
     expect(values).toContain(28);
     expect(values).toContain(48);
+  });
+});
+
+describe('attachment URL validation', () => {
+  it('accepts the server-issued encrypted download path', () => {
+    expect(isValidAttachmentUrl('/api/v1/emr/attachments/abc-123.jpg/download')).toBe(true);
+  });
+
+  it('accepts an absolute https link', () => {
+    expect(isValidAttachmentUrl('https://cdn.example.com/xray.jpg')).toBe(true);
+    expect(isValidAttachmentUrl('HTTPS://CDN.EXAMPLE.COM/xray.jpg')).toBe(true);
+  });
+
+  it('rejects script-injection and other executable schemes', () => {
+    // Mirrors server/modules/emr/emr.validator.js — a note must never be able
+    // to carry a javascript:/data: link that the timeline renders as an href.
+    expect(isValidAttachmentUrl('javascript:alert(1)')).toBe(false);
+    expect(isValidAttachmentUrl('JavaScript:alert(1)')).toBe(false);
+    expect(isValidAttachmentUrl('data:text/html;base64,PHNjcmlwdD4=')).toBe(false);
+    expect(isValidAttachmentUrl('vbscript:msgbox(1)')).toBe(false);
+  });
+
+  it('rejects plain http, protocol-relative and relative paths', () => {
+    expect(isValidAttachmentUrl('http://cdn.example.com/xray.jpg')).toBe(false);
+    expect(isValidAttachmentUrl('//cdn.example.com/xray.jpg')).toBe(false);
+    expect(isValidAttachmentUrl('uploads/xray.jpg')).toBe(false);
+  });
+
+  it('rejects empty / whitespace-only references', () => {
+    expect(isValidAttachmentUrl('')).toBe(false);
+    expect(isValidAttachmentUrl('   ')).toBe(false);
+    expect(isValidAttachmentUrl(null)).toBe(false);
+    expect(isValidAttachmentUrl(undefined)).toBe(false);
+  });
+
+  it('flags only third-party hosts as external', () => {
+    expect(isExternalAttachmentUrl('https://cdn.example.com/xray.jpg')).toBe(true);
+    expect(isExternalAttachmentUrl('/api/v1/emr/attachments/a.jpg/download')).toBe(false);
   });
 });

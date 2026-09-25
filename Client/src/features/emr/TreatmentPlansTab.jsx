@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import Card from '../../components/ui/Card';
@@ -18,7 +18,7 @@ import { generateInvoiceFromPlan } from '../wallet/walletSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { requestConfirm } from '../ui/confirmDialog';
 import { useSocketEvent } from '../../lib/socket';
-import { canManageEmr } from '../../lib/roles';
+import { useCanManageEmr } from '../../lib/roles';
 import { formatMoney } from '../../lib/format';
 import {
   PLAN_STATUS_STYLES,
@@ -39,7 +39,7 @@ export default function TreatmentPlansTab({ patientId }) {
   const dispatch = useDispatch();
   const { t } = useT();
   const { items: plans, status, error } = useSelector((s) => s.emr.plans);
-  const canManage = canManageEmr();
+  const canManage = useCanManageEmr();
 
   const [formOpen, setFormOpen] = useState(false);
   const [expanded, setExpanded] = useState(new Set());

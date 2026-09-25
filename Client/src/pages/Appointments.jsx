@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -18,7 +18,7 @@ import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import api from '../lib/axios';
 import { useSocketEvent } from '../lib/socket';
-import { canManageAppointments } from '../lib/roles';
+import { useCanCreateAppointments } from '../lib/roles';
 import { useT } from '../lib/i18n';
 
 function addDays(date, n) {
@@ -37,7 +37,7 @@ export default function Appointments() {
   const { t, lang } = useT();
   const locale = lang === 'ar' ? 'ar-EG' : 'en-US';
   const { items, status, error, query } = useSelector((s) => s.appointments);
-  const canManage = canManageAppointments();
+  const canCreate = useCanCreateAppointments();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [tab, setTab] = useState('calendar');
@@ -56,16 +56,21 @@ export default function Appointments() {
       setTab('queue');
     }
     if (newParam === '1') {
-      const withTime = new Date();
-      withTime.setHours(9, 0, 0, 0);
-      setDefaultStart(withTime);
-      setEditing(null);
-      setFormOpen(true);
+      // A `?new=1` deep link must not bypass the create permission: drop the
+      // param and stay on the calendar when the role has no
+      // `appointments:create`.
+      if (canCreate) {
+        const withTime = new Date();
+        withTime.setHours(9, 0, 0, 0);
+        setDefaultStart(withTime);
+        setEditing(null);
+        setFormOpen(true);
+      }
     }
     if (newParam || tabParam) {
       setSearchParams({}, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, canCreate]);
 
   useEffect(() => {
     api.get('/users/doctors').then((d) => setDoctors(d.data.data.doctors)).catch(() => {});
@@ -173,7 +178,7 @@ export default function Appointments() {
         title={t('appointments.title')}
         subtitle={t('appointments.subtitle')}
         actions={
-          canManage && (
+          canCreate && (
             <Button size="sm" onClick={() => openCreate(anchor)}>
               {t('appointments.new')}
             </Button>
@@ -326,7 +331,7 @@ export default function Appointments() {
                   anchorDate={anchor}
                   doctorFilter={query.doctor}
                   onEdit={openEdit}
-                  onNew={openCreate}
+                  onNew={canCreate ? openCreate : undefined}
                 />
               )}
             </div>

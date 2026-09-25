@@ -13,7 +13,7 @@ import ClinicalContextBar from '../features/emr/ClinicalContextBar';
 import { resetWallet } from '../features/wallet/walletSlice';
 import { setEmrPatient, resetEmr } from '../features/emr/emrSlice';
 import { patientApi } from '../features/patients/patientApi';
-import { canViewEmr } from '../lib/roles';
+import { useCanViewEmr } from '../lib/roles';
 import { useT } from '../lib/i18n';
 
 const TABS = [
@@ -33,7 +33,9 @@ export default function PatientEmr() {
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('chart');
-
+  // Resolved unconditionally at the top of the component: this is a hook, so
+  // it must not sit behind the early return below.
+  const canOpenEmr = useCanViewEmr();
   useEffect(() => {
     dispatch(setEmrPatient(patientId));
     return () => {
@@ -65,7 +67,7 @@ export default function PatientEmr() {
     };
   }, [patientId]);
 
-  if (!canViewEmr()) {
+  if (!canOpenEmr) {
     return (
       <EmptyState title={t('error.notAllowed')} message={t('error.notAllowedMsg')} />
     );

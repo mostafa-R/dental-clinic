@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -27,7 +27,7 @@ import EmptyState from '../components/ui/EmptyState';
 import Pagination from '../components/ui/Pagination';
 import Spinner from '../components/ui/Spinner';
 import { useSocketEvent } from '../lib/socket';
-import { canManageBilling, canViewBilling } from '../lib/roles';
+import { useCanViewBilling, useCanCreateInvoices } from '../lib/roles';
 import { useT } from '../lib/i18n';
 
 
@@ -37,8 +37,8 @@ export default function Billing() {
   const { t } = useT();
   const [searchParams, setSearchParams] = useSearchParams();
   const { items, pagination, query, status, error, summary, summaryStatus } = useSelector((s) => s.billing);
-  const canManage = canManageBilling();
-  const canViewSummary = canViewBilling();
+  const canViewSummary = useCanViewBilling();
+  const canCreate = useCanCreateInvoices();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -51,16 +51,19 @@ export default function Billing() {
 
   useEffect(() => {
     if (searchParams.get('new') === '1') {
+      // A `?new=1` deep link must not bypass the create permission: drop the
+      // param and stay on the list when the role has no `billing:create`.
+      setSearchParams({}, { replace: true });
+      if (!canCreate) return;
       setEditing(null);
       setFormOpen(true);
-      setSearchParams({}, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, canCreate]);
 
   useEffect(() => {
-    if (!canViewBilling()) return undefined;
+    if (!canViewSummary) return undefined;
     dispatch(fetchInvoices(query));
-  }, [dispatch, query]);
+  }, [dispatch, query, canViewSummary]);
 
   useEffect(() => {
     if (canViewSummary && summaryStatus === 'idle') {
@@ -78,7 +81,7 @@ export default function Billing() {
 
   useEffect(() => () => dispatch(resetBilling()), [dispatch]);
 
-  if (!canViewBilling()) {
+  if (!canViewSummary) {
     return (
       <Card>
         <EmptyState title={t('error.notAllowed')} message={t('error.notAllowedMsg')} />
@@ -150,7 +153,7 @@ export default function Billing() {
             <Button variant="outline" size="sm" onClick={() => setAgingOpen(true)}>
               {t('billing.aging.title')}
             </Button>
-            {canManage && (
+            {canCreate && (
               <Button size="sm" onClick={openCreate}>
                 {t('billing.new')}
               </Button>

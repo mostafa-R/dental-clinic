@@ -88,6 +88,27 @@ export const ATTACHMENT_TYPE_LABELS = {
   document: 'Document',
 };
 
+/**
+ * Mirrors the server rule in `server/modules/emr/emr.validator.js`: a clinical
+ * attachment reference must be either a same-origin API path (the authenticated
+ * encrypted-download route the server hands back on upload) or an absolute
+ * https link. Everything else — `javascript:`, `data:`, other schemes — is
+ * rejected so a note can never carry a script-injection link.
+ *
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function isValidAttachmentUrl(url) {
+  const value = String(url || '').trim();
+  if (!value) return false;
+  return value.startsWith('/api/') || /^https:\/\//i.test(value);
+}
+
+/** True when the reference points at a third-party host. */
+export function isExternalAttachmentUrl(url) {
+  return /^https:\/\//i.test(String(url || '').trim());
+}
+
 export const QUADRANTS = {
   ur: { label: 'Upper Right', symbol: '\u2518' },
   ul: { label: 'Upper Left', symbol: '\u2514' },

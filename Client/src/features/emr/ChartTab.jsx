@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import DentalChart from './DentalChart';
@@ -9,7 +9,7 @@ import Spinner from '../../components/ui/Spinner';
 import TreatmentPlanFormModal from './TreatmentPlanFormModal';
 import { fetchChart, fetchPlans, resetFormState, saveTooth } from './emrSlice';
 import { useSocketEvent } from '../../lib/socket';
-import { canManageEmr } from '../../lib/roles';
+import { useCanManageEmr } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
 import { formatMoney } from '../../lib/format';
 import { PROCEDURE_STATUS_STYLES, toothFdi, toothChartPayload } from './dental';
@@ -20,7 +20,7 @@ export default function ChartTab({ patientId }) {
   const { data: chart, status, error } = useSelector((s) => s.emr.chart);
   const plans = useSelector((s) => s.emr.plans);
   const formStatus = useSelector((s) => s.emr.formStatus);
-  const canManage = canManageEmr();
+  const canManage = useCanManageEmr();
 
   // S1b: tooth selection identity is the canonical FDI code. Legacy
   // number-only API responses still resolve via toothFdi() derivation.
