@@ -1,6 +1,7 @@
 ﻿import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../features/auth/authSlice';
 import { authApi, clearClientSessionTraces } from '../features/auth/authApi';
+import { resetPermissions } from '../features/users/userSlice';
 import { disconnectSocket } from '../lib/socket';
 import Button from './ui/Button';
 import { useT } from '../lib/i18n';
@@ -17,7 +18,6 @@ export default function SuspendedScreen() {
     } catch {
       // ignore server logout errors; always clear the local session
     } finally {
-      const { resetPermissions } = await import('../features/users/userSlice');
       dispatch(resetPermissions());
       dispatch(logout());
       disconnectSocket();

@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
@@ -6,11 +6,11 @@ import { showErrorDialog } from '../ui/uiSlice';
 import { patientApi } from '../patients/patientApi';
 import api from '../../lib/axios';
 import { createInvoice, resetFormState, updateInvoice } from './billingSlice';
+import { billingApi } from './billingApi';
 import { formatMoney } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { useIsClinicWide } from '../../lib/roles';
-
-const EMPTY_ITEM = { description: '', quantity: 1, unitPrice: 0 };
+import { EMPTY_ITEM, buildPayload, toForm } from './invoicePayload';
 
 const EMPTY_FORM = {
   patient: '',
@@ -30,55 +30,6 @@ function round2(n) {
   return Math.round((x + Number.EPSILON) * 100) / 100;
 }
 
-function parseDate(d) {
-  if (!d) return '';
-  const date = new Date(d);
-  if (isNaN(date.getTime())) return '';
-  return date.toISOString().slice(0, 10);
-}
-
-function toForm(invoice) {
-  return {
-    patient: invoice.patient?._id || invoice.patient || '',
-    branch: invoice.branch?._id || invoice.branch || '',
-    items:
-      invoice.items?.length > 0
-        ? invoice.items.map((it) => ({
-            description: it.description || '',
-            quantity: it.quantity ?? 1,
-            unitPrice: it.unitPrice ?? 0,
-          }))
-        : [{ ...EMPTY_ITEM }],
-    discount: invoice.discount ? String(invoice.discount) : '',
-    discountType: invoice.discountType || 'fixed',
-    discountRate: invoice.discountRate ? String(invoice.discountRate) : '',
-    tax: invoice.tax ? String(invoice.tax) : '',
-    taxRate: invoice.taxRate ? String(invoice.taxRate) : '',
-    dueDate: parseDate(invoice.dueDate),
-    notes: invoice.notes || '',
-  };
-}
-
-function buildPayload(form) {
-  const items = form.items
-    .filter((it) => it.description.trim())
-    .map((it) => ({
-      description: it.description.trim(),
-      quantity: Number(it.quantity) || 1,
-      unitPrice: Number(it.unitPrice) || 0,
-    }));
-  const payload = { items };
-  if (form.discount !== '') payload.discount = Number(form.discount) || 0;
-  if (form.discountType) payload.discountType = form.discountType;
-  if (form.discountRate !== '') payload.discountRate = Number(form.discountRate) || 0;
-  if (form.tax !== '') payload.tax = Number(form.tax) || 0;
-  if (form.taxRate !== '') payload.taxRate = Number(form.taxRate) || 0;
-  if (form.dueDate) payload.dueDate = new Date(form.dueDate).toISOString();
-  if (form.notes.trim()) payload.notes = form.notes.trim();
-  if (form.branch) payload.branch = form.branch;
-  return payload;
-}
-
 export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
   const dispatch = useDispatch();
   const { t } = useT();
@@ -90,6 +41,11 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
   const isEdit = Boolean(invoice);
 
   const [form, setForm] = useState(EMPTY_FORM);
+  // The row handed in by the list is a snapshot from whenever the table last
+  // fetched. Editing from it silently clobbered anything that changed since,
+  // so the current record is re-read before the form is seeded.
+  const [source, setSource] = useState(invoice);
+  const [loadingRecord, setLoadingRecord] = useState(false);
   const [patients, setPatients] = useState([]);
   const [patientsLoading, setPatientsLoading] = useState(false);
   // These two lists are the only way to pick a patient and a branch, so a
@@ -139,8 +95,38 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
 
   useEffect(() => {
     if (!open) return;
-    setForm(invoice ? toForm(invoice) : { ...EMPTY_FORM });
+    let cancelled = false;
     dispatch(resetFormState());
+
+    if (!invoice?._id) {
+      setSource(null);
+      setForm({ ...EMPTY_FORM });
+      return undefined;
+    }
+
+    setLoadingRecord(true);
+    billingApi
+      .get(invoice._id)
+      .then((d) => {
+        if (cancelled) return;
+        const fresh = d?.invoice || null;
+        setSource(fresh || invoice);
+        setForm(fresh ? toForm(fresh) : toForm(invoice));
+      })
+      .catch(() => {
+        // Fall back to the list row rather than opening an empty form, which
+        // would post an item-less invoice over a real one.
+        if (cancelled) return;
+        setSource(invoice);
+        setForm(toForm(invoice));
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRecord(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [open, invoice, dispatch]);
 
   const totals = useMemo(() => {
@@ -185,7 +171,11 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
       dispatch(showErrorDialog({ message: t('billing.form.selectPatient') }));
       return;
     }
-    const payload = { ...buildPayload(form), patient: form.patient };
+    if (!form.items.some((it) => it.description.trim())) {
+      dispatch(showErrorDialog({ message: t('billing.form.addLineItem') }));
+      return;
+    }
+    const payload = { ...buildPayload(form, source), patient: form.patient };
     try {
       if (isEdit) {
         await dispatch(updateInvoice({ id: invoice._id, payload })).unwrap();
@@ -218,7 +208,7 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
           <button
             type="submit"
             form="invoice-form"
-            disabled={submitting}
+            disabled={submitting || loadingRecord}
             className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60 dark:bg-brand dark:hover:bg-brand-dark"
           >
             {submitting ? t('common.saving') : isEdit ? t('common.save') : t('billing.form.create')}
@@ -226,6 +216,10 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
         </>
       }
     >
+      {loadingRecord && (
+        <div className="mb-3"><Spinner label={t('common.loading')} /></div>
+      )}
+
       {formStatus === 'loading' && (
         <div className="mb-3"><Spinner label={t('common.saving')} /></div>
       )}

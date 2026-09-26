@@ -106,7 +106,12 @@ router.get('/', protect, checkPermission('chat', 'read'), validate(listMessagesS
  *   patch:
  *     tags: [Chat]
  *     summary: Mark messages as read
- *     description: Requires `chat:update`.
+ *     description: >
+ *       Requires `chat:read`. Clearing your own unread badge is a read-side
+ *       action scoped to the caller's own messages — it never modifies anyone
+ *       else's state — so it must not require `chat:update`. Gating it on
+ *       `chat:update` left read-only participants with a permanent unread count
+ *       they had no way to clear.
  *     security:
  *       - cookieAuth: []
  *     requestBody:
@@ -142,7 +147,7 @@ router.get('/', protect, checkPermission('chat', 'read'), validate(listMessagesS
  *       '403':
  *         $ref: '#/components/responses/Forbidden'
  */
-router.patch('/read', protect, checkPermission('chat', 'update'), validate(markReadSchema, 'body'), markMessagesRead);
+router.patch('/read', protect, checkPermission('chat', 'read'), validate(markReadSchema, 'body'), markMessagesRead);
 
 /**
  * @swagger
@@ -150,7 +155,9 @@ router.patch('/read', protect, checkPermission('chat', 'update'), validate(markR
  *   post:
  *     tags: [Chat]
  *     summary: Mark a channel as viewed
- *     description: Requires `chat:update`. Marks the current user's channel view as up to date.
+ *     description: >
+ *       Requires `chat:read`. Like `/read`, this only advances the caller's own
+ *       channel-view marker — it is a read-side action, not a `chat:update` one.
  *     security:
  *       - cookieAuth: []
  *     requestBody:
@@ -182,7 +189,7 @@ router.patch('/read', protect, checkPermission('chat', 'update'), validate(markR
  *       '403':
  *         $ref: '#/components/responses/Forbidden'
  */
-router.post('/channel-read', protect, checkPermission('chat', 'update'), validate(markChannelReadSchema, 'body'), markChannelRead);
+router.post('/channel-read', protect, checkPermission('chat', 'read'), validate(markChannelReadSchema, 'body'), markChannelRead);
 
 /**
  * @swagger

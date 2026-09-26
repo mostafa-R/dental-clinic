@@ -28,7 +28,7 @@ function WalletIcon() {
 export default function PendingEarnings() {
   const { t } = useT();
   const user = useSelector((s) => s.auth.user);
-  const [amount, setAmount] = useState(null);
+  const [state, setState] = useState({ amount: null, failed: false });
 
   const hasAccess = usePermission("accounting", "read");
 
@@ -43,9 +43,14 @@ export default function PendingEarnings() {
         const pending = commissions
           .filter((c) => c.status === "pending")
           .reduce((sum, c) => sum + (c.amount || 0), 0);
-        setAmount(pending);
+        setState({ amount: pending, failed: false });
       })
-      .catch(() => {});
+      // Swallowing the error left `amount` null, so the card rendered an
+      // em-dash that was indistinguishable from "still loading" or a genuine
+      // zero. A doctor could read a blank earnings figure as "nothing owed".
+      .catch(() => {
+        if (!cancelled) setState({ amount: null, failed: true });
+      });
     return () => {
       cancelled = true;
     };
@@ -56,9 +61,13 @@ export default function PendingEarnings() {
   return (
     <StatCard
       label={t("doctorDashboard.pendingEarnings")}
-      value={amount !== null ? formatMoney(amount) : "—"}
+      value={state.failed ? t("common.unavailable") : state.amount !== null ? formatMoney(state.amount) : "—"}
       icon={<WalletIcon />}
-      hint={t("doctorDashboard.earningsHint")}
+      hint={
+        state.failed
+          ? t("doctorDashboard.earningsLoadFailed")
+          : t("doctorDashboard.earningsHint")
+      }
       accent="amber"
     />
   );

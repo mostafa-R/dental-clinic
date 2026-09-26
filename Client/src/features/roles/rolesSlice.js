@@ -1,10 +1,8 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 
 import { rolesApi } from './rolesApi';
+import { errPayload } from '../../lib/errors';
 
-function errPayload(err, fallback) {
-  return err.response?.data || { message: fallback };
-}
 
 export const fetchRoles = createAsyncThunk(
   'roles/fetchRoles',

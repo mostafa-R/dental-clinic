@@ -6,6 +6,7 @@ import Topbar from "./Topbar";
 import ChatGlobalListener from "../../features/chat/ChatGlobalListener";
 import { applyServerPreferences } from "../../features/preferences/usePreferences";
 import { initNotifications } from "../../lib/notificationSound";
+import { setClinicTimeZone } from "../../lib/clinicTime";
 import { useT } from "../../lib/i18n";
 
 function ImpersonationBanner() {
@@ -32,7 +33,17 @@ function ImpersonationBanner() {
 
 export default function AppLayout() {
   const user = useSelector((s) => s.auth.user);
+  const clinicTimezone = useSelector((s) => s.users?.myPermissions?.timezone);
   const location = useLocation();
+
+  // The clinic's IANA zone is the reference for every date the UI renders or
+  // submits. It arrives with the permissions payload and is re-applied whenever
+  // that payload is refreshed, so a clinic that changes its timezone (or an
+  // impersonation switch to another clinic) is picked up without a re-login.
+  // Until it lands, date helpers fall back to the browser zone.
+  useEffect(() => {
+    setClinicTimeZone(clinicTimezone);
+  }, [clinicTimezone]);
 
   // Apply server-stored preferences once the authenticated user is known.
   // Re-runs only when the user identity changes (login), so local toggles

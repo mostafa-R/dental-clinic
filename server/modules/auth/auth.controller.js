@@ -14,6 +14,7 @@ import {
 import User from '../users/user.model.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 import { resolveRole } from '../../middleware/checkPermission.js';
+import { resolveTenantTimezone } from '../../utils/timezoneUtils.js';
 
 export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.validatedBody;
@@ -82,9 +83,17 @@ export const getMe = asyncHandler(async (req, res) => {
 export const getMyPermissions = asyncHandler(async (req, res) => {
   const resolved = await resolveRole(req);
   const { isSystemAdmin, permissionMap } = resolved;
+  // The clinic's IANA zone. The client has no other way to learn it, and it is
+  // the reference for every "today"/"this day" question the UI asks — a browser
+  // in a different zone used to resolve date-only inputs and format timestamps
+  // against its own locale, which put appointments, recalls and the day-close
+  // screens a day out for clinics not on the receptionist's timezone. Sent on
+  // both branches so a system admin also gets a sane default rather than
+  // `undefined`.
+  const timezone = resolveTenantTimezone(req.user?.tenant);
   // System admins bypass the plan gate everywhere (see checkPermission).
   if (isSystemAdmin) {
-    return sendSuccess(res, { isSystemAdmin, permissions: permissionMap() });
+    return sendSuccess(res, { isSystemAdmin, permissions: permissionMap(), timezone });
   }
   // Intersect role permissions with the tenant's plan modules so the clinic
   // frontend (Sidebar / RequirePermission) automatically hides modules the
@@ -105,6 +114,7 @@ export const getMyPermissions = asyncHandler(async (req, res) => {
     permissions,
     plan: tenant?.plan ?? null,
     planModules: tenant?.planModules ?? [],
+    timezone,
   });
 });
 

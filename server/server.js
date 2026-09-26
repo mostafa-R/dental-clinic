@@ -4,6 +4,7 @@ import app, { upgradeRateLimitStore } from "./app.js";
 import { connectDB, disconnectDB } from "./config/db.js";
 import { connectRedis, disconnectRedis } from "./config/redis.js";
 import { runMigrations } from "./migrations/runner.js";
+import { resolveExpiryMs } from "./utils/jwt.js";
 import { setupDbMonitoring } from "./utils/dbMonitor.js";
 import { startMetricsExport, stopMetricsExport } from "./utils/redisMetrics.js";
 import { startAbuseCron, stopAbuseCron, stopAbuseFlusher } from "./services/abuseDetection.js";
@@ -24,6 +25,12 @@ import { startRecallEngine, stopRecallEngine } from "./services/recallEngine.js"
 import { getIO, initSocket } from "./socket/index.js";
 
 const PORT = Number(process.env.PORT || 5000);
+
+// Module-scoped so the fatal-error handlers can run the same drain a signal
+// does. Exiting straight from `uncaughtException` used to drop in-flight
+// requests and skip the watchdog entirely.
+let httpServer = null;
+let shuttingDown = false;
 
 
 
@@ -49,6 +56,18 @@ function validateEnv() {
     console.error("CLIENT_URL is required in production");
     process.exit(1);
   }
+
+  // Token lifetimes drive cookie security, so a malformed value must fail the
+  // boot rather than be silently reinterpreted at first login.
+  for (const key of ["ACCESS_TOKEN_EXPIRY", "REFRESH_TOKEN_EXPIRY"]) {
+    if (process.env[key] === undefined) continue;
+    try {
+      resolveExpiryMs(process.env[key], "12h", key);
+    } catch (err) {
+      console.error(err.message);
+      process.exit(1);
+    }
+  }
 }
 
 async function start() {
@@ -66,7 +85,7 @@ async function start() {
   await upgradeRateLimitStore();
   startMetricsExport();
 
-  const httpServer = http.createServer(app);
+  httpServer = http.createServer(app);
   initSocket(httpServer);
 
   httpServer.listen(PORT, () => {
@@ -97,22 +116,44 @@ async function start() {
   startAutomationEngine();
   startRecallEngine();
 
-  const shutdown = async (signal) => {
-    console.log(`\n${signal} received. Shutting down gracefully...`);
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+}
 
-    stopSuspensionCron();
-    stopAbuseCron();
-    stopAbuseFlusher();
-    stopAlertCron();
-    stopWhatsAppReminderCron();
-    stopBackupCron();
-    stopInstallmentCron();
-    stopNoShowCron();
-    stopRecallCron();
-    stopQueueNotifyCron();
-    stopInventoryCron();
-    stopConsentExpiryCron();
+// Module-scoped so the fatal-error handlers below can drain the same way a
+// signal does.
+async function shutdown(signal, exitCode = 0) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n${signal} received. Shutting down gracefully...`);
 
+  stopSuspensionCron();
+  stopAbuseCron();
+  stopAbuseFlusher();
+  stopAlertCron();
+  stopWhatsAppReminderCron();
+  stopBackupCron();
+  stopInstallmentCron();
+  stopNoShowCron();
+  stopRecallCron();
+  stopQueueNotifyCron();
+  stopInventoryCron();
+  stopConsentExpiryCron();
+
+  // Detach the fatal handlers first: a failure *during* drain must not
+  // re-enter shutdown (guarded above) or abort the drain mid-way.
+  process.removeAllListeners("uncaughtException");
+  process.removeAllListeners("unhandledRejection");
+
+  // Armed (not unref'd) and cleared on success, so a hung drain — a wedged
+  // WhatsApp client, a Redis socket that never settles — cannot hold the
+  // process open forever.
+  const watchdog = setTimeout(() => {
+    console.error("[Shutdown] Forced exit after 15s drain timeout");
+    process.exit(exitCode || 1);
+  }, 15000);
+
+  try {
     await disconnectAllWhatsAppClients();
 
     stopMetricsExport();
@@ -123,18 +164,17 @@ async function start() {
     await disconnectRedis();
     await disconnectDB();
 
-    httpServer.close(() => {
+    if (httpServer) {
+      await new Promise((resolve) => httpServer.close(resolve));
       console.log("HTTP server closed");
-      process.exit(0);
-    });
-    setTimeout(() => {
-      console.error("Forced shutdown after timeout");
-      process.exit(0);
-    }, 15000).unref();
-  };
+    }
+  } catch (err) {
+    console.error("[Shutdown] Error during drain:", err);
+    exitCode = 1;
+  }
 
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
+  clearTimeout(watchdog);
+  process.exit(exitCode);
 }
 
 start().catch((err) => {
@@ -144,10 +184,10 @@ start().catch((err) => {
 
 process.on("uncaughtException", (err) => {
   console.error("[FATAL] Uncaught Exception:", err);
-  process.exit(1);
+  shutdown("uncaughtException", 1);
 });
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] Unhandled Rejection:", reason);
-  process.exit(1);
+  shutdown("unhandledRejection", 1);
 });

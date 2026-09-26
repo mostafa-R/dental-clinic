@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { authApi, clearClientSessionTraces } from "../../features/auth/authApi";
-import { logout } from "../../features/auth/authSlice";
+import { resetAllState } from "../../app/resetAll";
 import PreferencesControls from "../../features/preferences/PreferencesControls";
 import GlobalSearch from "../../features/search/GlobalSearch";
 import { toggleMobileSidebar } from "../../features/ui/uiSlice";
@@ -232,9 +232,10 @@ export default function Topbar() {
     } catch {
       /* ignore server errors - always clear the local session below */
     } finally {
-      const { resetPermissions } = await import("../../features/users/userSlice");
-      dispatch(resetPermissions());
-      dispatch(logout());
+      // One dispatch clears every slice, not just auth: the patient list,
+      // appointment queue, invoices, EMR, wallet, chat and accounting caches
+      // are all PHI and must not survive into the next session.
+      dispatch(resetAllState());
       disconnectSocket();
       clearClientSessionTraces();
     }

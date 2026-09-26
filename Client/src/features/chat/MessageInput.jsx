@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { sendMessage } from './chatSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { useT } from '../../lib/i18n';
+import { usePermission } from '../../lib/roles';
 
 export default function MessageInput() {
   const { t } = useT();
@@ -10,6 +11,11 @@ export default function MessageInput() {
   const { activeChat, sendingStatus } = useSelector((s) => s.chat);
   const [content, setContent] = useState('');
   const textareaRef = useRef(null);
+
+  // Sending is `chat:create`, which is a separate grant from `chat:read` — a
+  // role can hold one without the other. Without this the composer rendered for
+  // anyone who could open the page, and every submit came back 403.
+  const canSend = usePermission('chat', 'create');
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -19,7 +25,7 @@ export default function MessageInput() {
     }
   }, [content]);
 
-  const disabled = !activeChat || sendingStatus === 'loading';
+  const disabled = !activeChat || sendingStatus === 'loading' || !canSend;
 
   const handleSend = async () => {
     if (!content.trim() || disabled) return;
@@ -52,8 +58,8 @@ export default function MessageInput() {
           value={content}
           onChange={(e) => setContent(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={t('chat.inputPlaceholder')}
-          aria-label={t('chat.inputPlaceholder')}
+          placeholder={canSend ? t('chat.inputPlaceholder') : t('chat.readOnlyPlaceholder')}
+          aria-label={canSend ? t('chat.inputPlaceholder') : t('chat.readOnlyPlaceholder')}
           disabled={disabled}
           rows={1}
           className="max-h-40 min-h-[38px] flex-1 resize-none overflow-y-auto rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-brand dark:focus:ring-brand/20"

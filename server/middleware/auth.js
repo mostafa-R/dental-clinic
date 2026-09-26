@@ -34,7 +34,7 @@ export async function protect(req, _res, next) {
     // tenant-scoped). Populating it here would double-query on every request.
     const user = await User.findById(decoded.sub)
       .populate('branch', 'name address phone isActive')
-      .populate('tenant', 'plan planModules planId status name isActive subscriptionEndsAt trialEndsAt');
+      .populate('tenant', 'plan planModules planId status name isActive subscriptionEndsAt trialEndsAt timezone');
     if (!user) {
       throw ApiError.unauthorized('User no longer exists');
     }
@@ -75,6 +75,11 @@ export async function protect(req, _res, next) {
           isActive: user.tenant.isActive,
           subscriptionEndsAt: user.tenant.subscriptionEndsAt,
           trialEndsAt: user.tenant.trialEndsAt,
+          // Carried through the cache so `/auth/my-permissions` can hand the
+          // clinic's IANA zone to the client without a second query. Entries
+          // written before this field existed simply lack it; readers fall back
+          // via `resolveTenantTimezone`.
+          timezone: user.tenant.timezone,
         };
         await cacheTenant(tenantId, tenantConfig);
       }

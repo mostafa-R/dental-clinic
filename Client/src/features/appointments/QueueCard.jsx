@@ -5,6 +5,7 @@ import { showErrorDialog } from '../ui/uiSlice';
 import StatusBadge from './StatusBadge';
 import { nextStatusOptions, statusTKey } from './statuses';
 import { useT } from '../../lib/i18n';
+import { clinicTimeZone } from '../../lib/clinicTime';
 
 const STATUS_BORDER = {
   checked_in: 'border-s-amber-400',
@@ -18,7 +19,16 @@ function formatTime(date) {
   if (!date) return null;
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  // Deliberately not the shared `formatTime` from lib/format: this card pins
+  // the en-US 12-hour style regardless of the UI language. The zone still has
+  // to be the clinic's — this used the browser's, so the time printed on the
+  // queue card disagreed with the time booked for a remote receptionist.
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: clinicTimeZone(),
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }).format(d);
 }
 
 function waitingSince(date) {
@@ -32,13 +42,16 @@ function waitingSince(date) {
   return `${h}h ${mins % 60}m`;
 }
 
-export default function QueueCard({ appointment, onClick, isDragging, compact }) {
+export default function QueueCard({ appointment, onClick, isDragging, compact, readOnly = false }) {
   const dispatch = useDispatch();
   const { t } = useT();
   const [transitioning, setTransitioning] = useState(false);
-  const options = nextStatusOptions(appointment.status);
+  const options = readOnly ? [] : nextStatusOptions(appointment.status);
 
   const handleTransition = async (status) => {
+    // The buttons are hidden for read-only users, but the guard belongs in the
+    // handler too so a status change cannot be triggered by any other path.
+    if (readOnly) return;
     setTransitioning(true);
     try {
       await dispatch(transitionAppointment({ id: appointment._id, status })).unwrap();

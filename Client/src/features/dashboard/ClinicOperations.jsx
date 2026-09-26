@@ -10,14 +10,21 @@ import { useSocketEvent } from '../../lib/socket';
 import { useT } from '../../lib/i18n';
 import { usePermission } from '../../lib/roles';
 import { formatMoney } from '../../lib/format';
+import { todayAsDateInputValue, clinicTimeZone } from '../../lib/clinicTime';
 
 function today() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return todayAsDateInputValue();
 }
 
 function formatTime(value) {
-  return value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--';
+  if (!value) return '--';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '--';
+  return new Intl.DateTimeFormat(undefined, {
+    timeZone: clinicTimeZone(),
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d);
 }
 
 function Row({ appointment, action, t }) {

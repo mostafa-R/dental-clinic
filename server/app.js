@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { abuseMonitor } from "./middleware/abuseMonitor.js";
 import { csrfProtection } from "./middleware/csrf.js";
 import { errorHandler, notFound } from "./middleware/error.js";
+import { errorMonitoringMiddleware } from "./utils/errorMonitor.js";
 import { hostPolicy } from "./middleware/hostPolicy.js";
 import { httpLogger } from "./middleware/httpLogger.js";
 import { ipAllowlist } from "./middleware/ipAllowlist.js";
@@ -26,6 +27,7 @@ import { userRateLimit } from "./middleware/userRateLimit.js";
 import apiRouter from "./routes/routes.js";
 import { setupSwagger } from "./swagger.js";
 import { perfMiddleware } from "./utils/perfMonitor.js";
+import { logInfo, logWarn } from "./utils/logger.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -169,20 +171,24 @@ const generalLimiter = rateLimit({
 
 app.use("/api", requestId, generalLimiter, perfMiddleware, abuseMonitor, userRateLimit({ windowMs: 60000, max: 200 }), maintenance, ipAllowlist, hostPolicy, tenantRouter, apiRouter);
 
+// Error chain. `errorMonitoringMiddleware` is 4-arg error middleware, so
+// Express only reaches it while walking the error path — and it must be
+// registered BEFORE the handlers that terminate the chain, otherwise
+// `errorHandler` (which never calls next()) ends the walk first and
+// monitoring never observes anything. It is also why it sits above
+// `notFound`: that is 2-arg middleware, so Express skips it on the error
+// path and hands the error straight to this one.
+app.use(errorMonitoringMiddleware);
 app.use(notFound);
 app.use(logError);
 app.use(errorHandler);
-
-// Import and use error monitoring middleware
-import { errorMonitoringMiddleware } from "./utils/errorMonitor.js";
-app.use(errorMonitoringMiddleware);
 
 export async function upgradeRateLimitStore() {
   try {
     const { getRedis } = await import("./config/redis.js");
     const redisClient = getRedis();
     if (!redisClient || redisClient.status !== "ready") {
-      console.warn("[RateLimit] Redis not connected - using in-memory store");
+      logWarn("[RateLimit] Redis not connected - using in-memory store");
       return false;
     }
 
@@ -193,10 +199,10 @@ export async function upgradeRateLimitStore() {
     authLimiter.store = store;
     emailAuthLimiter.store = store;
     generalLimiter.store = store;
-    console.log("[RateLimit] Upgraded auth + general limiters to Redis store");
+    logInfo("[RateLimit] Upgraded auth + general limiters to Redis store");
     return true;
   } catch {
-    console.warn("[RateLimit] Redis not available - using in-memory store");
+    logWarn("[RateLimit] Redis not available - using in-memory store");
     return false;
   }
 }

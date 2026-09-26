@@ -7,8 +7,10 @@ import EmptyState from '../../components/ui/EmptyState';
 import Spinner from '../../components/ui/Spinner';
 import { closeDuplicates, fetchDuplicates, mergePatients } from './patientSlice';
 import { pushToast, showErrorDialog } from '../ui/uiSlice';
+import { requestConfirm } from '../ui/confirmDialog';
 import { formatDate } from '../../lib/format';
 import { useT } from '../../lib/i18n';
+import { useCanManagePatients } from '../../lib/roles';
 import PhiField from '../../components/ui/PhiField';
 
 export default function DuplicatesPanel() {
@@ -16,25 +18,56 @@ export default function DuplicatesPanel() {
   const { t } = useT();
   const { duplicates, mergeStatus } = useSelector((s) => s.patients);
   const [survivorByGroup, setSurvivorByGroup] = useState({});
+  // Merging is destructive and irreversible, so the control follows the same
+  // gate as every other patient mutation. Without it a read-only role saw a
+  // live button and only discovered the 403 after clicking.
+  const canManage = useCanManagePatients();
 
   useEffect(() => {
     dispatch(fetchDuplicates());
   }, [dispatch]);
 
   const handleMerge = async (group) => {
-    const survivorId = survivorByGroup[group.key] || group.patients[0]?._id;
+    const survivor = group.patients?.find((p) => p._id === (survivorByGroup[group.key] || group.patients?.[0]?._id));
+    const survivorId = survivor?._id;
     const duplicatesToMerge = (group.patients || []).filter((p) => p._id !== survivorId);
-    if (duplicatesToMerge.length === 0) return;
+    if (!survivorId || duplicatesToMerge.length === 0) return;
 
-    try {
-      for (const dup of duplicatesToMerge) {
-        await dispatch(mergePatients({ duplicateId: dup._id, survivorId })).unwrap();
-      }
+    const survivorName = `${survivor.firstName || ''} ${survivor.lastName || ''}`.trim();
+    const ok = await requestConfirm({
+      title: t('patients.duplicates.confirmTitle'),
+      message: t('patients.duplicates.confirmMerge', {
+        count: duplicatesToMerge.length,
+        name: survivorName || survivor.patientId || '',
+      }),
+      danger: true,
+    });
+    if (!ok) return;
+
+    // Each merge is its own server-side write, so a failure part-way through
+    // leaves the earlier ones committed. Running them together and reporting
+    // the exact tally is the only honest option without a transactional
+    // batch endpoint - the previous loop stopped at the first error and
+    // reported a bare failure while some records had already been merged.
+    const results = await Promise.allSettled(
+      duplicatesToMerge.map((dup) =>
+        dispatch(mergePatients({ duplicateId: dup._id, survivorId })).unwrap(),
+      ),
+    );
+    const done = results.filter((r) => r.status === 'fulfilled').length;
+    const firstError = results.find((r) => r.status === 'rejected');
+
+    if (done === duplicatesToMerge.length) {
       dispatch(pushToast({ type: 'success', message: t('patients.duplicates.merged') }));
-      dispatch(fetchDuplicates());
-    } catch (err) {
-      dispatch(showErrorDialog(err));
+    } else if (done > 0) {
+      dispatch(showErrorDialog({
+        message: t('patients.duplicates.partialFailure', { done, total: duplicatesToMerge.length }),
+      }));
+    } else {
+      dispatch(showErrorDialog(firstError?.reason || t('patients.duplicates.mergeFailed')));
     }
+
+    dispatch(fetchDuplicates());
   };
 
   const hasGroups = (duplicates.groups || []).length > 0;
@@ -124,15 +157,22 @@ export default function DuplicatesPanel() {
                   })}
                 </div>
 
-                {selectable.length > 1 && (
+                {selectable.length > 1 && canManage && (
                   <button
                     type="button"
                     onClick={() => handleMerge(group)}
                     disabled={mergeStatus === 'loading'}
+                    aria-busy={mergeStatus === 'loading'}
                     className="mt-2.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-brand/25 transition hover:bg-brand-dark active:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60 dark:bg-brand dark:hover:bg-brand-dark"
                   >
                     {mergeStatus === 'loading' ? t('common.loading') : t('patients.duplicates.mergeInto')}
                   </button>
+                )}
+
+                {selectable.length > 1 && !canManage && (
+                  <p className="mt-2.5 text-xs text-slate-400 dark:text-slate-500">
+                    {t('patients.duplicates.needsPermission')}
+                  </p>
                 )}
               </div>
             );

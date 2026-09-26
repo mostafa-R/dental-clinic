@@ -6,6 +6,7 @@ import { accountingApi } from '../accounting/accountingApi';
 import { useCanViewBilling, usePermission } from '../../lib/roles';
 import { formatDate, formatMoney } from '../../lib/format';
 import { useT } from '../../lib/i18n';
+import { todayAsDateInputValue } from '../../lib/clinicTime';
 
 function Chip({ label, value, tone = 'slate' }) {
   const tones = { slate: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200', amber: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100' };
@@ -21,7 +22,10 @@ export default function ClinicalContextBar({ patient }) {
     let active = true;
     emrApi.listPlans(patient._id, { status: 'active', limit: 100 }).then((data) => active && setPlans(data.plans || [])).catch(() => active && setPlans([]));
     if (canBilling) accountingApi.getWallet(patient._id).then((data) => active && setWallet(data.wallet || null)).catch(() => active && setWallet(null));
-    if (canAppointments) { const d = new Date(); const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; appointmentApi.list({ date, patient: patient._id, limit: 10 }).then((data) => active && setTodayVisit((data.appointments || [])[0] || null)).catch(() => active && setTodayVisit(null)); }
+    // "Today" is the clinic's today — the server matches the `date` filter
+    // against its own clinic-local day, so a browser-local day made this
+    // silently miss the visit that actually happens today.
+    if (canAppointments) { const date = todayAsDateInputValue(); appointmentApi.list({ date, patient: patient._id, limit: 10 }).then((data) => active && setTodayVisit((data.appointments || [])[0] || null)).catch(() => active && setTodayVisit(null)); }
     return () => { active = false; };
   }, [patient._id, canBilling, canAppointments]);
   const allergies = patient.medicalHistory?.allergies?.map((item) => item.name).filter(Boolean).join(', ');

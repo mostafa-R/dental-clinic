@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { Route, Routes, Navigate } from 'react-router-dom';
 import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import ModuleGuard from './components/ModuleGuard';
@@ -66,6 +66,13 @@ function App() {
             <Route element={<AppLayout />}>
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="patients" element={<Patients />} />
+              {/* The patient record IS the EMR tab, so `/patients/:id` is a
+                  permanent redirect rather than a second page. Without it the
+                  six global-search result groups (patients, wallets,
+                  installments, treatmentPlans, clinicalNotes, prescriptions) all
+                  link here and land on the embedded 404 — they were the only
+                  in-app links not already pointing at `/patients/:id/emr`. */}
+              <Route path="patients/:id" element={<Navigate to="emr" replace />} />
               <Route path="patients/:id/emr" element={<PatientEmr />} />
               <Route path="appointments" element={<Appointments />} />
               <Route path="recalls" element={<Recalls />} />

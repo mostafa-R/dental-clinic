@@ -17,6 +17,7 @@ import { showErrorDialog, pushToast } from '../features/ui/uiSlice';
 import { requestConfirm } from '../features/ui/confirmDialog';
 import { useCanManageAppointments } from '../lib/roles';
 import { useT } from '../lib/i18n';
+import { clinicTimeZone } from '../lib/clinicTime';
 
 const STATUSES = ['', 'due', 'contacted', 'scheduled', 'postponed', 'completed', 'dismissed'];
 const TYPES = ['', 'hygiene', 'follow_up', 'treatment_review', 'post_procedure', 'periodic_check', 'custom'];
@@ -34,7 +35,14 @@ function formatDue(value, t) {
   if (!value) return '—';
   const d = new Date(value);
   const overdue = d.getTime() < Date.now();
-  const label = d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  // Render in the clinic's zone: a due date set for 09:00 clinic time was
+  // displayed one day earlier for anyone west of the clinic.
+  const label = new Intl.DateTimeFormat(undefined, {
+    timeZone: clinicTimeZone(),
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(d);
   return overdue ? `${label} · ${t('recall.overdue')}` : label;
 }
 

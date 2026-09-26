@@ -1,5 +1,7 @@
 import axios from 'axios';
 import { disconnectSocket } from './socket';
+import { resetAllState } from '../app/resetAll';
+import { getBoundAction, getBoundStore } from '../app/storeBinding';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -9,8 +11,16 @@ const api = axios.create({
 let isRefreshing = false;
 let queue = [];
 
-function redirectToLogin() {
+async function redirectToLogin() {
   disconnectSocket();
+  // Purge the store before navigating. When the session expires while the user
+  // is already sitting on /login, no navigation happens, so the previous
+  // session's PHI would otherwise sit in memory indefinitely.
+  try {
+    getBoundStore()?.dispatch(resetAllState());
+  } catch {
+    /* best-effort - a real navigation still tears down the heap */
+  }
   if (window.location.pathname !== '/login') {
     window.location.href = '/login';
   }
@@ -71,7 +81,7 @@ api.interceptors.response.use(
         // requests are rejected either way, and the next user action will try
         // the refresh again once connectivity returns.
         if (shouldEndSession(refreshError)) {
-          redirectToLogin();
+          await redirectToLogin();
         }
         return Promise.reject(refreshError);
       } finally {
@@ -80,7 +90,7 @@ api.interceptors.response.use(
     }
 
     if (status === 401 && url.includes('/auth/refresh')) {
-      redirectToLogin();
+      await redirectToLogin();
     }
 
     // Plan gate denied: the tenant's subscription changed (downgrade /
@@ -93,10 +103,10 @@ api.interceptors.response.use(
       if (msg.includes('plan does not include')) {
         original._planRefreshed = true;
         try {
-          const [{ store }] = await Promise.all([import('../app/store')]);
-          const st = store.getState()?.users?.permissionsStatus;
-          if (st !== 'loading') {
-            const { fetchMyPermissions } = await import('../features/users/userSlice');
+          const store = getBoundStore();
+          const fetchMyPermissions = getBoundAction('fetchMyPermissions');
+          const st = store?.getState()?.users?.permissionsStatus;
+          if (store && fetchMyPermissions && st !== 'loading') {
             store.dispatch(fetchMyPermissions());
           }
         } catch {

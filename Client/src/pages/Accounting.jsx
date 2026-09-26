@@ -11,10 +11,14 @@ import DataTable from '../components/ui/DataTable';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import StatCard from '../components/ui/StatCard';
+import TabList from '../components/ui/TabList';
+import TabPanel from '../components/ui/TabPanel';
 import ExpenseModal from '../features/accounting/ExpenseModal';
 import OwnerDrawingModal from '../features/accounting/OwnerDrawingModal';
 import DayCloseTab from '../features/accounting/DayCloseTab';
 import JournalTab from '../features/accounting/JournalTab';
+import { usePreferences } from '../features/preferences/usePreferences';
+import { useTabIds } from '../lib/tabs';
 import {
   deleteExpense,
   deleteDrawing,
@@ -43,13 +47,31 @@ const TABS = [
   { key: 'journal', labelKey: 'accounting.tab.journal' },
 ];
 
+/**
+ * Axis tick label. The old formatter divided by 1000 unconditionally, so any
+ * value below 500 rendered as "0k" and a quiet month looked identical to a
+ * dead one. Compact notation now only kicks in once the number is actually
+ * worth abbreviating.
+ */
+const compactMoney = (value) => {
+  const n = Number(value) || 0;
+  const abs = Math.abs(n);
+  if (abs >= 1000) {
+    const scaled = n / 1000;
+    return `${Number.isInteger(scaled) ? scaled : scaled.toFixed(1)}k`;
+  }
+  return String(n);
+};
+
 export default function Accounting() {
   const dispatch = useDispatch();
   const { t } = useT();
   const { summary, summaryStatus, expenses, drawings, commissions } = useSelector((s) => s.accounting);
   const canManage = useCanManageAccounting();
+  const { theme } = usePreferences();
 
   const [tab, setTab] = useState('summary');
+  const tabIds = useTabIds();
   const [expenseModal, setExpenseModal] = useState(false);
   const [drawingModal, setDrawingModal] = useState(false);
 
@@ -123,6 +145,17 @@ export default function Accounting() {
 
   const CHART_COLORS = ['#2F7A4F', '#F29D7E', '#A3D2A4', '#0F533E', '#5AA17C', '#F5C4A8', '#7FC299', '#E9825C'];
 
+  // Recharts renders SVG, so Tailwind's dark: classes do not reach it. These
+  // were fixed light-mode hexes, which left the grid and tick labels glaring
+  // against a dark page.
+  const axis = useMemo(
+    () =>
+      theme === 'dark'
+        ? { grid: '#475569', text: '#94a3b8', border: '#334155' }
+        : { grid: '#94a3b8', text: '#64748b', border: '#cbd5e1' },
+    [theme],
+  );
+
   const monthlyChartData = useMemo(() => {
     const raw = summary?.monthlyRevenue || [];
     return raw.map((r) => {
@@ -145,35 +178,27 @@ export default function Accounting() {
     <div className="space-y-6">
       <PageHeader title={t('accounting.title')} subtitle={t('accounting.subtitle')} />
 
-      <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800">
-        {TABS.map((tb) => (
-          <button
-            key={tb.key}
-            type="button"
-            onClick={() => setTab(tb.key)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition ${
-              tab === tb.key
-                ? 'border-brand text-brand dark:border-brand-light dark:text-brand-light'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-            }`}
-          >
-            {t(tb.labelKey)}
-          </button>
-        ))}
-      </div>
+      <TabList
+        tabs={TABS.map((tb) => ({ key: tb.key, label: t(tb.labelKey) }))}
+        active={tab}
+        onChange={setTab}
+        label={t('accounting.title')}
+        ids={tabIds}
+      />
 
+      <TabPanel tabIds={tabIds} tabKey={tab}>
       {/* Summary */}
       {tab === 'summary' && (
         isLoading ? <Spinner label={t('accounting.loading')} /> : s ? (
           <div className="space-y-6">
             <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">{t('accounting.from')}</label>
-                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+                <label htmlFor="accounting-date-from" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">{t('accounting.from')}</label>
+                <input id="accounting-date-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">{t('accounting.to')}</label>
-                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+                <label htmlFor="accounting-date-to" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">{t('accounting.to')}</label>
+                <input id="accounting-date-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
               </div>
               <Button size="sm" onClick={applyDateFilter}>
                 {t('accounting.filter')}
@@ -199,11 +224,11 @@ export default function Accounting() {
                 ) : (
                   <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={monthlyChartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" strokeOpacity={0.3} />
-                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} />
-                      <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={axis.grid} strokeOpacity={0.3} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: axis.text }} />
+                      <YAxis tick={{ fontSize: 11, fill: axis.text }} tickFormatter={compactMoney} />
                       <Tooltip
-                        contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #cbd5e1' }}
+                        contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${axis.border}` }}
                         formatter={(value) => [formatMoney(value), t('accounting.revenue')]}
                       />
                       <Bar dataKey="revenue" fill="#2F7A4F" radius={[4, 4, 0, 0]} />
@@ -435,6 +460,7 @@ export default function Accounting() {
 
       {/* Journal */}
       {tab === 'journal' && <JournalTab />}
+      </TabPanel>
 
       <ExpenseModal open={expenseModal} onClose={() => setExpenseModal(false)} />
       <OwnerDrawingModal open={drawingModal} onClose={() => setDrawingModal(false)} />

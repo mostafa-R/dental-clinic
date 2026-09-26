@@ -161,12 +161,42 @@ export function clearAuthCookies(res, _type = "clinic") {
   }
 }
 
-function msFromExpiry(expiry) {
-  if (typeof expiry !== "string") return 86400000;
-  const match = expiry.match(/^(\d+)([smhdw])$/);
-  if (!match) return 86400000;
+const EXPIRY_MULTIPLIERS = { s: 1000, m: 60000, h: 3600000, d: 86400000, w: 604800000 };
+const EXPIRY_PATTERN = /^(\d+)([smhdw])$/;
+
+/**
+ * Parse a `<n><unit>` duration (`30s`, `15m`, `1h`, `7d`, `2w`).
+ *
+ * A malformed value used to fall back to 24h, which meant a typo in
+ * ACCESS_TOKEN_EXPIRY (e.g. `1H`, `60 m`, `1hour`) silently produced a token
+ * valid for a full day instead of failing. Throwing is the safe direction: an
+ * unset variable still takes the documented default, but a value the operator
+ * clearly intended to set is rejected loudly rather than reinterpreted.
+ * `validateEnv()` calls this at boot so the failure happens on startup, not on
+ * the first login.
+ */
+export function msFromExpiry(expiry, label = "token expiry") {
+  if (typeof expiry !== "string") {
+    throw new Error(`Invalid ${label}: expected a string like "15m" or "12h", got ${typeof expiry}`);
+  }
+  const match = expiry.trim().match(EXPIRY_PATTERN);
+  if (!match) {
+    throw new Error(
+      `Invalid ${label} "${expiry}": expected <number><s|m|h|d|w>, e.g. "30s", "15m", "12h", "7d"`,
+    );
+  }
   const value = Number(match[1]);
-  const unit = match[2];
-  const multipliers = { s: 1000, m: 60000, h: 3600000, d: 86400000, w: 604800000 };
-  return value * multipliers[unit];
+  const ms = value * EXPIRY_MULTIPLIERS[match[2]];
+  if (!Number.isSafeInteger(ms) || ms <= 0) {
+    throw new Error(`Invalid ${label} "${expiry}": duration must resolve to a positive millisecond value`);
+  }
+  return ms;
+}
+
+/** Resolve a configured expiry, applying `fallback` only when unset. */
+export function resolveExpiryMs(value, fallback, label) {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return msFromExpiry(fallback, `${label} default`);
+  }
+  return msFromExpiry(value, label);
 }

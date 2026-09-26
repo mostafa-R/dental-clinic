@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { appointmentApi } from './appointmentApi';
+import { localDateString } from '../../lib/clinicTime';
 
 export const fetchAppointments = createAsyncThunk(
   'appointments/fetchList',
@@ -186,13 +187,14 @@ const appointmentsSlice = createSlice({
         state.queue.waiting = emptied(state.queue.waiting);
         state.queue.inChair = emptied(state.queue.inChair);
         if (state.queue.completedToday === 0) {
-          const today = new Date();
+          // Compare calendar days in the clinic's zone, not the browser's:
+          // a late-evening completion in a clinic ahead of the receptionist
+          // (or behind them) otherwise counted for the wrong day and
+          // `completedToday` drifted.
           const start = new Date(incoming.start || Date.now());
-          const sameDay =
-            start.getFullYear() === today.getFullYear() &&
-            start.getMonth() === today.getMonth() &&
-            start.getDate() === today.getDate();
-          if (sameDay) state.queue.completedToday += 1;
+          if (localDateString(start.getTime()) === localDateString(Date.now())) {
+            state.queue.completedToday += 1;
+          }
         }
       } else {
         state.queue.waiting = emptied(state.queue.waiting);
@@ -279,10 +281,19 @@ const appointmentsSlice = createSlice({
         state.callError = null;
       })
       .addCase(callNextPatient.fulfilled, (state, action) => {
-        state.queue.inChair = state.queue.inChair.filter((a) => a._id !== action.payload._id);
-        state.queue.inChair.push(action.payload);
+        const called = action.payload;
+        // "No next patient" is a valid outcome, not a failure. The server
+        // answers with an empty body when the waiting list is drained, and
+        // reading `_id` off that threw inside the reducer, which takes the
+        // whole store down and white-screens the queue.
+        if (!called || !called._id) {
+          state.callStatus = 'succeeded';
+          return;
+        }
+        state.queue.inChair = state.queue.inChair.filter((a) => a._id !== called._id);
+        state.queue.inChair.push(called);
         state.queue.inChair.sort((a, b) => new Date(a.start) - new Date(b.start));
-        state.queue.waiting = state.queue.waiting.filter((a) => a._id !== action.payload._id);
+        state.queue.waiting = state.queue.waiting.filter((a) => a._id !== called._id);
         state.callStatus = 'succeeded';
       })
       .addCase(callNextPatient.rejected, (state, action) => {

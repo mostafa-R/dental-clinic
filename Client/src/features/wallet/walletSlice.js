@@ -1,10 +1,8 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 
 import { accountingApi } from '../accounting/accountingApi';
+import { errPayload } from '../../lib/errors';
 
-function errPayload(err, fallback) {
-  return err.response?.data || { message: fallback };
-}
 
 export const fetchWallet = createAsyncThunk(
   'wallet/fetchWallet',

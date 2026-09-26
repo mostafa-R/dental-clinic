@@ -18,6 +18,8 @@ import { withTransaction } from "../../core/transaction.js";
 import { emitToBranch } from '../../socket/index.js';
 import { stripPHI } from '../../middleware/phiRestrict.js';
 import { postJournalEntry } from './journal.service.js';
+import { loadTenantTimezone } from '../../utils/timezoneUtils.js';
+import { localDateString, zonedDayRangeUtc, zonedDayStartUtc } from '../../utils/zonedDates.js';
 
 function serializePHI(value, req) {
   if (!req.isImpersonation) return value;
@@ -602,16 +604,28 @@ export const getAccountingSummary = asyncHandler(async (req, res) => {
 
 /* -------------------------------------------------------------- Day Close */
 
-function startOfDay(d) {
-  const date = new Date(d);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
-function endOfDay(d) {
-  const date = new Date(d);
-  date.setHours(23, 59, 59, 999);
-  return date;
+/**
+ * Resolve the `[start, end)` window for a Day Close.
+ *
+ * A Day Close is a *local* calendar day of the clinic, so the window is
+ * resolved through the tenant's stored IANA timezone (`zonedDayRangeUtc`) — the
+ * same helper every other calendar view uses. Folding the date with the
+ * server's `setHours` instead made the reconciliation window shift by the
+ * server's UTC offset, so for a clinic not on the server's zone the drawer was
+ * counted against a window that was hours off, and the same close could even
+ * land on two different `date` values (the `{ branch, date }` unique index).
+ *
+ * `dateStr` is a `YYYY-MM-DD` day selector. When absent, "today" means today in
+ * the clinic's timezone, not the server's.
+ */
+async function resolveDayWindow(req, dateStr) {
+  const tz = await loadTenantTimezone(currentTenant(req));
+  const day = dateStr || localDateString(Date.now(), tz);
+  const range = zonedDayRangeUtc(day, tz);
+  if (!range) {
+    throw ApiError.badRequest('Invalid date', { date: 'invalid' });
+  }
+  return { start: range.start, end: range.end, date: day, tz };
 }
 
 /** Normalize any payment-method label onto the four Day Close buckets. */
@@ -690,9 +704,7 @@ async function computeExpectedTakings(branchFilter, start, end) {
  */
 export const getDayClosePreview = asyncHandler(async (req, res) => {
   const branchFilter = filterByBranch(req);
-  const date = req.validatedQuery?.date ? new Date(req.validatedQuery.date) : new Date();
-  const start = startOfDay(date);
-  const end = endOfDay(date);
+  const { start, end } = await resolveDayWindow(req, req.validatedQuery?.date);
 
   const expected = await computeExpectedTakings(branchFilter, start, end);
 
@@ -738,8 +750,7 @@ export const closeDay = asyncHandler(async (req, res) => {
     });
   }
 
-  const start = startOfDay(dateStr ? new Date(dateStr) : new Date());
-  const end = endOfDay(start);
+  const { start, end } = await resolveDayWindow(req, dateStr);
 
   const alreadyClosed = await DayClose.findOne({
     branch: resolvedBranch,
@@ -783,10 +794,13 @@ export const listDayCloses = asyncHandler(async (req, res) => {
   const branchFilter = filterByBranch(req);
   const { from, to, page, limit } = req.validatedQuery;
 
+  // `date` is stored as the clinic-local midnight instant, so the history
+  // range is anchored on the same local day boundaries the close used.
+  const tz = await loadTenantTimezone(currentTenant(req));
   const filter = { ...branchFilter };
   const range = {};
-  if (from) range.$gte = startOfDay(new Date(from));
-  if (to) range.$lte = endOfDay(new Date(to));
+  if (from) range.$gte = new Date(zonedDayStartUtc(from, tz));
+  if (to) range.$lte = new Date(zonedDayStartUtc(to, tz));
   if (Object.keys(range).length) filter.date = range;
 
   const skip = (page - 1) * limit;

@@ -7,10 +7,10 @@ import Spinner from '../../components/ui/Spinner';
 import { fetchJournal } from './accountingSlice';
 import { formatDate, formatMoney } from '../../lib/format';
 import { useT } from '../../lib/i18n';
+import { toDateInputValue } from '../../lib/clinicTime';
 
 function dateInputValue(date) {
-  const d = date instanceof Date ? date : new Date(date);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return toDateInputValue(date);
 }
 
 export default function JournalTab() {

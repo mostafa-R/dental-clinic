@@ -62,11 +62,15 @@ export const INSTALLMENT_PLAN_STATUS_STYLES = {
   defaulted: 'bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300',
 };
 
-export const COMMISSION_STATUS = ['pending', 'paid'];
+// Mirrors the server's COMMISSION_STATUS. `void` was missing here, so a
+// voided commission (server enum: ['pending', 'paid', 'void']) rendered with
+// an undefined style lookup and a missing i18n key.
+export const COMMISSION_STATUS = ['pending', 'paid', 'void'];
 
 export const COMMISSION_STATUS_LABELS = {
   pending: 'Pending',
   paid: 'Paid',
+  void: 'Void',
 };
 
 export const INSTALLMENT_FREQUENCIES = ['weekly', 'biweekly', 'monthly', 'custom'];
@@ -81,4 +85,5 @@ export const INSTALLMENT_FREQUENCIES_LABELS = {
 export const COMMISSION_STATUS_STYLES = {
   pending: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
   paid: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  void: 'bg-slate-100 text-slate-500 line-through dark:bg-slate-700/50 dark:text-slate-400',
 };

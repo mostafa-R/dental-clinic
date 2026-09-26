@@ -96,6 +96,7 @@ const translations = {
     'common.saving': 'Saving…',
     'common.loading': 'Loading…',
     'common.empty': 'Nothing here yet',
+    'common.unavailable': 'Unavailable',
     'common.tryAgain': 'Try again',
     'common.loadFailedList': "Couldn't load this list. Check your connection and try again.",
     'common.close': 'Close',
@@ -342,6 +343,11 @@ const translations = {
     'patients.duplicates.pickSurvivor': 'Choose which record to keep',
     'patients.duplicates.mergeInto': 'Merge into survivor',
     'patients.duplicates.merged': 'Patients merged successfully',
+    'patients.duplicates.confirmTitle': 'Merge patient records?',
+    'patients.duplicates.confirmMerge': '{count} record(s) will be merged into {name}. Their appointments, invoices and clinical history move to the surviving record and cannot be undone.',
+    'patients.duplicates.mergeFailed': 'Merge failed',
+    'patients.duplicates.partialFailure': '{done} of {total} records were merged. The rest failed and still need review - reload to see the current state.',
+    'patients.duplicates.needsPermission': 'You do not have permission to merge patient records.',
 
     'appointments.title': 'Appointments',
     'appointments.subtitle': 'Manage the schedule and live patient queue.',
@@ -499,6 +505,7 @@ const translations = {
     'billing.form.new': 'New Invoice',
     'billing.form.edit': 'Edit Invoice',
     'billing.form.selectPatient': 'Select a patient',
+    'billing.form.addLineItem': 'Add at least one line item with a description',
     'billing.form.notes': 'Notes',
     'billing.form.notesPlaceholder': 'Optional note',
     'billing.form.lineItems': 'Line Items',
@@ -839,6 +846,7 @@ const translations = {
     'accounting.commission.markPaid': 'Mark Paid',
     'accounting.commission.status.pending': 'Pending',
     'accounting.commission.status.paid': 'Paid',
+    'accounting.commission.status.void': 'Void',
     'accounting.commission.empty': 'No commissions recorded yet.',
 
     'inventory.title': 'Inventory',
@@ -967,7 +975,6 @@ const translations = {
     'whatsapp.provider': 'Provider',
     'whatsapp.provider.whatsapp_web': 'WhatsApp Web (Free)',
     'whatsapp.provider.cloud_api': 'Cloud API',
-    'whatsapp.provider.twilio': 'Twilio',
     'whatsapp.connect': 'Connect',
     'whatsapp.disconnect': 'Disconnect',
     'whatsapp.connected': 'Connected',
@@ -1040,6 +1047,7 @@ const translations = {
     'chat.sending': 'Sending…',
     'chat.send': 'Send',
     'chat.inputPlaceholder': 'Type a message…',
+    'chat.readOnlyPlaceholder': 'You can read this chat but cannot send messages.',
     'chat.channel.doctors': 'Doctors',
     'chat.channel.doctorsDesc': 'Team discussion',
     'chat.channel.accounting': 'Accounting',
@@ -1211,8 +1219,10 @@ const translations = {
     'doctorDashboard.patientsHint': 'Unique patients treated',
     'doctorDashboard.pendingEarnings': 'Pending Earnings',
     'doctorDashboard.earningsHint': 'Awaiting payout',
+    'doctorDashboard.earningsLoadFailed': 'Could not load commissions',
     'doctorDashboard.outstanding': 'Outstanding',
     'doctorDashboard.outstandingHint': 'Unpaid invoices',
+    'doctorDashboard.outstandingLoadFailed': 'Could not load receivables',
     'doctorDashboard.todaySchedule': 'Today\'s Schedule',
     'doctorDashboard.noAppointments': 'No appointments today',
     'doctorDashboard.noAppointmentsHint': 'Your schedule is clear for today.',
@@ -1286,6 +1296,7 @@ const translations = {
     'common.saving': 'جارٍ الحفظ…',
     'common.loading': 'جارٍ التحميل…',
     'common.empty': 'لا يوجد شيء هنا بعد',
+    'common.unavailable': 'غير متاح',
     'common.tryAgain': 'إعادة المحاولة',
     'common.loadFailedList': 'تعذّر تحميل هذه القائمة. تحقق من اتصالك وحاول مرة أخرى.',
     'common.close': 'إغلاق',
@@ -1532,6 +1543,11 @@ const translations = {
     'patients.duplicates.pickSurvivor': 'اختر السجل الذي تريد الاحتفاظ به',
     'patients.duplicates.mergeInto': 'دمج في السجل الناجي',
     'patients.duplicates.merged': 'تم دمج المرضى بنجاح',
+    'patients.duplicates.confirmTitle': 'دمج سجلات المرضى؟',
+    'patients.duplicates.confirmMerge': 'سيتم دمج {count} سجل في {name}. سيتم نقل المواعيد والفواتير والتاريخ السريري إلى السجل الناجي ولا يمكن التراجع عن ذلك.',
+    'patients.duplicates.mergeFailed': 'فشل الدمج',
+    'patients.duplicates.partialFailure': 'تم دمج {done} من {total} سجل. فشل الباقي ولا يزال بحاجة إلى مراجعة - أعد التحميل لمعرفة الحالة الحالية.',
+    'patients.duplicates.needsPermission': 'ليس لديك صلاحية دمج سجلات المرضى.',
 
     'appointments.title': 'المواعيد',
     'appointments.subtitle': 'إدارة الجدول وقائمة انتظار المرضى المباشرة.',
@@ -1689,6 +1705,7 @@ const translations = {
     'billing.form.new': 'فاتورة جديدة',
     'billing.form.edit': 'تعديل الفاتورة',
     'billing.form.selectPatient': 'اختر مريضًا',
+    'billing.form.addLineItem': 'أضف بندًا واحدًا على الأقل مع وصف',
     'billing.form.notes': 'ملاحظات',
     'billing.form.notesPlaceholder': 'ملاحظة اختيارية',
     'billing.form.lineItems': 'بنود الفاتورة',
@@ -2029,6 +2046,7 @@ const translations = {
     'accounting.commission.markPaid': 'تم الدفع',
     'accounting.commission.status.pending': 'مستحقة',
     'accounting.commission.status.paid': 'مدفوعة',
+    'accounting.commission.status.void': 'ملغاة',
     'accounting.commission.empty': 'لا توجد عمولات مسجلة بعد.',
 
     'inventory.title': 'المخزون',
@@ -2112,7 +2130,6 @@ const translations = {
     'whatsapp.provider': 'المزود',
     'whatsapp.provider.whatsapp_web': 'واتساب ويب (مجاني)',
     'whatsapp.provider.cloud_api': 'Cloud API',
-    'whatsapp.provider.twilio': 'Twilio',
     'whatsapp.connect': 'اتصال',
     'whatsapp.disconnect': 'قطع الاتصال',
     'whatsapp.connected': 'متصل',
@@ -2229,6 +2246,7 @@ const translations = {
     'chat.sending': 'جارٍ الإرسال…',
     'chat.send': 'إرسال',
     'chat.inputPlaceholder': 'اكتب رسالة…',
+    'chat.readOnlyPlaceholder': 'يمكنك قراءة هذه المحادثة لكن لا يمكنك إرسال رسائل.',
     'chat.channel.doctors': 'الأطباء',
     'chat.channel.doctorsDesc': 'مناقشة الفريق',
     'chat.channel.accounting': 'المحاسبة',
@@ -2400,8 +2418,10 @@ const translations = {
     'doctorDashboard.patientsHint': 'المرضى الذين تم علاجهم',
     'doctorDashboard.pendingEarnings': 'الأرباح المعلقة',
     'doctorDashboard.earningsHint': 'بانتظار السداد',
+    'doctorDashboard.earningsLoadFailed': 'تعذر تحميل العمولات',
     'doctorDashboard.outstanding': 'المستحقات',
     'doctorDashboard.outstandingHint': 'فواتير غير مدفوعة',
+    'doctorDashboard.outstandingLoadFailed': 'تعذر تحميل المستحقات',
     'doctorDashboard.todaySchedule': 'جدول اليوم',
     'doctorDashboard.noAppointments': 'لا توجد مواعيد اليوم',
     'doctorDashboard.noAppointmentsHint': 'جدولك فارغ اليوم.',
@@ -2444,6 +2464,29 @@ function translate(key, vars) {
 
 export function t(key, vars) {
   return translate(key, vars);
+}
+
+/**
+ * Human label for a permission/plan module key.
+ *
+ * Module keys are snake_case identifiers (`dental_chart`) that used to reach
+ * the screen verbatim, so an Arabic visitor saw untranslated English on the
+ * pricing table. The `mod.*` catalogue covers every module in
+ * `server/constants/permissions.js`.
+ *
+ * `fallback` is the server-supplied English label, used for any key that is not
+ * in the catalogue yet; without it an unknown key degrades to a humanised form
+ * instead of printing the raw identifier, which still reads sensibly.
+ */
+export function moduleLabel(module, fallback) {
+  if (!module) return module || fallback;
+  const key = `mod.${module}`;
+  const translated = t(key);
+  if (translated !== key) return translated;
+  if (fallback) return fallback;
+  return String(module)
+    .replace(/_/g, ' ')
+    .replace(/^./, (c) => c.toUpperCase());
 }
 
 function subscribe(listener) {

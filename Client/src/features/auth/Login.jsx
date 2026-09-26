@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { loginUser, verifyImpersonation } from './authSlice';
+import { resetPermissions } from '../users/userSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { useLandingPath } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
@@ -43,7 +44,6 @@ export default function Login() {
   const onSubmit = async (e) => {
     e.preventDefault();
     try {
-      const { resetPermissions } = await import('../users/userSlice');
       dispatch(resetPermissions());
       await dispatch(loginUser(form)).unwrap();
       navigate(landingPath, { replace: true });

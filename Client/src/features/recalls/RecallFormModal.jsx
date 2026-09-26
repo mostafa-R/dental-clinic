@@ -7,6 +7,7 @@ import { createRecall, postponeRecall, scheduleRecall, resetRecallForm } from '.
 import { patientApi } from '../patients/patientApi';
 import { showErrorDialog } from '../ui/uiSlice';
 import { useT } from '../../lib/i18n';
+import { toDateTimeInputValue, fromDateTimeInputValue } from '../../lib/clinicTime';
 
 const TYPES = ['hygiene', 'follow_up', 'treatment_review', 'post_procedure', 'periodic_check', 'custom'];
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'];
@@ -19,10 +20,7 @@ function isObjectId(value) {
 }
 
 function toLocalInput(date) {
-  if (!date) return '';
-  const d = new Date(date);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return toDateTimeInputValue(date);
 }
 
 /**
@@ -96,7 +94,8 @@ export default function RecallFormModal({ open, mode = 'create', recall, onClose
           patient: patientId,
           recallType,
           reason: reason.trim() || undefined,
-          dueDate: new Date(dueDate).toISOString(),
+          // The picked wall clock is the clinic's — see clinicTime.js.
+          dueDate: fromDateTimeInputValue(dueDate)?.toISOString(),
           priority,
           notes: notes.trim() || undefined,
         })).unwrap();
@@ -104,7 +103,7 @@ export default function RecallFormModal({ open, mode = 'create', recall, onClose
         await dispatch(postponeRecall({
           id: recall._id,
           payload: {
-            postponedUntil: new Date(postponedUntil).toISOString(),
+            postponedUntil: fromDateTimeInputValue(postponedUntil)?.toISOString(),
             notes: notes.trim() || undefined,
           },
         })).unwrap();

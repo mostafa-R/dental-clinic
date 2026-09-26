@@ -21,16 +21,32 @@ import api from '../lib/axios';
 import { useSocketEvent } from '../lib/socket';
 import { useCanCreateAppointments } from '../lib/roles';
 import { useT } from '../lib/i18n';
+import { toDateInputValue, todayAsDateInputValue, fromDateTimeInputValue } from '../lib/clinicTime';
 
-function addDays(date, n) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + n);
-  return d;
+/**
+ * The day/week browser works in *calendar days*, not instants, so it must not be
+ * subject to any timezone. `anchor` is therefore a `YYYY-MM-DD` string
+ * everywhere, and day math is done through UTC (where `YYYY-MM-DD` means the
+ * same calendar day in every zone).
+ *
+ * This was the source of an off-by-one on the whole view: the old code did
+ * `setDate`/`toLocaleDateString` in the browser's zone, so a receptionist west
+ * of the clinic saw the week range labelled one day early and `CalendarView`
+ * dropped same-day appointments from the wrong column.
+ */
+function addDays(day, n) {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+/** Format a `YYYY-MM-DD` day through a UTC-noon Date so no zone can shift it. */
+function dayLabel(day, locale, opts) {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Intl.DateTimeFormat(locale, { timeZone: 'UTC', ...opts }).format(new Date(Date.UTC(y, m - 1, d, 12)));
 }
 
 function dateInputValue(date) {
-  const d = new Date(date);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return toDateInputValue(date);
 }
 
 export default function Appointments() {
@@ -43,7 +59,7 @@ export default function Appointments() {
 
   const [tab, setTab] = useState('calendar');
   const [view, setView] = useState('day');
-  const [anchor, setAnchor] = useState(() => new Date());
+  const [anchor, setAnchor] = useState(() => todayAsDateInputValue());
   const [doctors, setDoctors] = useState([]);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -61,9 +77,8 @@ export default function Appointments() {
       // param and stay on the calendar when the role has no
       // `appointments:create`.
       if (canCreate) {
-        const withTime = new Date();
-        withTime.setHours(9, 0, 0, 0);
-        setDefaultStart(withTime);
+        // 09:00 clinic time today — see `openCreate`.
+        setDefaultStart(fromDateTimeInputValue(`${todayAsDateInputValue()}T09:00`));
         setEditing(null);
         setFormOpen(true);
       }
@@ -133,9 +148,11 @@ export default function Appointments() {
 
   const openCreate = (day) => {
     const start = day || anchor;
-    const withTime = new Date(start);
-    withTime.setHours(9, 0, 0, 0);
-    setDefaultStart(withTime);
+    // 09:00 is a clinic wall clock. The old `withTime.setHours(9, 0, 0, 0)`
+    // set 09:00 in the *browser's* zone, which the form then rendered in the
+    // clinic's zone — a new appointment from a remote receptionist opened at
+    // the wrong hour.
+    setDefaultStart(fromDateTimeInputValue(`${toDateInputValue(start)}T09:00`));
     setEditing(null);
     setFormOpen(true);
   };
@@ -170,10 +187,9 @@ export default function Appointments() {
 
   const formatRange = (date, viewMode) => {
     if (viewMode === 'day') {
-      return date.toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      return dayLabel(date, locale, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     }
-    const end = addDays(date, 6);
-    return `${date.toLocaleDateString(locale, { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    return `${dayLabel(date, locale, { month: 'short', day: 'numeric' })} – ${dayLabel(addDays(date, 6), locale, { month: 'short', day: 'numeric', year: 'numeric' })}`;
   };
 
   const inputCls =
@@ -230,7 +246,7 @@ export default function Appointments() {
               </button>
               <button
                 type="button"
-                onClick={() => setAnchor(new Date())}
+                onClick={() => setAnchor(todayAsDateInputValue())}
                 className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 sm:text-sm"
               >
                 {t('appointments.today')}

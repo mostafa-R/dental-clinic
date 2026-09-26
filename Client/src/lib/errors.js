@@ -41,6 +41,59 @@ export function formatFieldErrors(details) {
   }));
 }
 
+// A gateway/HTML error page or a stack dump is not a usable message, and it is
+// not something to paste into a UI, so anything that long or that looks like
+// markup is dropped in favour of the caller's own fallback.
+const MAX_INLINE_MESSAGE = 300;
+const looksLikeMarkup = (text) => /^\s*</.test(text) || /&(nbsp|amp|lt|gt);/i.test(text);
+
+function usableString(value) {
+  if (typeof value !== 'string') return '';
+  const text = value.trim();
+  if (!text || text.length > MAX_INLINE_MESSAGE || looksLikeMarkup(text)) return '';
+  return text;
+}
+
+/**
+ * Normalises a rejected Axios error into the `{ message, details? }` shape the
+ * slices store and the pages render.
+ *
+ * This replaces seven identical `err.response?.data || { message: fallback }`
+ * copies, which handed whatever the server sent straight into component state.
+ * A response body can be a JSON object, but it can equally be a bare string, an
+ * array, an HTML error page from the edge proxy, or nothing at all - so callers
+ * ended up writing `error?.message || String(error)` and rendering `[object
+ * Object]`. The contract is now always a plain object with a usable string
+ * `message`, and `details` is preserved so `formatFieldErrors` can still expand
+ * per-field validation messages.
+ */
+export function errPayload(err, fallback) {
+  const fallbackText = usableString(fallback) || t('error.fallback');
+  const data = err && typeof err === 'object' ? err.response?.data : undefined;
+
+  // A string body is only useful if it is short and plain text.
+  if (typeof data === 'string') {
+    return { message: usableString(data) || fallbackText };
+  }
+
+  // Arrays and other non-plain values carry no readable message.
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const message =
+      usableString(data.message) ||
+      (Array.isArray(data.message) ? usableString(data.message.join(', ')) : '') ||
+      '';
+    const payload = { message: message || fallbackText };
+    if (data.details && typeof data.details === 'object') payload.details = data.details;
+    if (data.status !== undefined) payload.status = data.status;
+    return payload;
+  }
+
+  // No usable body: a transport-level failure still has a message worth
+  // showing ("Network Error"), but never a raw stack.
+  const transport = usableString(err?.message);
+  return { message: transport || fallbackText };
+}
+
 /**
  * Convert a raw API error body (or any thrown value) into a user-friendly
  * dialog payload: { title, message, fields }.

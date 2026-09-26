@@ -1,7 +1,17 @@
 import { getLang } from './i18n';
+import { clinicTimeZone } from './clinicTime';
 
 function locale() {
   return getLang() === 'ar' ? 'ar-EG' : 'en-US';
+}
+
+// Every timestamp below is an absolute instant, and the only meaningful way to
+// render one is in the clinic's zone. `toLocale*` used the browser's zone, so a
+// receptionist in a different zone saw appointment times, note timestamps and
+// day-close rows shifted — and a clinic-local midnight rendered as the
+// previous day west of the clinic.
+function inClinicZone() {
+  return { timeZone: clinicTimeZone() };
 }
 
 export function formatNumber(value) {
@@ -23,6 +33,7 @@ export function formatDate(date) {
   const d = date instanceof Date ? date : new Date(date);
   if (Number.isNaN(d.getTime())) return '—';
   return new Intl.DateTimeFormat(locale(), {
+    ...inClinicZone(),
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -53,18 +64,31 @@ export function formatTime(date) {
   if (!date) return '--';
   const d = date instanceof Date ? date : new Date(date);
   if (Number.isNaN(d.getTime())) return '--';
-  return d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit', hour12: true });
+  return new Intl.DateTimeFormat(locale(), {
+    ...inClinicZone(),
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }).format(d);
 }
 
 export function formatDateTime(date) {
   if (!date) return '--';
   const d = date instanceof Date ? date : new Date(date);
   if (Number.isNaN(d.getTime())) return '--';
-  return `${formatDate(d)} · ${d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+  return `${formatDate(d)} · ${formatTime(d)}`;
 }
 
 export function greetingFor(date = new Date()) {
-  const h = date.getHours();
+  // Evaluated in the clinic's zone: "good evening" must track the clinic's
+  // clock, not the receptionist's.
+  const h = Number(
+    new Intl.DateTimeFormat('en-US', {
+      ...inClinicZone(),
+      hour: '2-digit',
+      hourCycle: 'h23',
+    }).format(date),
+  );
   if (h < 12) return 'dashboard.greetingMorning';
   if (h < 18) return 'dashboard.greetingAfternoon';
   return 'dashboard.greetingEvening';

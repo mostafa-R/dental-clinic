@@ -32,7 +32,7 @@ export function parseDateOnly(value) {
 
 export function localDateString(instantMs, tz) {
   const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz,
+    timeZone: normalizeTimeZone(tz),
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -49,7 +49,7 @@ export function localDateString(instantMs, tz) {
  */
 export function zonedOffsetMs(instantMs, tz) {
   const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz,
+    timeZone: normalizeTimeZone(tz),
     hourCycle: 'h23',
     year: 'numeric',
     month: '2-digit',
@@ -80,11 +80,12 @@ export function zonedOffsetMs(instantMs, tz) {
 export function zonedDayStartUtc(value, tz) {
   const parsed = parseDateOnly(value);
   if (!parsed) return null;
+  const zone = normalizeTimeZone(tz);
   const { y, mo, d } = parsed;
   const noonProbe = Date.UTC(y, mo - 1, d, 12);
-  const offset = zonedOffsetMs(noonProbe, tz);
+  const offset = zonedOffsetMs(noonProbe, zone);
   let t = Date.UTC(y, mo - 1, d) - offset;
-  const offsetAtT = zonedOffsetMs(t, tz);
+  const offsetAtT = zonedOffsetMs(t, zone);
   if (offsetAtT !== offset) {
     t = Date.UTC(y, mo - 1, d) - offsetAtT;
   }

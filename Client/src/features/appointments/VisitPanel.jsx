@@ -9,25 +9,29 @@ import StatusBadge from './StatusBadge';
 import { nextStatusOptions, statusTKey } from './statuses';
 import { useT } from '../../lib/i18n';
 import PhiField from '../../components/ui/PhiField';
-import { useCanViewEmr } from '../../lib/roles';
+import { useCanManageAppointments, useCanManageBilling, useCanManageEmr, useCanViewEmr } from '../../lib/roles';
 import api from '../../lib/axios';
 import { formatMoney, formatTime } from '../../lib/format';
+import { toDateTimeInputValue, fromDateTimeInputValue } from '../../lib/clinicTime';
 
-function toLocalInput(date) {
-  if (!date) return '';
-  const d = new Date(date);
-  if (Number.isNaN(d.getTime())) return '';
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 16);
-}
-
-export default function VisitPanel({ open, appointment, onClose }) {
+export default function VisitPanel({ open, appointment, onClose, readOnly = false }) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { t } = useT();
-  // Resolved unconditionally at the top of the component — `useCanViewEmr` is a
+  // Resolved unconditionally at the top of the component - `useCanViewEmr` is a
   // hook, so it cannot be called from inside the JSX below.
   const canOpenEmr = useCanViewEmr();
+  // Viewing a note and writing one are different permissions; the whole EMR
+  // block renders for viewers, so the save action needs the write check.
+  const canEditEmr = useCanManageEmr();
+  // The panel is opened from the queue board, which stays read-only for roles
+  // without the appointments write permission.
+  const canManage = useCanManageAppointments();
+  const isReadOnly = readOnly || !canManage;
+  // Billing is a separate module, so the invoice block in this panel is gated
+  // on billing write access rather than the queue's appointment permission.
+  const canBill = useCanManageBilling();
+
 
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
@@ -56,8 +60,8 @@ export default function VisitPanel({ open, appointment, onClose }) {
 
   useEffect(() => {
     if (!open || !appointment) return;
-    setStart(toLocalInput(appointment.start));
-    setEnd(toLocalInput(appointment.end));
+    setStart(toDateTimeInputValue(appointment.start));
+    setEnd(toDateTimeInputValue(appointment.end));
     setChair(appointment.chair || '');
     setReason(appointment.reason || '');
     setNotes(appointment.notes || '');
@@ -111,12 +115,14 @@ export default function VisitPanel({ open, appointment, onClose }) {
   }, [open, appointment]);
 
   const saveAppointment = async () => {
-    if (!appointment) return;
+    if (!appointment || isReadOnly) return;
     setSavingAppt(true);
     try {
       const payload = { chair, reason, notes };
-      if (start) payload.start = new Date(start).toISOString();
-      if (end) payload.end = new Date(end).toISOString();
+    // The wall clock the user picked is the clinic's, not the browser's — see
+    // the matching comment in AppointmentFormModal.
+    if (start) payload.start = fromDateTimeInputValue(start)?.toISOString();
+    if (end) payload.end = fromDateTimeInputValue(end)?.toISOString();
       await dispatch(updateAppointment({ id: appointment._id, payload })).unwrap();
     } catch (err) {
       dispatch(showErrorDialog(err));
@@ -126,6 +132,7 @@ export default function VisitPanel({ open, appointment, onClose }) {
   };
 
   const handleTransition = async (status) => {
+    if (isReadOnly) return;
     setTransitioning(true);
     try {
       await dispatch(transitionAppointment({ id: appointment._id, status })).unwrap();
@@ -137,6 +144,7 @@ export default function VisitPanel({ open, appointment, onClose }) {
   };
 
   const saveClinicalNote = async () => {
+    if (!canEditEmr) return;
     if (!appointment?.patient?._id) return;
     setSavingNote(true);
     try {
@@ -166,6 +174,7 @@ export default function VisitPanel({ open, appointment, onClose }) {
   const invTotal = invSubtotal - invDiscountVal + invTaxVal;
 
   const saveInvoice = async () => {
+    if (!canBill) return;
     const items = invItems
       .filter((it) => it.description.trim())
       .map((it) => ({ description: it.description.trim(), quantity: Number(it.quantity) || 1, unitPrice: Number(it.unitPrice) || 0 }));
@@ -203,7 +212,7 @@ export default function VisitPanel({ open, appointment, onClose }) {
 
   const patient = appointment.patient;
   const doctor = appointment.doctor;
-  const options = nextStatusOptions(appointment.status);
+  const options = isReadOnly ? [] : nextStatusOptions(appointment.status);
   const inputCls =
     'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-brand/20';
 
@@ -273,14 +282,16 @@ export default function VisitPanel({ open, appointment, onClose }) {
               </div>
             </div>
             <div className="mt-2 flex justify-end">
-              <button
-                type="button"
-                onClick={saveAppointment}
-                disabled={savingAppt}
-                className="rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
-              >
-                {savingAppt ? t('common.saving') : t('common.save')}
-              </button>
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  onClick={saveAppointment}
+                  disabled={savingAppt}
+                  className="rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
+                >
+                  {savingAppt ? t('common.saving') : t('common.save')}
+                </button>
+              )}
             </div>
           </div>
 
@@ -316,14 +327,16 @@ export default function VisitPanel({ open, appointment, onClose }) {
                   >
                     {t('emr.rx.new')}
                   </button>
-                  <button
-                    type="button"
-                    onClick={saveClinicalNote}
-                    disabled={savingNote}
-                    className="rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
-                  >
-                    {savingNote ? t('common.saving') : existingNote ? t('common.save') : t('emr.note.create')}
-                  </button>
+                  {canEditEmr && (
+                    <button
+                      type="button"
+                      onClick={saveClinicalNote}
+                      disabled={savingNote}
+                      className="rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
+                    >
+                      {savingNote ? t('common.saving') : existingNote ? t('common.save') : t('emr.note.create')}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -400,9 +413,11 @@ export default function VisitPanel({ open, appointment, onClose }) {
                   </span>
                 </div>
                 <div className="flex justify-end">
-                  <button type="button" onClick={saveInvoice} disabled={savingInvoice} className="rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-white transition hover:bg-brand-dark disabled:opacity-50">
-                    {savingInvoice ? t('common.saving') : invoice ? t('common.save') : t('billing.form.create')}
-                  </button>
+                  {canBill && (
+                    <button type="button" onClick={saveInvoice} disabled={savingInvoice} className="rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-white transition hover:bg-brand-dark disabled:opacity-50">
+                      {savingInvoice ? t('common.saving') : invoice ? t('common.save') : t('billing.form.create')}
+                    </button>
+                  )}
                 </div>
               </div>
             )}

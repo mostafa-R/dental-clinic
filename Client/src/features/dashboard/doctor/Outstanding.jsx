@@ -26,7 +26,7 @@ function InvoiceIcon() {
 
 export default function Outstanding() {
   const { t } = useT();
-  const [amount, setAmount] = useState(null);
+  const [state, setState] = useState({ amount: null, failed: false });
 
   const hasAccess = usePermission("billing", "read");
 
@@ -37,9 +37,13 @@ export default function Outstanding() {
       .getBillingSummary()
       .then((data) => {
         if (cancelled) return;
-        setAmount(data.totalOutstanding || 0);
+        setState({ amount: data.totalOutstanding || 0, failed: false });
       })
-      .catch(() => {});
+      // See PendingEarnings: an empty catch left the card permanently blank,
+      // which reads as "nothing outstanding" rather than "could not load".
+      .catch(() => {
+        if (!cancelled) setState({ amount: null, failed: true });
+      });
     return () => {
       cancelled = true;
     };
@@ -50,9 +54,13 @@ export default function Outstanding() {
   return (
     <StatCard
       label={t("doctorDashboard.outstanding")}
-      value={amount !== null ? formatMoney(amount) : "—"}
+      value={state.failed ? t("common.unavailable") : state.amount !== null ? formatMoney(state.amount) : "—"}
       icon={<InvoiceIcon />}
-      hint={t("doctorDashboard.outstandingHint")}
+      hint={
+        state.failed
+          ? t("doctorDashboard.outstandingLoadFailed")
+          : t("doctorDashboard.outstandingHint")
+      }
       accent="rose"
     />
   );

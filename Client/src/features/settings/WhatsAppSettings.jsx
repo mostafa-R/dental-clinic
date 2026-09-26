@@ -186,7 +186,6 @@ export default function WhatsAppSettings() {
             >
               <option value="whatsapp_web">{t('whatsapp.provider.whatsapp_web')}</option>
               <option value="cloud_api">{t('whatsapp.provider.cloud_api')}</option>
-              <option value="twilio">{t('whatsapp.provider.twilio')}</option>
             </select>
           </div>
         </div>

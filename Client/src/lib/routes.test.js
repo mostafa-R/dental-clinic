@@ -121,6 +121,29 @@ describe('registry integrity', () => {
     expect(source).not.toContain('<');
   });
 
+  it('declares a <Route> in App.jsx for every gated path in the registry', () => {
+    // The registry and the router are two hand-maintained lists that have to
+    // agree. Nothing enforced that, and they drifted: `/patients/:id` was
+    // documented as "reached from a patient row, a dashboard card or a search
+    // result" and six global-search result groups linked to it, but App.jsx only
+    // ever declared `patients/:id/emr` — so every one of those links rendered
+    // the embedded 404. A path that is registered but unrouted is worse than an
+    // unregistered one: the guard passes (it is a known module), then the router
+    // falls through to the catch-all.
+    const source = readFileSync(resolve(CLIENT_SRC, 'App.jsx'), 'utf8');
+    const declared = new Set(
+      [...source.matchAll(/<Route\b[^>]*?\bpath=["']([^"']+)["']/g)].map((m) => m[1]),
+    );
+
+    // Registry paths are absolute (`/patients/:id`); App.jsx declares them
+    // relative to the layout route (`patients/:id`). Normalise for comparison.
+    const relative = new Set([...declared].map((p) => `/${p.replace(/^\//, '')}`));
+
+    for (const route of NAV_ROUTES) {
+      expect(relative, `no <Route> for registry path ${route.path}`).toContain(route.path);
+    }
+  });
+
   it('keeps the default landing path on a real route', () => {
     expect(NAV_ROUTES.some((r) => r.path === DEFAULT_LANDING_PATH)).toBe(true);
   });

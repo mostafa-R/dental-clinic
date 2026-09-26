@@ -10,10 +10,13 @@ import { useCanManageAccounting } from '../../lib/roles';
 import { formatDate, formatMoney } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { useSocketEvent } from '../../lib/socket';
+import { toDateInputValue } from '../../lib/clinicTime';
 
+// The day being closed is a *clinic* calendar day. Deriving it from the
+// browser's zone meant a receptionist west of the clinic opened the screen
+// after their own midnight and defaulted to closing yesterday.
 function dateInputValue(date) {
-  const d = date instanceof Date ? date : new Date(date);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return toDateInputValue(date);
 }
 
 const METHODS = ['cash', 'card', 'transfer', 'wallet'];

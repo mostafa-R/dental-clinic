@@ -9,15 +9,8 @@ import { createAppointment, resetFormState, updateAppointment } from './appointm
 import api from '../../lib/axios';
 import { useT } from '../../lib/i18n';
 import { formatMoney } from '../../lib/format';
+import { toDateTimeInputValue, fromDateTimeInputValue } from '../../lib/clinicTime';
 import { useIsClinicWide } from '../../lib/roles';
-
-function toLocalInput(date) {
-  if (!date) return '';
-  const d = new Date(date);
-  if (Number.isNaN(d.getTime())) return '';
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 16);
-}
 
 const EMPTY = {
   patient: '',
@@ -79,8 +72,8 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
         doctor: appointment.doctor?._id || appointment.doctor || '',
         branch: appointment.branch?._id || appointment.branch || '',
         chair: appointment.chair || '',
-        start: toLocalInput(appointment.start),
-        end: toLocalInput(appointment.end),
+        start: toDateTimeInputValue(appointment.start),
+        end: toDateTimeInputValue(appointment.end),
         reason: appointment.reason || '',
         notes: appointment.notes || '',
       });
@@ -89,7 +82,7 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
       // Clean slate: never carry the previously edited appointment's branch
       // into a new one. The default is applied by the effect below, once the
       // branch list has loaded.
-      setForm({ ...EMPTY, start: defaultStart ? toLocalInput(defaultStart) : '' });
+      setForm({ ...EMPTY, start: defaultStart ? toDateTimeInputValue(defaultStart) : '' });
       setPatientSearch('');
     }
     dispatch(resetFormState());
@@ -130,8 +123,12 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
       reason: form.reason,
       notes: form.notes,
     };
-    if (form.start) payload.start = new Date(form.start).toISOString();
-    if (form.end) payload.end = new Date(form.end).toISOString();
+    // `new Date(form.start)` parsed the datetime-local value in the *browser's*
+    // zone, so a 09:00 slot chosen in a Cairo clinic was stored as 09:00 in
+    // whatever zone the receptionist's laptop was set to — a silent multi-hour
+    // error on every appointment. The wall clock belongs to the clinic.
+    if (form.start) payload.start = fromDateTimeInputValue(form.start)?.toISOString();
+    if (form.end) payload.end = fromDateTimeInputValue(form.end)?.toISOString();
     if (canPickBranch && form.branch) payload.branch = form.branch;
 
     try {

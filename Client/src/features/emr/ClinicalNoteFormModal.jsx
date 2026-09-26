@@ -8,22 +8,25 @@ import { createNote, updateNote, resetFormState } from './emrSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { ATTACHMENT_TYPES, isValidAttachmentUrl } from './dental';
 import { useT } from '../../lib/i18n';
+import {
+  nowAsDateTimeInputValue,
+  toDateTimeInputValue,
+  fromDateTimeInputValue,
+} from '../../lib/clinicTime';
 
 function emptyAttachment() {
   return { type: 'xray', url: '', caption: '' };
 }
 
+// A note's visit timestamp is the clinic's clock, not the browser's: the old
+// `getTimezoneOffset` shift made a 09:00 consultation land hours off for any
+// clinic not on the receptionist's zone.
 function nowLocalDatetime() {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16);
+  return nowAsDateTimeInputValue();
 }
 
 function toLocalDatetime(isoStr) {
-  if (!isoStr) return '';
-  const d = new Date(isoStr);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16);
+  return toDateTimeInputValue(isoStr);
 }
 
 export default function ClinicalNoteFormModal({ open, patientId, patient, note, onClose }) {
@@ -111,13 +114,13 @@ export default function ClinicalNoteFormModal({ open, patientId, patient, note, 
             noteId: note._id,
             payload: {
               doctor,
-              visitDate: visitDate ? new Date(visitDate).toISOString() : undefined,
+              visitDate: fromDateTimeInputValue(visitDate)?.toISOString(),
               chiefComplaint: chiefComplaint.trim() || undefined,
               examination: examination.trim() || undefined,
               diagnosis: diagnosis.trim() || undefined,
               plan: plan.trim() || undefined,
               attachments: cleanAttachments.length ? cleanAttachments : undefined,
-              nextAppointment: nextAppointment ? new Date(nextAppointment).toISOString() : undefined,
+              nextAppointment: fromDateTimeInputValue(nextAppointment)?.toISOString(),
               nextAppointmentNotes: nextAppointmentNotes.trim() || undefined,
             },
           }),
@@ -128,13 +131,13 @@ export default function ClinicalNoteFormModal({ open, patientId, patient, note, 
             patientId,
             payload: {
               doctor,
-              visitDate: visitDate ? new Date(visitDate).toISOString() : undefined,
+              visitDate: fromDateTimeInputValue(visitDate)?.toISOString(),
               chiefComplaint: chiefComplaint.trim() || undefined,
               examination: examination.trim() || undefined,
               diagnosis: diagnosis.trim() || undefined,
               plan: plan.trim() || undefined,
               attachments: cleanAttachments.length ? cleanAttachments : undefined,
-              nextAppointment: nextAppointment ? new Date(nextAppointment).toISOString() : undefined,
+              nextAppointment: fromDateTimeInputValue(nextAppointment)?.toISOString(),
               nextAppointmentNotes: nextAppointmentNotes.trim() || undefined,
             },
           }),

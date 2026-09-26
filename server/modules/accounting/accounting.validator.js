@@ -80,13 +80,22 @@ export const accountingSummaryQuerySchema = z.object({
 
 /* ---------------------------------------------------------------- Day Close */
 
+// A Day Close identifies a *local calendar day* of the clinic, so the selector
+// is a date-only value; the server resolves it to the clinic's own day window
+// (see `resolveDayWindow` in the controller). Accepting a full datetime here
+// used to work only because the controller folded it with the server's
+// `setHours` — which is exactly the bug — so the contract is now explicit.
+const dateOnly = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected a YYYY-MM-DD date');
+
 export const dayCloseQuerySchema = z.object({
-  date: z.string().min(4).max(40).optional(),
+  date: dateOnly.optional(),
   branch: objectId.optional(),
 });
 
 export const closeDaySchema = z.object({
-  date: z.string().min(4).max(40).optional(),
+  date: dateOnly.optional(),
   branch: objectId.optional(),
   countedCash: z.number().min(0, 'Counted cash cannot be negative'),
   notes: z.string().max(500).optional(),
@@ -95,6 +104,6 @@ export const closeDaySchema = z.object({
 export const listDayCloseQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(50),
-  from: z.string().min(4).max(40).optional(),
-  to: z.string().min(4).max(40).optional(),
+  from: dateOnly.optional(),
+  to: dateOnly.optional(),
 });

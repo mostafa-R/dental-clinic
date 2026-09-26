@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getSocket } from '../lib/socket';
+import { getSocket, onTrackedSocketEvent, offTrackedSocketEvent } from '../lib/socket';
 
 /**
  * Subscribe to socket events while the component is mounted.
@@ -17,14 +17,14 @@ export function useSocket(events = []) {
     const cleaned = events.filter(Boolean);
     cleaned.forEach(([event, handler]) => {
       if (event && typeof handler === 'function') {
-        s?.on(event, handler);
+        onTrackedSocketEvent(s, event, handler);
       }
     });
 
     return () => {
       cleaned.forEach(([event, handler]) => {
         if (event && typeof handler === 'function') {
-          s?.off(event, handler);
+          offTrackedSocketEvent(s, event, handler);
         }
       });
     };

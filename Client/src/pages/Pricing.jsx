@@ -5,7 +5,7 @@ import { setCredentials } from '../features/auth/authSlice';
 import { authApi } from '../features/auth/authApi';
 import { listPublicPlans } from '../features/pricing/plansApi';
 import { landingPathFor } from '../lib/roles';
-import { useT } from '../lib/i18n';
+import { moduleLabel, useT } from '../lib/i18n';
 import { formatMoney, formatNumber } from '../lib/format';
 import { DentoCareLogo } from '../components/ui/DentoCareLogo';
 import PreferencesControls from '../features/preferences/PreferencesControls';
@@ -338,7 +338,7 @@ export default function Pricing() {
                       {(plan.modules || []).map((m) => (
                         <li key={`mod-${m}`} className="flex items-start gap-2">
                           <CheckIcon />
-                          <span className="capitalize">{String(m).replace(/_/g, ' ')}</span>
+                          <span>{moduleLabel(m)}</span>
                         </li>
                       ))}
                     </ul>
@@ -384,7 +384,7 @@ export default function Pricing() {
                   className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700"
                 >
                   <CheckIcon />
-                  <span className="capitalize">{m.replace(/_/g, ' ')}</span>
+                  <span>{moduleLabel(m)}</span>
                 </span>
               ))}
             </div>

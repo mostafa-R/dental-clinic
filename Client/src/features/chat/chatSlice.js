@@ -1,10 +1,8 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 
 import { chatApi } from './chatApi';
+import { errPayload } from '../../lib/errors';
 
-function errPayload(err, fallback) {
-  return err.response?.data || { message: fallback };
-}
 
 export const fetchStaff = createAsyncThunk(
   'chat/fetchStaff',
@@ -202,6 +200,13 @@ const chatSlice = createSlice({
       state.messages = state.messages.map((m) =>
         readIds.includes(m._id) ? { ...m, isRead: true } : m,
       );
+    });
+    // `markChannelRead` had no case at all, so the badge was only cleared as a
+    // side effect of the next `fetchMessages.fulfilled` — up to one poll
+    // interval of a stale count, and nothing at all if that request failed.
+    // The thunk resolves with the channel id, so clear it on acknowledgement.
+    builder.addCase(markChannelRead.fulfilled, (state, action) => {
+      state.unread[`channel:${action.payload}`] = 0;
     });
   },
 });

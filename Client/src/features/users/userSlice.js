@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { userApi } from './userApi';
+import { clearClinicTimeZone } from '../../lib/clinicTime';
 
 export const fetchUsers = createAsyncThunk(
   'users/fetchUsers',
@@ -90,9 +91,13 @@ const userSlice = createSlice({
     },
     // Plan reassignment / account switch must never reuse stale entitlements.
     // Dispatched on logout + login, and on 403 plan-denied (see lib/axios).
+    // The cached clinic timezone goes with it: leaving it behind would render
+    // the next user's dates in the previous clinic's zone until the fresh
+    // permissions payload arrives.
     resetPermissions(state) {
       state.myPermissions = null;
       state.permissionsStatus = 'idle';
+      clearClinicTimeZone();
     },
   },
   extraReducers: (builder) => {

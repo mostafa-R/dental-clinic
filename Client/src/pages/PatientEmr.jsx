@@ -4,6 +4,8 @@ import { useDispatch } from 'react-redux';
 
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
+import TabList from '../components/ui/TabList';
+import TabPanel from '../components/ui/TabPanel';
 import ChartTab from '../features/emr/ChartTab';
 import TreatmentPlansTab from '../features/emr/TreatmentPlansTab';
 import PrescriptionsTab from '../features/emr/PrescriptionsTab';
@@ -15,6 +17,7 @@ import { setEmrPatient, resetEmr } from '../features/emr/emrSlice';
 import { patientApi } from '../features/patients/patientApi';
 import { useCanViewEmr } from '../lib/roles';
 import { useT } from '../lib/i18n';
+import { useTabIds } from '../lib/tabs';
 
 const TABS = [
   { key: 'chart', labelKey: 'emr.tab.chart' },
@@ -33,6 +36,7 @@ export default function PatientEmr() {
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('chart');
+  const tabIds = useTabIds();
   // Resolved unconditionally at the top of the component: this is a hook, so
   // it must not sit behind the early return below.
   const canOpenEmr = useCanViewEmr();
@@ -100,34 +104,27 @@ export default function PatientEmr() {
 
       {!isLoading && !error && patient && <ClinicalContextBar patient={patient} />}
 
-      <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800">
-        {TABS.map((tb) => (
-          <button
-            key={tb.key}
-            type="button"
-            onClick={() => setTab(tb.key)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition ${
-              tab === tb.key
-                ? 'border-brand text-brand dark:border-brand-light dark:text-brand-light'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-            }`}
-          >
-            {t(tb.labelKey)}
-          </button>
-        ))}
-      </div>
+      <TabList
+        tabs={TABS.map((tb) => ({ key: tb.key, label: t(tb.labelKey) }))}
+        active={tab}
+        onChange={setTab}
+        label={t('emr.title')}
+        ids={tabIds}
+      />
+
 
       {isLoading && <Spinner label={t('emr.loading')} />}
       {error && !isLoading && <EmptyState title={t('error.notFound')} message={error} />}
       {!isLoading && !error && patient && (
-        <>
+        <TabPanel tabIds={tabIds} tabKey={tab}>
           {tab === 'chart' && <ChartTab patientId={patientId} />}
           {tab === 'plans' && <TreatmentPlansTab patientId={patientId} />}
           {tab === 'prescriptions' && <PrescriptionsTab patientId={patientId} patient={patient} />}
           {tab === 'timeline' && <ClinicalTimelineTab patientId={patientId} patient={patient} />}
           {tab === 'wallet' && <WalletTab patientId={patientId} />}
-        </>
+        </TabPanel>
       )}
+
     </div>
   );
 }

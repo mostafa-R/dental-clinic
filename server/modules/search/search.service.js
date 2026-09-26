@@ -15,6 +15,31 @@ import Branch from '../users/branch.model.js';
 import Role from '../users/role.model.js';
 import User from '../users/user.model.js';
 
+/**
+ * The modules global search can return results from.
+ *
+ * Single source of truth for two things that must not drift: the `can()`
+ * guards inside `globalSearch` below, and the route-level gate. The gate used
+ * to be `checkPermission('patients', 'read')`, which made global search a
+ * patients feature: a receptionist with `appointments:read` but no
+ * `patients:read` was refused a search they were entitled to, while a user who
+ * could read nothing else was still let in (they simply got empty sections).
+ * Individual result sets were always filtered correctly — only the door was
+ * wrong.
+ */
+export const SEARCHABLE_MODULES = [
+  'patients',
+  'appointments',
+  'billing',
+  'accounting',
+  'branches',
+  'users',
+  'roles',
+  'inventory',
+  'emr',
+  'prescriptions',
+];
+
 const EMPTY_RESULT = {
   patients: [], appointments: [], invoices: [],
   branches: [], users: [], roles: [],
@@ -63,10 +88,10 @@ export async function globalSearch(branchFilter, query, can = () => true, option
     return EMPTY_RESULT;
   }
 
-  const allowedModules = [
-    'patients', 'appointments', 'billing', 'branches', 'users', 'roles',
-    'inventory', 'accounting', 'emr', 'prescriptions',
-  ].filter(can);
+  // Drives the cache key, so it has to be the same set the `can()` guards below
+  // actually query — two users with different entitlements must not share a
+  // cache entry.
+  const allowedModules = SEARCHABLE_MODULES.filter(can);
 
   const cacheKey = buildSearchCacheKey(branchFilter, q, allowedModules, options);
   const cached = await cacheGet('search', cacheKey);

@@ -19,7 +19,9 @@ import VisitPanel from './VisitPanel';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
 import { useT } from '../../lib/i18n';
+import { useCanManageAppointments } from '../../lib/roles';
 import { canTransition } from './statuses';
+import { todayAsDateInputValue } from '../../lib/clinicTime';
 
 const QUEUE_RANK = { checked_in: 0, in_progress: 1, confirmed: 2, scheduled: 3, no_show: 4, completed: 5, cancelled: 6 };
 const POLL_INTERVAL = 30000;
@@ -43,16 +45,25 @@ function useIsMobile(breakpoint = 640) {
   return isMobile;
 }
 
-/** Today as YYYY-MM-DD in the user's own timezone (not UTC). */
+/**
+ * Today as YYYY-MM-DD in the *clinic's* timezone.
+ *
+ * It used the browser's zone, so from clinic midnight until the receptionist's
+ * own midnight the board filtered on yesterday and the live queue appeared
+ * empty — the most visible symptom of the whole timezone class of bugs.
+ */
 function localDate() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return todayAsDateInputValue();
 }
 
 export default function LiveQueue() {
   const dispatch = useDispatch();
   const { t } = useT();
   const { items, status, query, queue, queueStatus, callStatus } = useSelector((s) => s.appointments);
+  // Queue mutations used to be reachable for anyone who could open the board,
+  // so a read-only role could still call and advance patients. Every write
+  // path below is gated on this rather than relying on hidden buttons alone.
+  const canManage = useCanManageAppointments();
   const [selectedAppt, setSelectedAppt] = useState(null);
   const [expandedSections, setExpandedSections] = useState(() => new Set(['checked_in', 'in_progress', 'scheduled', 'completed']));
   const [nextDoctor, setNextDoctor] = useState('');
@@ -185,6 +196,7 @@ export default function LiveQueue() {
   }, [boardItems]);
 
   const handleCallNext = useCallback(async () => {
+    if (!canManage) return;
     const body = nextDoctor ? { doctor: nextDoctor } : {};
     try {
       const appointment = await dispatch(callNextPatient(body)).unwrap();
@@ -198,10 +210,11 @@ export default function LiveQueue() {
     } catch (err) {
       dispatch(showErrorDialog(err));
     }
-  }, [dispatch, nextDoctor, t]);
+  }, [canManage, dispatch, nextDoctor, t]);
 
   const onDragEnd = useCallback(
     async (result) => {
+      if (!canManage) return;
       const { destination, source, draggableId } = result;
       if (!destination) return;
       if (destination.droppableId === source.droppableId && destination.index === source.index) return;
@@ -226,7 +239,7 @@ export default function LiveQueue() {
         dispatch(showErrorDialog(err));
       }
     },
-    [boardItems, dispatch, t],
+    [boardItems, canManage, dispatch, t],
   );
 
   const toggleSection = (key) => {
@@ -270,7 +283,7 @@ export default function LiveQueue() {
             )}
             <Button
               onClick={handleCallNext}
-              disabled={callStatus === 'loading'}
+              disabled={callStatus === 'loading' || !canManage}
               size="sm"
             >
               {callStatus === 'loading' ? t('appointments.queue.calling') : t('appointments.queue.callNext')}
@@ -371,7 +384,12 @@ export default function LiveQueue() {
                         </p>
                       ) : (
                         (byColumn[col.key] || []).map((a, index) => (
-                          <Draggable key={a._id} draggableId={a._id} index={index}>
+                          <Draggable
+                            key={a._id}
+                            draggableId={a._id}
+                            index={index}
+                            isDragDisabled={!canManage}
+                          >
                             {(dragProvided, dragSnapshot) => (
                               <div
                                 ref={dragProvided.innerRef}
@@ -382,6 +400,7 @@ export default function LiveQueue() {
                                   appointment={a}
                                   onClick={setSelectedAppt}
                                   isDragging={dragSnapshot.isDragging}
+                                  readOnly={!canManage}
                                 />
                               </div>
                             )}
@@ -402,6 +421,7 @@ export default function LiveQueue() {
         open={Boolean(selectedAppt)}
         appointment={selectedAppt}
         onClose={() => setSelectedAppt(null)}
+        readOnly={!canManage}
       />
     </div>
   );

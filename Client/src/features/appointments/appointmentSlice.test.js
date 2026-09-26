@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 
-import reducer, { fetchAppointments, setDate } from './appointmentSlice.js';
+import reducer, { callNextPatient, fetchAppointments, setDate } from './appointmentSlice.js';
 
 /**
  * Regression coverage for the live-queue request sequencing.
@@ -115,5 +115,58 @@ describe('appointmentSlice fetchAppointments sequencing', () => {
 
     state = reducer(state, fulfilled('r-tomorrow', [{ id: 2, name: NAME(2) }]));
     expect(state.items.map((a) => a.id)).toEqual([2]);
+  });
+});
+
+/**
+ * Regression coverage for `callNextPatient` against a drained queue.
+ *
+ * The bug: the reducer read `action.payload._id` unconditionally, but the
+ * server answers with an empty body when nobody is waiting. That property
+ * access on `undefined` threw inside the reducer, which takes the whole store
+ * down and white-screens the queue -- the most common thing a receptionist
+ * does at the end of a day.
+ */
+describe('appointmentSlice callNextPatient', () => {
+  const patient = (id) => ({ _id: id, firstName: `p-${id}`, start: '2026-09-26T09:00:00.000Z' });
+
+  /** A queue with one patient already in the chair and one still waiting. */
+  const seeded = () => ({
+    ...reducer(undefined, { type: '@@INIT' }),
+    queue: {
+      waiting: [patient('w1')],
+      inChair: [patient('c1')],
+      completedToday: 0,
+      updatedAt: null,
+    },
+  });
+
+  const called = (payload) => callNextPatient.fulfilled(payload, 'r1', {});
+
+  it('moves the called patient from waiting into the chair', () => {
+    const state = reducer(seeded(), called(patient('w1')));
+
+    expect(state.queue.inChair.map((a) => a._id)).toEqual(['c1', 'w1']);
+    expect(state.queue.waiting).toHaveLength(0);
+    expect(state.callStatus).toBe('succeeded');
+  });
+
+  // The regression this block exists for.
+  it('survives an empty result instead of throwing and taking the store down', () => {
+    let state;
+    expect(() => {
+      state = reducer(seeded(), called(null));
+    }).not.toThrow();
+
+    expect(state.callStatus).toBe('succeeded');
+    expect(state.queue.inChair.map((a) => a._id)).toEqual(['c1']);
+    expect(state.queue.waiting.map((a) => a._id)).toEqual(['w1']);
+  });
+
+  it('treats a result with no _id the same as no result', () => {
+    const state = reducer(seeded(), called({}));
+
+    expect(state.callStatus).toBe('succeeded');
+    expect(state.queue.inChair.map((a) => a._id)).toEqual(['c1']);
   });
 });

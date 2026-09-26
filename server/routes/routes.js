@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { protectSite, authorizeSite } from "../middleware/siteAuth.js";
+import { logWarn } from "../utils/logger.js";
 
 // Core application routes
 import accountRoutes from "../modules/accounting/accounting.routes.js";
@@ -170,9 +171,10 @@ router.use((req, res, next) => {
   }
   if (!aliasDeprecationLogged) {
     aliasDeprecationLogged = true;
-    console.warn(
-      `[API] Deprecated unversioned alias hit: ${req.method} ${req.path}. ` +
-        "Migrate clients to /api/v1 (see audit/contract/CONTRACT_FREEZE.md).",
+    logWarn(
+      "Deprecated unversioned alias hit — migrate clients to /api/v1 " +
+        "(see audit/contract/CONTRACT_FREEZE.md)",
+      { method: req.method, path: req.path },
     );
   }
   res.setHeader("Deprecation", "true");

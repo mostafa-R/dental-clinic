@@ -1,6 +1,6 @@
 ﻿import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { useT } from '../../lib/i18n';
+import { moduleLabel, useT } from '../../lib/i18n';
 import { moduleAccessStatus } from '../../lib/roles';
 import { navRouteForModule } from '../../lib/routes';
 import {
@@ -124,7 +124,7 @@ export default function ModulesGrid({ modules = [] }) {
               </div>
               <div className="min-w-0 flex-1 pt-0.5">
                 <span className="text-sm font-semibold text-slate-900 dark:text-white">
-                  {t(`mod.${m.key}`) === `mod.${m.key}` ? m.label : t(`mod.${m.key}`)}
+                  {moduleLabel(m.key, m.label)}
                 </span>
               </div>
               <span className="shrink-0 rounded-full bg-brand/5 px-2.5 py-1 text-[11px] font-medium text-brand-dark transition-colors dark:bg-brand/20 dark:text-brand-light">
