@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { setCredentials } from '../features/auth/authSlice';
 import { authApi } from '../features/auth/authApi';
 import { listPublicPlans } from '../features/pricing/plansApi';
-import { defaultRouteFor } from '../lib/roles';
+import { landingPathFor } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { formatMoney, formatNumber } from '../lib/format';
 import { DentoCareLogo } from '../components/ui/DentoCareLogo';
@@ -71,6 +71,9 @@ export default function Pricing() {
   const { t } = useT();
   const dispatch = useDispatch();
   const user = useSelector((s) => s.auth.user);
+  // The landing route is permission-aware, so a signed-in visitor without the
+  // module their role prefers is not bounced into a 403 loop.
+  const myPermissions = useSelector((s) => s.users?.myPermissions);
   const [probedUser, setProbedUser] = useState(null);
 
   const [plans, setPlans] = useState([]);
@@ -114,7 +117,7 @@ export default function Pricing() {
   const activeUser = user || probedUser;
 
   if (activeUser) {
-    return <Navigate to={defaultRouteFor(activeUser.role)} replace />;
+    return <Navigate to={landingPathFor(myPermissions, activeUser.role)} replace />;
   }
 
   const featuredIndex = plans.length > 0 ? Math.floor(plans.length / 2) : -1;

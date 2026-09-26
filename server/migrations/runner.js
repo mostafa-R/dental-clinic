@@ -1,11 +1,38 @@
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
 
 import Migration from './migration.model.js';
 import { logger } from '../utils/logger.js';
+import { connectDB } from '../config/db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Every migration reads from `mongoose.connection.db` and the runner records
+ * applied versions through the `Migration` model, so a live connection is a
+ * hard requirement — without it the first query just buffers until it times
+ * out with `buffering timed out after 10000ms`.
+ *
+ * `server.js` already calls `connectDB()` before `runMigrations()`, so this is
+ * a no-op on the normal boot path. It exists for the standalone CLI entry
+ * (`npm run migrate`), which used to import the runner directly and therefore
+ * ran every migration with no connection at all.
+ */
+async function ensureConnected() {
+  // On the server boot path `app.js` has already loaded .env as an import side
+  // effect. The CLI imports only this file, so without this `MONGO_URI` is
+  // undefined and connectDB() would exit(1) with "MONGO_URI is not defined".
+  // dotenv never overrides a variable that is already set, so an exported
+  // MONGO_URI still wins.
+  dotenv.config({ path: path.join(__dirname, '..', '.env'), quiet: true });
+
+  // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
+  if (mongoose.connection.readyState === 1) return;
+  await connectDB();
+}
 
 /**
  * Get all migration files sorted by version (filename prefix).
@@ -35,6 +62,8 @@ async function getAppliedVersions() {
  * Run all pending migrations.
  */
 export async function runMigrations() {
+  await ensureConnected();
+
   const files = await getMigrationFiles();
   const applied = await getAppliedVersions();
   const pending = files.filter((f) => !applied.has(f.version));

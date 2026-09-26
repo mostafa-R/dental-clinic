@@ -1,6 +1,8 @@
 import { forwardRef } from 'react';
 
-export const buttonVariants = {
+// Not exported: these are internal to Button. Exporting them alongside the
+// component defeats React Fast Refresh.
+const buttonVariants = {
   primary:
     'bg-brand text-white shadow-sm shadow-brand/25 hover:bg-brand-dark active:bg-brand-dark dark:bg-brand dark:hover:bg-brand-dark',
   secondary:
@@ -14,7 +16,7 @@ export const buttonVariants = {
   'success-soft': 'text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/15',
 };
 
-export const buttonSizes = {
+const buttonSizes = {
   xs: 'gap-1 rounded-lg px-2 py-1 text-xs',
   sm: 'gap-1.5 rounded-lg px-2.5 py-1.5 text-xs',
   md: 'gap-1.5 rounded-xl px-3.5 py-2.5 text-sm',

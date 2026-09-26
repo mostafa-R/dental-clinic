@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { useT } from '../../lib/i18n';
 import DentoCareLogo from '../ui/DentoCareLogo';
 import { fetchMyPermissions } from '../../features/users/userSlice';
 import { setSidebarCollapsed, setMobileSidebarOpen } from '../../features/ui/uiSlice';
+import { NAV_ITEMS, NAV_SECTION_ORDER } from '../../lib/routes';
+import { checkModuleAccess, useLandingPath } from '../../lib/roles';
 import {
   DashboardIcon,
   PatientsIcon,
@@ -19,61 +21,37 @@ import {
   BranchIcon as BranchesIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
+  CloseIcon,
 } from '../ui/icons';
 
-const NAV_SECTIONS = [
-  {
-    label: null,
-    items: [
-      { to: '/dashboard', labelKey: 'nav.dashboard', module: 'dashboard', icon: DashboardIcon },
-    ],
-  },
-  {
-    labelKey: 'nav.section.clinical',
-    items: [
-      { to: '/patients', labelKey: 'nav.patients', module: 'patients', icon: PatientsIcon },
-      { to: '/appointments', labelKey: 'nav.appointments', module: 'appointments', icon: AppointmentsIcon },
-      { to: '/recalls', labelKey: 'nav.recalls', module: 'appointments', icon: AppointmentsIcon },
-    ],
-  },
-  {
-    labelKey: 'nav.section.business',
-    items: [
-      { to: '/billing', labelKey: 'nav.billing', module: 'billing', icon: BillingIcon },
-      { to: '/accounting', labelKey: 'nav.accounting', module: 'accounting', icon: AccountingIcon },
-      { to: '/inventory', labelKey: 'nav.inventory', module: 'inventory', icon: InventoryIcon },
-      { to: '/branches', labelKey: 'nav.branches', module: 'branches', icon: BranchesIcon },
-    ],
-  },
-  {
-    labelKey: 'nav.section.communication',
-    items: [
-      { to: '/chat', labelKey: 'nav.chat', module: 'chat', icon: ChatIcon },
-    ],
-  },
-  {
-    labelKey: 'nav.section.administration',
-    items: [
-      { to: '/users', labelKey: 'nav.users', module: 'users', icon: UsersIcon },
-      { to: '/roles', labelKey: 'nav.roles', module: 'roles', icon: RolesIcon },
-      { to: '/settings', labelKey: 'nav.settings', module: 'settings', icon: SettingsIcon },
-    ],
-  },
-];
+const NAV_ICON = {
+  '/dashboard': DashboardIcon,
+  '/patients': PatientsIcon,
+  '/appointments': AppointmentsIcon,
+  '/recalls': AppointmentsIcon,
+  '/billing': BillingIcon,
+  '/accounting': AccountingIcon,
+  '/inventory': InventoryIcon,
+  '/branches': BranchesIcon,
+  '/chat': ChatIcon,
+  '/users': UsersIcon,
+  '/roles': RolesIcon,
+  '/settings': SettingsIcon,
+};
 
-function hasAccess(permissions, module) {
-  if (!module) return true;
-  if (!permissions) return false;
-  if (permissions.isSystemAdmin) return true;
-  // Belt-and-suspenders: backend already intersects role perms with the plan
-  // (getMyPermissions), but check planModules explicitly too so a stale or
-  // hand-crafted payload can never show a module the subscription excludes.
-  if (Array.isArray(permissions.planModules) && !permissions.planModules.includes(module)) {
-    return false;
-  }
-  const actions = permissions.permissions?.[module];
-  return Array.isArray(actions) && actions.length > 0;
+/**
+ * Group the route registry into sidebar sections. The path/module/section data
+ * comes from `lib/routes.js`; this file only supplies the icons, so adding a
+ * route cannot leave the menu out of sync with the URL guard.
+ */
+function buildNavSections() {
+  return NAV_SECTION_ORDER.map((labelKey) => ({
+    labelKey,
+    items: NAV_ITEMS.filter((item) => item.section === labelKey),
+  }));
 }
+
+const NAV_SECTIONS = buildNavSections();
 
 export default function Sidebar() {
   const dispatch = useDispatch();
@@ -86,8 +64,12 @@ export default function Sidebar() {
   const collapsed = useSelector((s) => s.ui.sidebarCollapsed);
   const mobileOpen = useSelector((s) => s.ui.mobileSidebarOpen);
   const chatUnread = useSelector((s) => s.chat.unread);
+  const landingPath = useLandingPath();
 
   const [hovered, setHovered] = useState(false);
+  const previousPathRef = useRef(location.pathname);
+  const mobilePanelRef = useRef(null);
+  const persistReadyRef = useRef(false);
 
   useEffect(() => {
     if (user && permissionsStatus === 'idle') {
@@ -103,12 +85,41 @@ export default function Sidebar() {
   }, []);
 
   useEffect(() => {
+    // Skip the first run. Both of these effects fire on mount, so persisting
+    // immediately wrote the default `false` over the stored preference before
+    // the restore above had been applied — it only looked correct because the
+    // restore re-triggered this effect a render later.
+    if (!persistReadyRef.current) {
+      persistReadyRef.current = true;
+      return;
+    }
     localStorage.setItem('sidebarCollapsed', String(collapsed));
   }, [collapsed]);
 
   useEffect(() => {
+    // Close the mobile drawer on *navigation* only.
+    //
+    // This used to list `mobileOpen` in its dependencies and dispatch a close
+    // whenever it was true, so opening the drawer set state to true, the effect
+    // re-ran, and immediately closed it again — the drawer could never stay
+    // open. Comparing against the previous pathname closes on real navigation
+    // without reacting to the drawer merely being opened.
+    if (previousPathRef.current === location.pathname) return;
+    previousPathRef.current = location.pathname;
     if (mobileOpen) dispatch(setMobileSidebarOpen(false));
-  }, [location.pathname, dispatch, mobileOpen]);
+  }, [location.pathname, mobileOpen, dispatch]);
+
+  // Escape closes the drawer, and focus moves into it on open: it is a modal
+  // dialog, so it must be reachable and dismissible from the keyboard alone.
+  useEffect(() => {
+    if (!mobileOpen) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') dispatch(setMobileSidebarOpen(false));
+    };
+    document.addEventListener('keydown', onKeyDown);
+    mobilePanelRef.current?.focus();
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [mobileOpen, dispatch]);
 
   const totalChatUnread = useMemo(
     () => Object.values(chatUnread).reduce((sum, n) => sum + n, 0),
@@ -119,7 +130,9 @@ export default function Sidebar() {
     () =>
       NAV_SECTIONS.map((section) => ({
         ...section,
-        items: section.items.filter((item) => item.alwaysShow || hasAccess(myPermissions, item.module)),
+        items: section.items
+          .filter((item) => checkModuleAccess(myPermissions, item.module))
+          .map((item) => ({ ...item, icon: NAV_ICON[item.path] })),
       })).filter((section) => section.items.length > 0),
     [myPermissions],
   );
@@ -138,6 +151,7 @@ export default function Sidebar() {
           collapsed={isCollapsed}
           sections={filteredSections}
           location={location}
+          landingPath={landingPath}
           totalChatUnread={totalChatUnread}
           t={t}
           onToggleCollapse={() => dispatch(setSidebarCollapsed(!collapsed))}
@@ -146,15 +160,27 @@ export default function Sidebar() {
 
       {/* Mobile overlay */}
       {mobileOpen && (
-        <div id="app-mobile-nav" className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label={t('topbar.toggleMenu')}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => dispatch(setMobileSidebarOpen(false))} />
-          <aside className="relative flex h-full w-56 shrink-0 flex-col overflow-hidden bg-brand-dark dark:bg-[#0e1c17]">
+        <div id="app-mobile-nav" className="fixed inset-0 z-40 lg:hidden">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => dispatch(setMobileSidebarOpen(false))}
+          />
+          <aside
+            ref={mobilePanelRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('topbar.toggleMenu')}
+            className="relative flex h-full w-56 shrink-0 flex-col overflow-hidden bg-brand-dark outline-none dark:bg-[#0e1c17]"
+          >
             <SidebarContent
               collapsed={false}
               sections={filteredSections}
               location={location}
+              landingPath={landingPath}
               totalChatUnread={totalChatUnread}
               t={t}
+              onClose={() => dispatch(setMobileSidebarOpen(false))}
             />
           </aside>
         </div>
@@ -168,7 +194,7 @@ function NavItem({ item, collapsed, totalChatUnread, t }) {
 
   return (
     <NavLink
-      to={item.to}
+      to={item.path}
       className={({ isActive }) =>
         [
           'group relative flex items-center rounded-lg text-sm font-medium transition-colors duration-150',
@@ -196,7 +222,7 @@ function NavItem({ item, collapsed, totalChatUnread, t }) {
           {!collapsed && (
             <>
               <span className="flex-1 truncate">{t(item.labelKey)}</span>
-              {item.to === '/chat' && totalChatUnread > 0 && (
+              {item.path === '/chat' && totalChatUnread > 0 && (
                 <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white shadow-sm shadow-rose-500/30">
                   {totalChatUnread > 99 ? '99+' : totalChatUnread}
                 </span>
@@ -204,7 +230,7 @@ function NavItem({ item, collapsed, totalChatUnread, t }) {
             </>
           )}
 
-          {collapsed && item.to === '/chat' && totalChatUnread > 0 && (
+          {collapsed && item.path === '/chat' && totalChatUnread > 0 && (
             <span className="absolute end-1.5 top-1.5 flex h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-brand-dark dark:ring-[#0e1c17]" />
           )}
         </>
@@ -213,13 +239,15 @@ function NavItem({ item, collapsed, totalChatUnread, t }) {
   );
 }
 
-function SidebarContent({ collapsed, sections, location, totalChatUnread, t, onToggleCollapse }) {
+function SidebarContent({ collapsed, sections, location, landingPath, totalChatUnread, t, onToggleCollapse, onClose }) {
   return (
     <>
-      {/* Logo */}
+      {/* Logo — goes to the user's own landing page, not a hardcoded
+          /dashboard, so a role without the dashboard module is not bounced
+          every time they click the logo. */}
       <div className="flex h-16 shrink-0 items-center border-b border-white/10 px-4">
         <NavLink
-          to="/dashboard"
+          to={landingPath}
           className={`flex items-center ${collapsed ? 'flex-1 justify-center' : 'flex-1 gap-3'}`}
         >
           <DentoCareLogo
@@ -237,8 +265,22 @@ function SidebarContent({ collapsed, sections, location, totalChatUnread, t, onT
             onClick={onToggleCollapse}
             className="hidden text-white/60 transition-colors hover:bg-white/10 hover:text-white lg:flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
             aria-label={collapsed ? t('sidebar.expand') : t('sidebar.collapse')}
+            aria-expanded={!collapsed}
           >
             {collapsed ? <PanelLeftOpenIcon width={18} height={18} /> : <PanelLeftCloseIcon width={18} height={18} />}
+          </button>
+        )}
+
+        {/* The drawer is a modal dialog, so it needs a real close control —
+            the backdrop is not reachable by keyboard. */}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+            aria-label={t('sidebar.close')}
+          >
+            <CloseIcon width={18} height={18} />
           </button>
         )}
       </div>
@@ -258,7 +300,7 @@ function SidebarContent({ collapsed, sections, location, totalChatUnread, t, onT
             <div className="space-y-1">
               {section.items.map((item) => (
                 <NavItem
-                  key={item.to}
+                  key={item.path}
                   item={item}
                   collapsed={collapsed}
                   location={location}

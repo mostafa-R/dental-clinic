@@ -8,7 +8,7 @@ import { showErrorDialog } from '../ui/uiSlice';
 import StatusBadge from './StatusBadge';
 import { nextStatusOptions, statusTKey } from './statuses';
 import { useT } from '../../lib/i18n';
-import { PhiField } from '../../hooks/usePhi';
+import PhiField from '../../components/ui/PhiField';
 import { useCanViewEmr } from '../../lib/roles';
 import api from '../../lib/axios';
 import { formatMoney, formatTime } from '../../lib/format';

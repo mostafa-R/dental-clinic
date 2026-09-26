@@ -18,6 +18,27 @@ function roleBelongsToTenant(roleDoc, tenantId) {
 }
 
 /**
+ * Is this role clinic-wide, i.e. does it see every branch of its tenant rather
+ * than only the branch its holder is assigned to?
+ *
+ * This is deliberately NOT the same question as `isSystemAdmin`. Those used to
+ * be conflated behind one flag, which meant making the clinic manager
+ * plan-bound (isSystemAdmin: false) would have quietly demoted them from
+ * "sees the whole clinic" to "sees only my own branch" — a data-visibility
+ * change nobody asked for, on top of the permission change that was asked for.
+ *
+ * The rule is derived from the granted permissions instead of a hardcoded role
+ * key, so it stays correct for custom roles: a role that can read/update/delete
+ * branches manages the clinic's branch structure and therefore needs
+ * clinic-wide visibility. Platform roles keep it via `isSystemAdmin`.
+ */
+export function isClinicWideRole(roleDoc, perms) {
+  if (roleDoc.isSystemAdmin) return true;
+  const branchActions = perms?.branches || [];
+  return ['read', 'update', 'delete'].some((action) => branchActions.includes(action));
+}
+
+/**
  * Resolve the Role document for the authenticated user.
  *
  * Resolution order:
@@ -84,6 +105,7 @@ export async function resolveRole(req) {
     const emptyPerms = Object.fromEntries(MODULES.map((m) => [m.key, []]));
     return {
       isSystemAdmin: false,
+      isTenantWide: false,
       permissionMap: () => emptyPerms,
     };
   }
@@ -99,6 +121,7 @@ export async function resolveRole(req) {
 
   return {
     isSystemAdmin: !!roleDoc.isSystemAdmin,
+    isTenantWide: isClinicWideRole(roleDoc, perms),
     permissionMap: () => perms,
   };
 }
@@ -165,8 +188,15 @@ export function checkPermission(module, action) {
 /**
  * Middleware factory: allow the request when the caller holds ANY of the
  * listed [module, action] pairs (PRD e.g. refunds need billing.delete OR
- * accounting.update). The plan gate passes when at least one candidate
- * module is included in the tenant's plan.
+ * accounting.update).
+ *
+ * A candidate pair only counts when BOTH halves hold for that SAME module:
+ * the module is in the tenant's plan AND the role grants the action on it.
+ * The two halves must not be evaluated independently — gating the plan with
+ * `pairs.some(([mod]) => planIncludesModule(tenant, mod))` let a role pass on
+ * `billing:delete` while only `accounting` was in the plan, i.e. a permission
+ * exercised on a module the clinic never bought. The same hole let an
+ * `emr:read` holder read `/users/doctors` on an appointments-only plan.
  */
 export function checkAnyPermission(pairs) {
   return async function anyPermissionMiddleware(req, _res, next) {
@@ -186,31 +216,28 @@ export function checkAnyPermission(pairs) {
         return next(ApiError.forbidden('Clinic context is missing. Please log in again.'));
       }
 
-      const planAllowed = pairs.some(([mod]) =>
-        planIncludesModule(req.user.tenant, mod),
-      );
-      if (!planAllowed) {
-        const [firstModule] = pairs[0];
+      const perms = permissionMap();
+      const holds = ([mod, act]) => (perms[mod] || []).includes(act);
+      const inPlan = ([mod]) => planIncludesModule(req.user.tenant, mod);
+
+      if (pairs.some((pair) => inPlan(pair) && holds(pair))) {
+        return next();
+      }
+
+      // The role holds one of the actions but on a module the plan excludes —
+      // report the upgrade path instead of a bare permission denial, so the
+      // clinic admin sees why the entitlement they configured is inert.
+      const unplanned = pairs.find((pair) => holds(pair) && !inPlan(pair));
+      if (unplanned) {
         return next(
           ApiError.forbidden(
-            `Your plan does not include the ${firstModule} module. Contact your platform administrator to upgrade.`,
+            `Your plan does not include the ${unplanned[0]} module. Contact your platform administrator to upgrade.`,
           ),
         );
       }
 
-      const perms = permissionMap();
-      const allowed = pairs.some(
-        ([mod, act]) => (perms[mod] || []).includes(act),
-      );
-
-      if (!allowed) {
-        const label = pairs.map(([m, a]) => `${a} ${m}`).join(' or ');
-        return next(
-          ApiError.forbidden(`You do not have permission to ${label}`),
-        );
-      }
-
-      return next();
+      const label = pairs.map(([m, a]) => `${a} ${m}`).join(' or ');
+      return next(ApiError.forbidden(`You do not have permission to ${label}`));
     } catch (err) {
       return next(err);
     }

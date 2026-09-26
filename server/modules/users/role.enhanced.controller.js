@@ -226,13 +226,17 @@ export async function updateRolePermissions(req, res) {
       throw ApiError.notFound('Role not found');
     }
     
-    // التحقق من الصلاحيات: لا يمكن تعديل أدوار builtIn إلا إذا كان المستخدم لديه صلاحيات كافية
-    if (role.isBuiltIn && !req._roleResolved?.isSystemAdmin) {
-      throw ApiError.forbidden('Cannot modify built-in role permissions');
-    }
-    
-    // التحقق من حدود المستخدم: لا يمكنه منح صلاحيات لا يملكها هو
-    // (system admin يستثنى من هذا القيد لأنه يتجاوز كل فحوصات الصلاحيات)
+    // Built-in roles (مدير المركز, طبيب, موظف استقبال, …) carry the default
+    // permission sets, but they are NOT frozen: a clinic manager has to be able
+    // to adjust the permissions *granted* to its own role, since that grant is
+    // now one of the two things bounding its access (the other being the
+    // tenant's plan). Previously this refused every built-in role for any
+    // non-system-admin, which — once clinic_manager stopped being a system
+    // admin — locked the manager out of its own permissions entirely.
+    //
+    // The real anti-escalation guard is `assertCanGrantPermissions` below: a
+    // caller can never write an action it does not itself hold. That check
+    // applies to built-in and custom roles alike, so nothing is lost here.
     assertCanGrantPermissions(
       req._roleResolved?.permissionMap?.() || {},
       permissions,

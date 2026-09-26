@@ -5,17 +5,16 @@ import Card from "../../../components/ui/Card";
 import EmptyState from "../../../components/ui/EmptyState";
 import Spinner from "../../../components/ui/Spinner";
 import { useT } from "../../../lib/i18n";
+import { usePermission } from "../../../lib/roles";
 import { doctorDashboardApi } from "../doctorDashboardApi";
 
 export default function ActivePlans() {
   const { t } = useT();
   const user = useSelector((s) => s.auth.user);
-  const perms = useSelector((s) => s.users.myPermissions);
   const [plans, setPlans] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const hasAccess =
-    perms?.isSystemAdmin || perms?.permissions?.emr?.includes("read");
+  const hasAccess = usePermission("emr", "read");
 
   useEffect(() => {
     if (!hasAccess || !user?._id) return;

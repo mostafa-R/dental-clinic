@@ -1,17 +1,20 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { useT } from '../lib/i18n';
-import { defaultRouteFor } from '../lib/roles';
+import { useLandingPath } from '../lib/roles';
 import { DentoCareLogo } from '../components/ui/DentoCareLogo';
 
 export default function NotFound({ embedded = false }) {
   const { t } = useT();
   const location = useLocation();
   const navigate = useNavigate();
+  // Points at a page the signed-in user is allowed to open, so "Go home" can
+  // never drop them straight back onto a 404.
+  const homeTo = useLandingPath();
   const user = useSelector((s) => s.auth.user);
-
-  const homeTo = defaultRouteFor(user?.role);
   const loginTo = '/login';
+  // Checked separately: `useLandingPath()` returns a truthy fallback path even
+  // for a signed-out visitor, so it cannot stand in for an auth check here.
   const isAuthenticated = Boolean(user);
 
   const body = (

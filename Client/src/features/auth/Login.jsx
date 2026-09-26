@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { loginUser, verifyImpersonation } from './authSlice';
 import { showErrorDialog } from '../ui/uiSlice';
-import { defaultRouteFor } from '../../lib/roles';
+import { useLandingPath } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
 import PreferencesControls from '../preferences/PreferencesControls';
 import DentoCareLogo from '../../components/ui/DentoCareLogo';
@@ -14,6 +14,10 @@ export default function Login() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { status, user } = useSelector((s) => s.auth);
+  // Permission-aware landing route. Re-reads when `myPermissions` resolves, so
+  // the post-login redirect waits for the grants instead of guessing from the
+  // role alone and bouncing the user off a page they cannot open.
+  const landingPath = useLandingPath();
   const { t } = useT();
   const [searchParams] = useSearchParams();
 
@@ -30,9 +34,9 @@ export default function Login() {
   // Redirect if already authenticated
   useEffect(() => {
     if (user) {
-      navigate(defaultRouteFor(user.role), { replace: true });
+      navigate(landingPath, { replace: true });
     }
-  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user, landingPath, navigate]);
 
   const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
@@ -41,8 +45,8 @@ export default function Login() {
     try {
       const { resetPermissions } = await import('../users/userSlice');
       dispatch(resetPermissions());
-      const loggedInUser = await dispatch(loginUser(form)).unwrap();
-      navigate(defaultRouteFor(loggedInUser.role), { replace: true });
+      await dispatch(loginUser(form)).unwrap();
+      navigate(landingPath, { replace: true });
     } catch (err) {
       dispatch(showErrorDialog(err));
     }

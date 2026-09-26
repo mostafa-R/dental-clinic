@@ -94,9 +94,62 @@ describe('GET /users/doctors authorization', () => {
     expect(next.mock.calls[0][0]?.statusCode).toBe(403);
   });
 
+  it('refuses a held permission whose module is outside the plan, even when a sibling candidate module is in it', async () => {
+    // The regression this closes: `emr:read` is held, but the plan only bought
+    // `appointments`. The plan gate used to pass on the sibling candidate
+    // (`appointments`) and then hand out access via the unplanned `emr` grant.
+    const next = await run(checkAnyPermission(DOCTORS), {
+      permissions: { emr: ['read'] },
+      planModules: ['appointments'],
+    });
+    expect(next.mock.calls[0][0]?.statusCode).toBe(403);
+    expect(next.mock.calls[0][0]?.message).toMatch(/plan does not include the emr module/);
+  });
+
+  it('still passes when the held permission and the plan agree on the same module', async () => {
+    const next = await run(checkAnyPermission(DOCTORS), {
+      permissions: { emr: ['read'], appointments: ['create'] },
+      planModules: ['appointments'],
+    });
+    expect(next.mock.calls[0][0]).toBeUndefined();
+  });
+
   it('lets a system admin through without any grant', async () => {
     const next = await run(checkAnyPermission(DOCTORS), { permissions: {}, isSystemAdmin: true });
     expect(next.mock.calls[0][0]).toBeUndefined();
+  });
+});
+
+describe('checkAnyPermission gates the plan per pair, not globally', () => {
+  const WALLET_CREDIT = [
+    ['accounting', 'update'],
+    ['billing', 'delete'],
+  ];
+
+  it('refuses billing:delete on an accounting-only plan', async () => {
+    const next = await run(checkAnyPermission(WALLET_CREDIT), {
+      permissions: { billing: ['delete'] },
+      planModules: ['accounting'],
+    });
+    expect(next.mock.calls[0][0]?.statusCode).toBe(403);
+    expect(next.mock.calls[0][0]?.message).toMatch(/plan does not include the billing module/);
+  });
+
+  it('allows accounting:update on the same accounting-only plan', async () => {
+    const next = await run(checkAnyPermission(WALLET_CREDIT), {
+      permissions: { billing: ['delete'], accounting: ['update'] },
+      planModules: ['accounting'],
+    });
+    expect(next.mock.calls[0][0]).toBeUndefined();
+  });
+
+  it('reports a plain permission denial when the plan covers the module but the role lacks the action', async () => {
+    const next = await run(checkAnyPermission(WALLET_CREDIT), {
+      permissions: { accounting: ['read'] },
+      planModules: ['accounting', 'billing'],
+    });
+    expect(next.mock.calls[0][0]?.statusCode).toBe(403);
+    expect(next.mock.calls[0][0]?.message).toMatch(/do not have permission to/);
   });
 });
 

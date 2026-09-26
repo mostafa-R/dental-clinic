@@ -131,9 +131,22 @@ export async function updateItem(id, branchFilter, data) {
   }
 
   // Enforce SKU uniqueness on edit too (issue #11).
+  //
+  // The branch is taken from the item being edited, not from `branchFilter`: a
+  // system admin's filter legitimately carries no branch (they may pass
+  // `?branch=`), so `toObjectId(undefined)` produced `branch: null`, the lookup
+  // matched nothing and a duplicate SKU fell through to the unique index as an
+  // opaque 500 instead of a clean 409.
+  let target = null;
   if (update.sku) {
+    target = await InventoryItem.findOne({ _id: id, ...branchFilter })
+      .select('branch')
+      .lean();
+    if (!target) {
+      throw ApiError.notFound('Inventory item not found');
+    }
     const existing = await InventoryItem.findOne({
-      branch: toObjectId(branchFilter.branch),
+      branch: target.branch,
       sku: update.sku,
       _id: { $ne: id },
     }).select('_id');

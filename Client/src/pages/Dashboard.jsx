@@ -142,7 +142,11 @@ export default function Dashboard() {
     if (isPureDoctor) setActiveView("doctor");
   }, [isPureDoctor]);
 
-  const onRefresh = () => dispatch(fetchDashboardStats());
+  // Stabilised so the `header` memo below is not invalidated on every render.
+  const onRefresh = useCallback(
+    () => dispatch(fetchDashboardStats()),
+    [dispatch],
+  );
 
   const header = useMemo(
     () => (
@@ -233,7 +237,7 @@ export default function Dashboard() {
         </div>
       </header>
     ),
-    [t, user, canSwitchDashboard, activeView, isLoading, onRefresh],
+    [t, user, isPureDoctor, canSwitchDashboard, activeView, isLoading, onRefresh],
   );
 
   if (isPureDoctor) return <DoctorDashboard header={header} />;

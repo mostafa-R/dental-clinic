@@ -42,16 +42,34 @@ export function validateTenantMatch(resourceTenant, expectedTenant, options = {}
 }
 
 /**
+ * Whether the caller sees the whole clinic (every branch of its tenant) or
+ * only the single branch it is assigned to.
+ *
+ * This is intentionally keyed off `isTenantWide`, not `isSystemAdmin`: those
+ * are separate concerns. `isSystemAdmin` bypasses the permission matrix and
+ * the plan gate; `isTenantWide` is a data-visibility question. Conflating them
+ * meant that making `clinic_manager` plan-bound (isSystemAdmin: false) also
+ * silently cut a manager supervising several branches down to one branch.
+ * `resolveRole` derives `isTenantWide` from the granted `branches` permission,
+ * falling back to `isSystemAdmin` for roles resolved elsewhere.
+ */
+function callerIsClinicWide(req) {
+  const resolved = req._roleResolved;
+  if (!resolved) return false;
+  return resolved.isTenantWide === true || resolved.isSystemAdmin === true;
+}
+
+/**
  * Build a mongoose filter object scoped to the authenticated user's branch
  * and tenant.
  *
- * - Site (platform) admin WITH a tenant: restricted to their own
- *   tenant's data, optionally narrowed to a single ?branch= query. This is the
- *   key tenant-isolation guard: a site admin can never see another clinic's
- *   records.
- * - Site (platform) admin WITHOUT a tenant (the platform/seeder admin): no
+ * - Clinic-wide role (manages branches, or a platform admin): restricted to
+ *   their own tenant's data, optionally narrowed to a single ?branch= query.
+ *   This is the key tenant-isolation guard: even a clinic-wide admin can never
+ *   see another clinic's records.
+ * - Platform admin WITHOUT a tenant (the platform/seeder admin): no
  *   restriction, may optionally narrow with ?branch=.
- * - clinic_admin/other roles: restricted to their own branch.
+ * - Everyone else: restricted to their own branch.
  *
  * The branch/tenant values are normalized to ObjectIds so the result is safe
  * to use in both query helpers (find/countDocuments) and aggregation
@@ -62,10 +80,9 @@ export function filterByBranch(req) {
     throw ApiError.unauthorized('Authentication required');
   }
 
-  const isSystemAdmin = req._roleResolved?.isSystemAdmin;
-  if (isSystemAdmin) {
+  if (callerIsClinicWide(req)) {
     const filter = {};
-    // Tenant isolation: clinic admins only see their own tenant's data.
+    // Tenant isolation: clinic-wide roles only see their own tenant's data.
     if (req.user.tenant) {
       filter.tenant = toObjectId(req.user.tenant);
     }
@@ -94,7 +111,8 @@ export function currentTenant(req) {
 
 /**
  * Resolve the branch to assign when creating a record.
- * - Site (platform) admin / clinic_admin: must provide a branch (via body); otherwise bad request.
+ * - Clinic-wide role (manages branches) / platform admin: must provide a branch
+ *   (via body); otherwise bad request.
  * - other roles: forced to their own branch regardless of input.
  *
  * When the caller belongs to a tenant, the requested branch is verified to
@@ -107,8 +125,7 @@ export async function resolveBranchForCreate(req, bodyBranch) {
 
   let branchId;
 
-  const isSystemAdmin = req._roleResolved?.isSystemAdmin;
-  if (isSystemAdmin) {
+  if (callerIsClinicWide(req)) {
     if (!bodyBranch) {
       throw ApiError.badRequest('branch is required', { branch: 'branch is required' });
     }

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../../components/ui/Card";
 import EmptyState from "../../../components/ui/EmptyState";
 import { formatNumber } from "../../../lib/format";
 import { useT } from "../../../lib/i18n";
+import { usePermission } from "../../../lib/roles";
 import { doctorDashboardApi } from "../doctorDashboardApi";
 
 function AlertTriangleIcon() {
@@ -18,11 +18,9 @@ function AlertTriangleIcon() {
 
 export default function LowStock() {
   const { t } = useT();
-  const perms = useSelector((s) => s.users.myPermissions);
   const [items, setItems] = useState(null);
 
-  const hasAccess =
-    perms?.isSystemAdmin || perms?.permissions?.inventory?.includes("read");
+  const hasAccess = usePermission("inventory", "read");
 
   useEffect(() => {
     if (!hasAccess) return;

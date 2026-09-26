@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/ProtectedRoute';
-import RequirePermission from './components/RequirePermission';
+import ModuleGuard from './components/ModuleGuard';
 import Skeleton from './components/ui/Skeleton';
 
 const Login = lazy(() => import('./features/auth/Login'));
@@ -59,21 +59,26 @@ function App() {
         <Route path="/login" element={<Login />} />
 
         <Route element={<ProtectedRoute />}>
-          <Route element={<AppLayout />}>
-            <Route path="dashboard" element={<RequirePermission module="dashboard"><Dashboard /></RequirePermission>} />
-            <Route path="patients" element={<RequirePermission module="patients"><Patients /></RequirePermission>} />
-            <Route path="patients/:id/emr" element={<RequirePermission module="emr"><PatientEmr /></RequirePermission>} />
-            <Route path="appointments" element={<RequirePermission module="appointments"><Appointments /></RequirePermission>} />
-            <Route path="recalls" element={<RequirePermission module="appointments"><Recalls /></RequirePermission>} />
-            <Route path="branches" element={<RequirePermission module="branches"><Branches /></RequirePermission>} />
-            <Route path="billing" element={<RequirePermission module="billing"><Billing /></RequirePermission>} />
-            <Route path="accounting" element={<RequirePermission module="accounting"><Accounting /></RequirePermission>} />
-            <Route path="inventory" element={<RequirePermission module="inventory"><Inventory /></RequirePermission>} />
-            <Route path="roles" element={<RequirePermission module="roles"><Roles /></RequirePermission>} />
-            <Route path="users" element={<RequirePermission module="users"><Users /></RequirePermission>} />
-            <Route path="settings" element={<RequirePermission module="settings"><Settings /></RequirePermission>} />
-             <Route path="chat" element={<RequirePermission module="chat"><Chat /></RequirePermission>} />
-            <Route path="*" element={<NotFound embedded />} />
+          {/* One permission gate for every authenticated URL. `ModuleGuard`
+              resolves the module from `lib/routes.js` — the same registry the
+              sidebar renders from — so the menu and the URL can never disagree. */}
+          <Route element={<ModuleGuard />}>
+            <Route element={<AppLayout />}>
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="patients" element={<Patients />} />
+              <Route path="patients/:id/emr" element={<PatientEmr />} />
+              <Route path="appointments" element={<Appointments />} />
+              <Route path="recalls" element={<Recalls />} />
+              <Route path="branches" element={<Branches />} />
+              <Route path="billing" element={<Billing />} />
+              <Route path="accounting" element={<Accounting />} />
+              <Route path="inventory" element={<Inventory />} />
+              <Route path="roles" element={<Roles />} />
+              <Route path="users" element={<Users />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="chat" element={<Chat />} />
+              <Route path="*" element={<NotFound embedded />} />
+            </Route>
           </Route>
         </Route>
 

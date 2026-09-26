@@ -17,6 +17,19 @@ const baseFields = {
 export const tenantSchema = z
   .object({
     ...baseFields,
+    // The clinic's own display name is `name`. This is the *person's* name for
+    // the initial clinic_manager account, which is a different thing: a clinic
+    // is called "Bright Smile Dental" while its owner is "Dr. Sara Ahmed".
+    // Provisioning used to reuse `name` for both, so every new clinic_manager
+    // was named after the clinic and the staff list showed a business name
+    // where a person should be.
+    //
+    // Optional, and defaults to `name` in the service so existing callers that
+    // send only `name` keep working unchanged. Deliberately NOT in
+    // `baseFields`: the owner's name is a user attribute, and a tenant update
+    // must not silently rewrite a person's name — that goes through the user
+    // endpoint.
+    adminName: z.string().trim().min(2, "Admin name must be at least 2 characters").optional(),
     // Required: the platform admin sets the clinic admin's initial password
     // at provisioning time. The API never returns a generated plaintext
     // password, so we must not allow creating an account with an

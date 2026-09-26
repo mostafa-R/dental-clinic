@@ -138,7 +138,7 @@ router.get("/:id", authorizeSite("super_admin", "admin", "support"), getTenant);
  *   post:
  *     tags: [Site Tenants]
  *     summary: Create a tenant
- *     description: Site realm. Requires `super_admin` or `admin` role and 2FA confirmation. Provisioning a tenant creates its database, plan subscription, and initial admin.
+ *     description: Site realm. Requires `super_admin` or `admin` role and 2FA confirmation. Provisioning a tenant creates its default branch, plan subscription, and initial `clinic_manager` user. The body is flat, not nested under `admin`.
  *     security:
  *       - bearerAuth: []
  *       - siteCookieAuth: []
@@ -148,18 +148,20 @@ router.get("/:id", authorizeSite("super_admin", "admin", "support"), getTenant);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name, plan, admin]
+ *             required: [name, email, plan, adminPassword]
  *             properties:
- *               name: { type: string }
+ *               name:
+ *                 type: string
+ *                 description: The clinic's display name.
+ *               adminName:
+ *                 type: string
+ *                 description: >
+ *                   The clinic_manager user's own name, when it differs from the
+ *                   clinic name. Defaults to `name` when omitted.
  *               email: { type: string }
  *               phone: { type: string }
  *               plan: { type: string }
- *               admin:
- *                 type: object
- *                 properties:
- *                   name: { type: string }
- *                   email: { type: string }
- *                   password: { type: string }
+ *               adminPassword: { type: string }
  *     responses:
  *       '201':
  *         description: Tenant created

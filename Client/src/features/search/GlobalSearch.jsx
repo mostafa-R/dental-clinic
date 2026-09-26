@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 
 import { searchApi, GROUPS, resultView } from './searchApi';
 import { useT } from '../../lib/i18n';
+import { checkModuleAccess } from '../../lib/roles';
 
 function SearchIcon() {
   return (
@@ -25,6 +27,7 @@ function CloseIcon() {
 export default function GlobalSearch() {
   const navigate = useNavigate();
   const { t } = useT();
+  const myPermissions = useSelector((s) => s.users?.myPermissions);
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -34,6 +37,22 @@ export default function GlobalSearch() {
   const [active, setActive] = useState(-1);
   const inputRef = useRef(null);
   const boxRef = useRef(null);
+
+  // `GET /search` is gated on `patients:read` alone and happily returns
+  // invoices, users, roles, stock and drawings. Filter each group by the same
+  // predicate the route guard and sidebar use, so a result the user may not
+  // open is never listed — let alone clickable into a silent bounce. Groups
+  // that navigate to a patient's page additionally need `patients` (see
+  // `requires` in searchApi).
+  const visibleGroups = useMemo(
+    () =>
+      GROUPS.filter(
+        ({ module, requires }) =>
+          checkModuleAccess(myPermissions, module, 'read') &&
+          (!requires || requires.every((m) => checkModuleAccess(myPermissions, m, 'read'))),
+      ),
+    [myPermissions],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -72,7 +91,7 @@ export default function GlobalSearch() {
 
   const flatItems = [];
   const groupStart = new Map();
-  GROUPS.forEach(({ key }) => {
+  visibleGroups.forEach(({ key }) => {
     const items = results[key] || [];
     if (items.length) {
       groupStart.set(key, flatItems.length);
@@ -154,7 +173,7 @@ export default function GlobalSearch() {
             <p className="px-4 py-6 text-center text-sm text-slate-400">{t('search.empty', { query: q })}</p>
           ) : (
             <div className="divide-y divide-slate-100 py-1 dark:divide-slate-700/60">
-              {GROUPS.map(({ key }) => {
+              {visibleGroups.map(({ key }) => {
                 const items = results[key] || [];
                 if (!items.length) return null;
                 const start = groupStart.get(key);

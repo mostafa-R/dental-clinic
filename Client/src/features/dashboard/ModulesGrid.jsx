@@ -1,5 +1,8 @@
 ﻿import { Link } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { useT } from '../../lib/i18n';
+import { moduleAccessStatus } from '../../lib/roles';
+import { navRouteForModule } from '../../lib/routes';
 import {
   PatientsIcon,
   BillingIcon,
@@ -17,97 +20,115 @@ const MODULE_CONFIG = {
   patients: {
     icon: PatientsIcon,
     bg: 'bg-brand',
-    descKey: 'nav.patients',
   },
   appointments: {
     icon: AppointmentsIcon,
     bg: 'bg-brand',
-    descKey: 'nav.appointments',
   },
   billing: {
     icon: BillingIcon,
     bg: 'bg-amber-500',
-    descKey: 'nav.billing',
   },
   accounting: {
     icon: AccountingIcon,
     bg: 'bg-sky-600',
-    descKey: 'nav.accounting',
   },
   inventory: {
     icon: InventoryIcon,
     bg: 'bg-violet-500',
-    descKey: 'nav.inventory',
   },
   branches: {
     icon: BranchIcon,
     bg: 'bg-sky-500',
-    descKey: 'nav.branches',
   },
   chat: {
     icon: ChatIcon,
     bg: 'bg-rose-500',
-    descKey: 'nav.chat',
   },
   users: {
     icon: UsersIcon,
     bg: 'bg-brand',
-    descKey: 'nav.users',
   },
   roles: {
     icon: RolesIcon,
     bg: 'bg-violet-600',
-    descKey: 'nav.roles',
   },
   settings: {
     icon: SettingsIcon,
     bg: 'bg-slate-600',
-    descKey: 'nav.settings',
   },
 };
 
 const DEFAULT_MODULE = {
   icon: PatientsIcon,
   bg: 'bg-brand',
-  descKey: 'dashboard.modules',
 };
 
-export default function ModulesGrid({ modules }) {
+/**
+ * The modules this user can open from here.
+ *
+ * The server already filters the list down to plan ∩ granted permissions, but
+ * the check is repeated here with the same `moduleAccessStatus` predicate the
+ * sidebar and the URL guard use, so a payload cached before a plan downgrade or
+ * a role edit cannot keep rendering a card that leads to AccessDenied.
+ *
+ * `navRouteForModule` also drops anything with no page of its own (`emr` lives
+ * under a patient, `platform_settings` is not a client route). Linking to
+ * `/${key}` instead used to send those to the 404 page — and 404 is not a
+ * registered route, so `moduleForPath` returned `null` and the permission guard
+ * never ran at all.
+ */
+export default function ModulesGrid({ modules = [] }) {
   const { t } = useT();
+  const myPermissions = useSelector((s) => s.users?.myPermissions);
+
+  // `moduleAccessStatus` is used instead of the boolean `checkModuleAccess`
+  // because the three outcomes are not the same. `unknown` means the current
+  // user's permissions have not loaded yet, and treating that as "denied"
+  // rendered "no modules in your plan yet" on every single page load — a
+  // false statement about the plan, shown to a fully entitled user, replaced a
+  // moment later by the real grid.
+  const loaded = !!myPermissions;
+
+  const visible = modules.filter((m) => {
+    if (moduleAccessStatus(myPermissions, m.key) !== 'granted') return false;
+    return navRouteForModule(m.key) !== null;
+  });
+
+  // Nothing is known yet: render no claim at all rather than an empty plan.
+  if (!loaded) return null;
+
+  if (visible.length === 0) {
+    return (
+      <p className="py-4 text-sm text-slate-500 dark:text-slate-400">
+        {t('dashboard.noModules')}
+      </p>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      {modules.map((m) => {
+      {visible.map((m) => {
         const config = MODULE_CONFIG[m.key] || DEFAULT_MODULE;
         const Icon = config.icon;
+        const route = navRouteForModule(m.key);
         return (
           <Link
             key={m.key}
-            to={m.enabled ? `/${m.key}` : '#'}
-            className={`group relative overflow-hidden rounded-xl border bg-white p-4 transition-colors duration-150 ${
-              m.enabled
-                ? 'border-slate-200 hover:border-brand/30 hover:bg-brand/5 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-brand/30 dark:hover:bg-slate-800'
-                : 'border-slate-100 opacity-75 dark:border-slate-800 dark:bg-slate-800/50'
-            }`}
+            to={route.path}
+            className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-4 transition-colors duration-150 hover:border-brand/30 hover:bg-brand/5 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-brand/30 dark:hover:bg-slate-800"
           >
             <div className="flex items-start gap-3.5">
               <div className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${config.bg} text-white shadow-sm`}>
                 <Icon width={20} height={20} />
-                {!m.enabled && (
-                  <div className="absolute inset-0 rounded-xl bg-white/40 dark:bg-black/40" />
-                )}
               </div>
               <div className="min-w-0 flex-1 pt-0.5">
-                <span className="text-sm font-semibold text-slate-900 dark:text-white">{m.label}</span>
-                <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
-                  {t(config.descKey)}
-                </p>
+                <span className="text-sm font-semibold text-slate-900 dark:text-white">
+                  {t(`mod.${m.key}`) === `mod.${m.key}` ? m.label : t(`mod.${m.key}`)}
+                </span>
               </div>
-              <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                m.enabled
-                  ? 'bg-brand/5 text-brand-dark dark:bg-brand/20 dark:text-brand-light'
-                  : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
-              }`}>
-                {m.enabled ? t('common.open') : t('common.inDevelopment')}
+              <span className="shrink-0 rounded-full bg-brand/5 px-2.5 py-1 text-[11px] font-medium text-brand-dark transition-colors dark:bg-brand/20 dark:text-brand-light">
+                {t('common.open')}
               </span>
             </div>
           </Link>

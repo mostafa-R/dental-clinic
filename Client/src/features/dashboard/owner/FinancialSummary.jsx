@@ -1,8 +1,8 @@
 ﻿import { useEffect, useState } from "react";
-import { useSelector } from "react-redux";
 import Card from "../../../components/ui/Card";
 import { formatMoney } from "../../../lib/format";
 import { useT } from "../../../lib/i18n";
+import { usePermission } from "../../../lib/roles";
 import { doctorDashboardApi } from "../doctorDashboardApi";
 
 function RevenueIcon() {
@@ -55,11 +55,9 @@ const FINANCIAL_META = {
 
 export default function FinancialSummary() {
   const { t } = useT();
-  const perms = useSelector((s) => s.users.myPermissions);
   const [data, setData] = useState(null);
 
-  const hasAccess =
-    perms?.isSystemAdmin || perms?.permissions?.accounting?.includes("read");
+  const hasAccess = usePermission("accounting", "read");
 
   useEffect(() => {
     if (!hasAccess) return;

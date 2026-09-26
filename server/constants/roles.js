@@ -109,7 +109,21 @@ export const DEFAULT_ROLES = {
     name: 'مدير المركز',
     description: 'إدارة المركز بالكامل',
     isBuiltIn: true,
-    isSystemAdmin: true, // يرى كل شيء داخل مستأجره
+    // NOT a system admin. مدير المركز مسؤول عن عيادته هو، وقدراته بتتحسب
+    // من قائمتين مش من flag واحد:
+    //   1) الصلاحيات الممنوحة فعلاً على الدور ده (تحت) — قابلة للتعديل من
+    //      مدير المركز نفسه، ومش hardcoded.
+    //   2) الوحدات الموجودة في بلن العيادة (tenant.planModules) — يُفرض
+    //      عند كل request في middleware/checkPermission.js.
+    //
+    // كان isSystemAdmin: true فكان بيتخطى فحص البالن خالص (سطر
+    // `if (isSystemAdmin) return next()` بيجي قبل planIncludesModule)، فكان
+    // بيشوف كل صفحة وفيتشر حتى لو مش مشترى. دلوقتي بيبقى مربوط بالبلن 100%.
+    //
+    // ملاحظة: ده مش بيأثر على نطاق الفروع — مدير المركز لسه بيشوف كل فروع
+    // عيادته. نطاق الفروع بيتحسب من صلاحية `branches` نفسها
+    // (resolveRole → isTenantWide → branchScope.js) مش من الـ flag ده.
+    isSystemAdmin: false,
     permissions: {
       dashboard: ['create', 'read', 'update', 'delete'],
       patients: ['create', 'read', 'update', 'delete'],

@@ -8,17 +8,17 @@ const GROUPS = [
   { key: 'patients', module: 'patients' },
   { key: 'appointments', module: 'appointments' },
   { key: 'invoices', module: 'billing' },
-  { key: 'wallets', module: 'billing' },
-  { key: 'installments', module: 'billing' },
+  { key: 'wallets', module: 'billing', requires: ['patients'] },
+  { key: 'installments', module: 'billing', requires: ['patients'] },
   { key: 'branches', module: 'branches' },
   { key: 'users', module: 'users' },
   { key: 'roles', module: 'roles' },
   { key: 'inventory', module: 'inventory' },
   { key: 'expenses', module: 'accounting' },
   { key: 'drawings', module: 'accounting' },
-  { key: 'treatmentPlans', module: 'emr' },
-  { key: 'clinicalNotes', module: 'emr' },
-  { key: 'prescriptions', module: 'prescriptions' },
+  { key: 'treatmentPlans', module: 'emr', requires: ['patients'] },
+  { key: 'clinicalNotes', module: 'emr', requires: ['patients'] },
+  { key: 'prescriptions', module: 'prescriptions', requires: ['patients'] },
 ];
 
 function patientName(p) {

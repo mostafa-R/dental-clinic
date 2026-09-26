@@ -25,6 +25,8 @@ import { getIO, initSocket } from "./socket/index.js";
 
 const PORT = Number(process.env.PORT || 5000);
 
+
+
 function validateEnv() {
   const required = [
     ["MONGO_URI", "MongoDB connection string"],

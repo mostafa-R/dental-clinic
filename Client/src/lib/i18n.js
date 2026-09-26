@@ -68,12 +68,27 @@ const translations = {
     'mod.accounting': 'Accounting & Finance',
     'mod.inventory': 'Inventory',
     'mod.emr': 'Medical Records (EMR)',
+    'mod.treatment_plans': 'Treatment Plans',
+    'mod.dental_chart': 'Dental Chart',
+    'mod.clinical_notes': 'Clinical Notes',
     'mod.prescriptions': 'Prescriptions',
+    'mod.queue': 'Queue & Waitlist',
+    'mod.installments': 'Installments & Payments',
+    'mod.platform_settings': 'Platform Settings',
     'mod.users': 'Staff & Users',
     'mod.branches': 'Branches',
     'mod.settings': 'Settings',
     'mod.roles': 'Roles & Permissions',
     'mod.chat': 'Chat',
+    'mod.consents': 'Consents & E-Signature',
+    'mod.automations': 'Automation Rules',
+
+    'accessDenied.title': 'You do not have access to this page',
+    'accessDenied.planBody':
+      'This feature is not included in your clinic subscription. Ask your plan administrator to add it to your plan.',
+    'accessDenied.permissionBody':
+      'Your role does not include this area. Ask a clinic administrator to grant you access.',
+    'accessDenied.goHome': 'Back to my home page',
 
     'common.cancel': 'Cancel',
     'common.confirm': 'Confirm',
@@ -173,6 +188,7 @@ const translations = {
 
     'sidebar.collapse': 'Collapse sidebar',
     'sidebar.expand': 'Expand sidebar',
+    'sidebar.close': 'Close sidebar',
 
     'theme.light': 'Light',
     'theme.dark': 'Dark',
@@ -209,6 +225,7 @@ const translations = {
     'dashboard.appointmentQueue': 'Appointment Queue',
     'dashboard.recentActivity': 'Recent Activity',
     'dashboard.modules': 'Modules',
+    'dashboard.noModules': 'No modules available in your plan yet',
     'dashboard.todayOverview': 'Today at a Glance',
     'dashboard.noBranches': 'No branches',
     'dashboard.createBranchHint': 'Create a branch to get started.',
@@ -1241,12 +1258,27 @@ const translations = {
     'mod.accounting': 'المحاسبة والمالية',
     'mod.inventory': 'المخزون',
     'mod.emr': 'السجلات الطبية',
+    'mod.treatment_plans': 'خطط العلاج',
+    'mod.dental_chart': 'خريطة الأسنان',
+    'mod.clinical_notes': 'الملاحظات السريرية',
     'mod.prescriptions': 'الوصفات الطبية',
+    'mod.queue': 'قائمة الانتظار',
+    'mod.installments': 'الأقساط والدفعات',
+    'mod.platform_settings': 'إعدادات المنصة',
     'mod.users': 'الموظفين',
     'mod.branches': 'الفروع',
     'mod.settings': 'الإعدادات',
     'mod.roles': 'الأدوار والصلاحيات',
     'mod.chat': 'المحادثة',
+    'mod.consents': 'الموافقات والتوقيع الإلكتروني',
+    'mod.automations': 'قواعد الأتمتة',
+
+    'accessDenied.title': 'ليس لديك صلاحية الوصول لهذه الصفحة',
+    'accessDenied.planBody':
+      'هذه الميزة غير مشمولة في باقة عيادتك. اطلب من مسؤول الباقة إضافتها.',
+    'accessDenied.permissionBody':
+      'دورك لا يشمل هذا القسم. اطلب من مدير العيادة منحك الصلاحية.',
+    'accessDenied.goHome': 'العودة إلى صفحتي الرئيسية',
 
     'common.cancel': 'إلغاء',
     'common.confirm': 'تأكيد',
@@ -1346,6 +1378,7 @@ const translations = {
 
     'sidebar.collapse': 'طي القائمة الجانبية',
     'sidebar.expand': 'توسيع القائمة الجانبية',
+    'sidebar.close': 'إغلاق القائمة',
 
     'theme.light': 'فاتح',
     'theme.dark': 'داكن',
@@ -1382,6 +1415,7 @@ const translations = {
     'dashboard.appointmentQueue': 'قائمة الانتظار',
     'dashboard.recentActivity': 'النشاط الأخير',
     'dashboard.modules': 'الوحدات',
+    'dashboard.noModules': 'لا توجد وحدات متاحة في باقتك بعد',
     'dashboard.todayOverview': 'نظرة سريعة على اليوم',
     'dashboard.noBranches': 'لا توجد فروع',
     'dashboard.createBranchHint': 'أنشئ فرعًا للبدء.',

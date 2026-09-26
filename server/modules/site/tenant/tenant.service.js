@@ -127,7 +127,7 @@ export async function getTenantById(id) {
   return { ...tenant, branchesCount, usersCount, patientsCount, appointmentsCount };
 }
 
-export async function createTenant({ name, email, phone, plan, planId, status, address, city, country, adminPassword }) {
+export async function createTenant({ name, email, phone, plan, planId, status, address, city, country, adminName, adminPassword }) {
   const existingTenant = await Tenant.findOne({ email });
   if (existingTenant) {
     throw ApiError.conflict('A tenant with this email already exists');
@@ -236,6 +236,12 @@ export async function createTenant({ name, email, phone, plan, planId, status, a
     // Create or find the clinic_manager role for this tenant. A duplicate-key
     // error means a concurrent request just created it — fall back to reading
     // it instead of failing the whole tenant creation.
+    //
+    // `isSystemAdmin` is copied from the constant rather than hardcoded: the
+    // clinic manager is deliberately NOT a system admin, because that flag
+    // bypasses tenant.planModules. Its access is the granted permissions AND
+    // the plan. Existing clinics are moved over by migration
+    // 006-clinic-manager-plan-bound.
     const clinicManagerDef = DEFAULT_ROLES.CLINIC_MANAGER;
     let clinicAdminRole = await Role.findOne({ key: clinicManagerDef.key, tenant: tenant._id }).session(session).lean();
     if (!clinicAdminRole) {
@@ -255,9 +261,15 @@ export async function createTenant({ name, email, phone, plan, planId, status, a
       }
     }
 
+    // The clinic's name and its owner's name are separate values: a clinic is
+    // "Bright Smile Dental", its clinic_manager is "Dr. Sara Ahmed". Passing
+    // `name` here too stamped the business name onto a person, so the staff
+    // list, the audit trail and anything greeting the user by name all showed
+    // a clinic instead of a human. Falls back to `name` so callers that only
+    // send a single name keep the previous behaviour.
     const [clinicAdmin] = await User.create([{
       tenant: tenant._id,
-      name: name,
+      name: adminName || name,
       email,
       password,
       roleId: clinicAdminRole._id,

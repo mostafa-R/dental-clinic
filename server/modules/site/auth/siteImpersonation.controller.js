@@ -41,7 +41,15 @@ export const startImpersonation = asyncHandler(async (req, res) => {
   const userRole = user.roleId
     ? await Role.findById(user.roleId).select('key isSystemAdmin isBuiltIn').lean()
     : null;
-  const targetIsOwner = userRole?.isSystemAdmin || userRole?.key === 'clinic_admin' || userRole?.key === 'super_admin';
+  // The owner keys are listed explicitly rather than inferred from a flag.
+  // `clinic_manager` was previously spelled `clinic_admin` here, which never
+  // matched DEFAULT_ROLES.CLINIC_MANAGER.key — so once the clinic_manager role
+  // stopped being a system admin (it is now plan-bound, see constants/roles.js)
+  // the `isSystemAdmin` half of this test would have gone false and let a plain
+  // `support` admin impersonate the clinic owner. Spelling it correctly is what
+  // keeps owner impersonation restricted to super_admin.
+  const OWNER_ROLE_KEYS = new Set(['clinic_manager', 'super_admin']);
+  const targetIsOwner = !!userRole?.isSystemAdmin || OWNER_ROLE_KEYS.has(userRole?.key);
   if (targetIsOwner && req.siteAdmin?.role !== 'super_admin') {
     throw ApiError.forbidden('Only super_admin can impersonate the clinic owner');
   }

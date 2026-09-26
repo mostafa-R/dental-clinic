@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import Spinner from '../../components/ui/Spinner';
 import Card from '../../components/ui/Card';
@@ -26,11 +26,9 @@ export default function WhatsAppSettings() {
   const [testForm, setTestForm] = useState({ to: '', message: '' });
   const [sendingTest, setSendingTest] = useState(false);
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  async function loadSettings() {
+  // Declared before the effect and memoised so the dependency is honest; it is
+  // also called from the connect/disconnect handlers below.
+  const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
       const data = await settingsApi.getWhatsAppSettings();
@@ -40,7 +38,11 @@ export default function WhatsAppSettings() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [dispatch, t]);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   async function handleSave() {
     setSaving(true);

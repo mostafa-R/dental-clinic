@@ -9,7 +9,7 @@ import { closeDuplicates, fetchDuplicates, mergePatients } from './patientSlice'
 import { pushToast, showErrorDialog } from '../ui/uiSlice';
 import { formatDate } from '../../lib/format';
 import { useT } from '../../lib/i18n';
-import { PhiField } from '../../hooks/usePhi';
+import PhiField from '../../components/ui/PhiField';
 
 export default function DuplicatesPanel() {
   const dispatch = useDispatch();

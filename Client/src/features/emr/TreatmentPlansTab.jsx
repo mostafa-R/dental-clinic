@@ -28,7 +28,7 @@ import {
   formatToothLabel,
 } from './dental';
 import { useT } from '../../lib/i18n';
-import { PhiField } from '../../hooks/usePhi';
+import PhiField from '../../components/ui/PhiField';
 
 function newItemDraft() {
   // S1b: tooth identity is the canonical FDI code (backend normalizes).
@@ -44,6 +44,8 @@ export default function TreatmentPlansTab({ patientId }) {
   const [formOpen, setFormOpen] = useState(false);
   const [expanded, setExpanded] = useState(new Set());
   const [drafts, setDrafts] = useState({});
+  // In-flight item status edits, keyed `${planId}:${itemId}` -> chosen status.
+  const [pendingItems, setPendingItems] = useState({});
 
   const refetch = useCallback(() => {
     dispatch(fetchPlans({ patientId, params: { limit: 100 } }));
@@ -94,10 +96,25 @@ export default function TreatmentPlansTab({ patientId }) {
   };
 
   const onStatusChange = async (planId, itemId, status) => {
+    const key = `${planId}:${itemId}`;
+    // Drop a second change while the first is still in flight. Without this the
+    // two responses race and `replacePlan` applies them in arrival order, so the
+    // item can settle on the older status.
+    if (pendingItems[key]) return;
+    // Show the chosen value immediately: the select is bound to the stored
+    // status, which only updates once the server responds, so awaiting that
+    // made the control snap back to the old option and look broken.
+    setPendingItems((p) => ({ ...p, [key]: { status } }));
     try {
       await dispatch(updatePlanItem({ patientId, planId, itemId, payload: { status } })).unwrap();
     } catch (err) {
       dispatch(showErrorDialog(err));
+    } finally {
+      setPendingItems((p) => {
+        const next = { ...p };
+        delete next[key];
+        return next;
+      });
     }
   };
 
@@ -202,13 +219,21 @@ export default function TreatmentPlansTab({ patientId }) {
                           <span className="w-8 text-center font-mono text-xs text-slate-400 dark:text-slate-500">{formatToothLabel({ fdi: item.fdi, number: item.tooth })}</span>
                           <span className="flex-1 text-sm text-slate-700 dark:text-slate-200"><PhiField>{item.procedureName}</PhiField></span>
                           <span className="text-sm font-medium text-slate-900 dark:text-white">{formatMoney(item.estimatedCost)}</span>
-                          {canManage ? (
-                            <select value={item.status} onChange={(e) => onStatusChange(plan._id, item._id, e.target.value)} className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+                          {canManage ? (() => {
+                            const pending = pendingItems[`${plan._id}:${item._id}`];
+                            return (
+                            <select
+                              value={pending?.status ?? item.status}
+                              disabled={!!pending}
+                              onChange={(e) => onStatusChange(plan._id, item._id, e.target.value)}
+                              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                            >
                               {PROCEDURE_STATUSES.map((s) => (
                                 <option key={s} value={s}>{t(`emr.procedure.status.${s}`)}</option>
                               ))}
                             </select>
-                          ) : (
+                            );
+                          })() : (
                             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PROCEDURE_STATUS_STYLES[item.status]}`}>{t(`emr.procedure.status.${item.status}`)}</span>
                           )}
                           {canManage && (

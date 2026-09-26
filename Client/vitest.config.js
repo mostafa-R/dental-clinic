@@ -7,6 +7,9 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    setupFiles: [],
+    // Components are authored for the automatic JSX runtime and never import
+    // React, but this transform emits classic `React.createElement` calls, so the
+    // runtime must be in scope. See test.setup.js.
+    setupFiles: ["./test.setup.js"],
   },
 });

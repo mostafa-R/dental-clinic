@@ -1,10 +1,11 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import Card from "../../../components/ui/Card";
 import EmptyState from "../../../components/ui/EmptyState";
 import Spinner from "../../../components/ui/Spinner";
 import { formatTime } from "../../../lib/format";
 import { useT } from "../../../lib/i18n";
+import { usePermission } from "../../../lib/roles";
 import { useSocketEvent } from "../../../lib/socket";
 import { doctorDashboardApi } from "../doctorDashboardApi";
 
@@ -36,14 +37,15 @@ const DOT_COLORS = {
 export default function TodaySchedule() {
   const { t } = useT();
   const user = useSelector((s) => s.auth.user);
-  const perms = useSelector((s) => s.users.myPermissions);
   const [appointments, setAppointments] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const hasAccess =
-    perms?.isSystemAdmin || perms?.permissions?.appointments?.includes("read");
+  const hasAccess = usePermission("appointments", "read");
 
-  const fetchAppointments = () => {
+  // Memoised so the effect below and the socket subscriptions all see the same
+  // function; a plain function was re-created every render and captured a stale
+  // `hasAccess` / `user._id`.
+  const fetchAppointments = useCallback(() => {
     if (!hasAccess || !user?._id) return;
     setLoading(true);
     doctorDashboardApi
@@ -51,11 +53,11 @@ export default function TodaySchedule() {
       .then(setAppointments)
       .catch(() => setAppointments([]))
       .finally(() => setLoading(false));
-  };
+  }, [hasAccess, user?._id]);
 
   useEffect(() => {
     fetchAppointments();
-  }, [hasAccess, user?._id]);
+  }, [fetchAppointments]);
 
   useSocketEvent("appointment:created", fetchAppointments);
   useSocketEvent("appointment:updated", fetchAppointments);

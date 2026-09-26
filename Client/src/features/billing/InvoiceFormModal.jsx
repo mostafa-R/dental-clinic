@@ -8,6 +8,7 @@ import api from '../../lib/axios';
 import { createInvoice, resetFormState, updateInvoice } from './billingSlice';
 import { formatMoney } from '../../lib/format';
 import { useT } from '../../lib/i18n';
+import { useIsClinicWide } from '../../lib/roles';
 
 const EMPTY_ITEM = { description: '', quantity: 1, unitPrice: 0 };
 
@@ -82,8 +83,10 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
   const dispatch = useDispatch();
   const { t } = useT();
   const { formStatus } = useSelector((s) => s.billing);
-  const myPermissions = useSelector((s) => s.users.myPermissions);
-  const isSuperAdmin = myPermissions?.isSystemAdmin ?? false;
+  // Clinic-wide roles (not just system admins) must be able to choose a branch:
+  // the server's `resolveBranchForCreate` requires an explicit branch from them,
+  // so hiding the field makes every create fail with "branch is required".
+  const canPickBranch = useIsClinicWide();
   const isEdit = Boolean(invoice);
 
   const [form, setForm] = useState(EMPTY_FORM);
@@ -123,7 +126,7 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
   }, [dispatch, open, t]);
 
   useEffect(() => {
-    if (!open || !isSuperAdmin) return;
+    if (!open || !canPickBranch) return;
     api
       .get('/branches')
       .then((r) => setBranches(r.data.data?.branches || []))
@@ -132,7 +135,7 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
         setOptionsError(t('branches.loadFailed'));
         dispatch(showErrorDialog({ message: t('branches.loadFailed') }));
       });
-  }, [dispatch, open, isSuperAdmin, t]);
+  }, [dispatch, open, canPickBranch, t]);
 
   useEffect(() => {
     if (!open) return;
@@ -251,7 +254,8 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
               <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{optionsError}</span>
             )}
           </label>
-          {isSuperAdmin && (
+            {canPickBranch && (
+
             <label className="block">
               <span className={labelCls}>{t('appointments.form.branch')} <span className="text-red-500">*</span></span>
               <select value={form.branch} onChange={set('branch')} required className={inputCls}>

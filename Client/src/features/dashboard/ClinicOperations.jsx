@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useSelector } from 'react-redux';
 import Card from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
 import StatusBadge from '../appointments/StatusBadge';
@@ -9,15 +8,12 @@ import { inventoryApi } from '../inventory/inventoryApi';
 import { billingApi } from '../billing/billingApi';
 import { useSocketEvent } from '../../lib/socket';
 import { useT } from '../../lib/i18n';
+import { usePermission } from '../../lib/roles';
 import { formatMoney } from '../../lib/format';
 
 function today() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function hasAccess(permissions, module) {
-  return Boolean(permissions?.isSystemAdmin || permissions?.permissions?.[module]?.includes('read'));
 }
 
 function formatTime(value) {
@@ -41,11 +37,10 @@ function Row({ appointment, action, t }) {
 export default function ClinicOperations() {
   const { t } = useT();
   const navigate = useNavigate();
-  const permissions = useSelector((s) => s.users.myPermissions);
-  const canAppointments = hasAccess(permissions, 'appointments');
-  const canEmr = hasAccess(permissions, 'emr');
-  const canInventory = hasAccess(permissions, 'inventory');
-  const canBilling = hasAccess(permissions, 'billing');
+  const canAppointments = usePermission('appointments', 'read');
+  const canEmr = usePermission('emr', 'read');
+  const canInventory = usePermission('inventory', 'read');
+  const canBilling = usePermission('billing', 'read');
   const [appointments, setAppointments] = useState(null);
   const [queue, setQueue] = useState(null);
   const [lowStock, setLowStock] = useState(null);

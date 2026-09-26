@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSelector } from 'react-redux';
 import { emrApi } from './emrApi';
 import { appointmentApi } from '../appointments/appointmentApi';
 import { accountingApi } from '../accounting/accountingApi';
-import { useCanViewBilling } from '../../lib/roles';
+import { useCanViewBilling, usePermission } from '../../lib/roles';
 import { formatDate, formatMoney } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 
-function hasRead(permissions, module) { return Boolean(permissions?.isSystemAdmin || permissions?.permissions?.[module]?.includes('read')); }
 function Chip({ label, value, tone = 'slate' }) {
   const tones = { slate: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200', amber: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100' };
   return <div className={`min-w-0 rounded-md border px-3 py-2 ${tones[tone]}`}><p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{label}</p><p className="mt-0.5 truncate text-sm font-medium">{value}</p></div>;
@@ -16,9 +14,9 @@ function Chip({ label, value, tone = 'slate' }) {
 
 export default function ClinicalContextBar({ patient }) {
   const { t } = useT();
-  const navigate = useNavigate(); const permissions = useSelector((s) => s.users.myPermissions);
+  const navigate = useNavigate();
   const [plans, setPlans] = useState([]); const [wallet, setWallet] = useState(null); const [todayVisit, setTodayVisit] = useState(null);
-  const canAppointments = hasRead(permissions, 'appointments'); const canBilling = useCanViewBilling();
+  const canAppointments = usePermission('appointments', 'read'); const canBilling = useCanViewBilling();
   useEffect(() => {
     let active = true;
     emrApi.listPlans(patient._id, { status: 'active', limit: 100 }).then((data) => active && setPlans(data.plans || [])).catch(() => active && setPlans([]));

@@ -171,6 +171,15 @@ export function PanelLeftOpenIcon(props) {
   );
 }
 
+export function CloseIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}
+
 export function ChevronLeftIcon(props) {
   return (
     <svg {...base} {...props}>

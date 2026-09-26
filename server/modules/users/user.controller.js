@@ -12,6 +12,7 @@ import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
 import { invalidatePermission } from '../../utils/cache.js';
+import { assertCanGrantPermissions } from '../../utils/permissionPolicy.js';
 import { emitToBranch } from '../../socket/index.js';
 import { auditTenantAction } from '../../middleware/audit.js';
 
@@ -51,6 +52,19 @@ export const createUser = asyncHandler(async (req, res) => {
   if (roleDoc.isSystemAdmin) {
     throw ApiError.forbidden('Cannot assign a system admin role through this endpoint');
   }
+
+  // Creating a user with a role IS granting that role's permissions, so the
+  // caller must already hold every one of them. The `isSystemAdmin` check above
+  // only ever caught platform roles: it used to also catch `clinic_manager`,
+  // but that role is deliberately no longer a system admin (it is plan-bound,
+  // see constants/roles.js), which would have left any role holding
+  // `users: create` able to mint itself a full clinic manager. This guard is
+  // role-agnostic and closes that path for every role, built-in or custom.
+  assertCanGrantPermissions(
+    req._roleResolved?.permissionMap?.() || {},
+    roleDoc.permissions,
+    { isSystemAdmin: !!req._roleResolved?.isSystemAdmin }
+  );
 
   // Resolve branch: clinic owner must assign to a branch within their tenant.
   let branchId;
@@ -254,12 +268,25 @@ export const updateUser = asyncHandler(async (req, res) => {
   }
 
   // Prevent changing TO a system admin role. Keeping the user's own,
-  // already-assigned system admin role (e.g. clinic manager) is allowed so
-  // those staff records can still be edited for name/phone/branch/etc.
+  // already-assigned role is allowed so those staff records can still be
+  // edited for name/phone/branch/etc.
   if (data.roleId) {
-    const targetRole = await Role.findById(data.roleId).select('isSystemAdmin isBuiltIn');
-    if (targetRole?.isSystemAdmin && String(data.roleId) !== String(user.roleId || '')) {
+    const targetRole = await Role.findById(data.roleId).select('isSystemAdmin isBuiltIn permissions');
+    const roleChanged = String(data.roleId) !== String(user.roleId || '');
+    if (targetRole?.isSystemAdmin && roleChanged) {
       throw ApiError.forbidden('Cannot assign a system admin role through this endpoint');
+    }
+    // Only a genuine role *change* is a privilege grant, so this is where the
+    // caller must already hold the incoming role's permissions. Unchanged role
+    // ids are skipped on purpose: otherwise a manager who trims their own role
+    // could no longer edit their own name/phone/branch, since their trimmed
+    // permissions would no longer cover the role sitting on the record.
+    if (targetRole && roleChanged) {
+      assertCanGrantPermissions(
+        req._roleResolved?.permissionMap?.() || {},
+        targetRole.permissions,
+        { isSystemAdmin: !!req._roleResolved?.isSystemAdmin }
+      );
     }
   }
 

@@ -43,6 +43,12 @@ function useIsMobile(breakpoint = 640) {
   return isMobile;
 }
 
+/** Today as YYYY-MM-DD in the user's own timezone (not UTC). */
+function localDate() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function LiveQueue() {
   const dispatch = useDispatch();
   const { t } = useT();
@@ -54,19 +60,36 @@ export default function LiveQueue() {
   const queryRef = useRef(query);
   queryRef.current = query;
 
-  const today = useMemo(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const [today, setToday] = useState(() => localDate());
+  // A tab left open across midnight used to keep serving yesterday's date,
+  // because the value was computed once. Re-check on focus and once a minute.
+  useEffect(() => {
+    const check = () =>
+      setToday((prev) => {
+        const next = localDate();
+        return next === prev ? prev : next;
+      });
+    const id = setInterval(check, 60_000);
+    document.addEventListener('visibilitychange', check);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', check);
+    };
   }, []);
 
+  const prevTodayRef = useRef(today);
   useEffect(() => {
-    // Seed the date only when the store has none. This used to dispatch
-    // unconditionally, and because it runs on every mount it reset the day
-    // whenever the user switched tabs away and came back — the queue then
-    // silently showed today instead of the day they had selected.
-    if (!queryRef.current.date) {
+    // Seed the date only while the store is still showing a day we chose for
+    // the user. Dispatching unconditionally (the original bug) reset the day on
+    // every mount, so tabbing away and back silently jumped to today. A date
+    // that differs from the previous "today" was picked deliberately and is
+    // left alone — but it is re-seeded once the calendar day rolls over.
+    const stored = queryRef.current.date;
+    const userPicked = stored && stored !== prevTodayRef.current;
+    if (!userPicked) {
       dispatch(setDate(today));
     }
+    prevTodayRef.current = today;
   }, [dispatch, today]);
 
   useEffect(() => {

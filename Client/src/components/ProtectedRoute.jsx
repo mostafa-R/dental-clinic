@@ -3,7 +3,9 @@ import { Navigate, Outlet, useSearchParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { loadCurrentUser, verifyImpersonation } from '../features/auth/authSlice';
 import { fetchMyPermissions } from '../features/users/userSlice';
+import { usePermissionRevalidation } from '../lib/roles';
 import { subscribeBranch, disconnectSocket } from '../lib/socket';
+import FullPageLoader from './FullPageLoader';
 import SuspendedScreen from './SuspendedScreen';
 
 export default function ProtectedRoute() {
@@ -32,6 +34,10 @@ export default function ProtectedRoute() {
     }
   }, [dispatch, user, permissionsStatus]);
 
+  // A plan downgrade or role edit made by an admin must reach open tabs, not
+  // just the next page load.
+  usePermissionRevalidation();
+
   useEffect(() => {
     if (user?.branch?._id) {
       subscribeBranch(user.branch._id);
@@ -40,11 +46,7 @@ export default function ProtectedRoute() {
   }, [user?.branch?._id]);
 
   if (!user && (status === 'loading' || status === 'idle')) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100">
-        <div className="text-sm text-slate-500">Loading…</div>
-      </div>
-    );
+    return <FullPageLoader />;
   }
 
   if (!user) {
@@ -52,11 +54,7 @@ export default function ProtectedRoute() {
   }
 
   if (permissionsStatus === 'loading' || permissionsStatus === 'idle') {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100">
-        <div className="text-sm text-slate-500">Loading…</div>
-      </div>
-    );
+    return <FullPageLoader />;
   }
 
   // Check tenant suspension

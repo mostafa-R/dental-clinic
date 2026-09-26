@@ -9,6 +9,7 @@ import { createAppointment, resetFormState, updateAppointment } from './appointm
 import api from '../../lib/axios';
 import { useT } from '../../lib/i18n';
 import { formatMoney } from '../../lib/format';
+import { useIsClinicWide } from '../../lib/roles';
 
 function toLocalInput(date) {
   if (!date) return '';
@@ -35,8 +36,10 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
   const { formStatus } = useSelector((s) => s.appointments);
   const { items: patients, status: patientsStatus } = useSelector((s) => s.patients);
   const { items: branches, status: branchesStatus } = useSelector((s) => s.branches);
-  const myPermissions = useSelector((s) => s.users.myPermissions);
-  const isSuperAdmin = myPermissions?.isSystemAdmin ?? false;
+  // The branch picker is shown to any clinic-wide role, not just system admins:
+  // the server's `resolveBranchForCreate` requires an explicit branch from them,
+  // so hiding this field would make every create fail with "branch is required".
+  const canPickBranch = useIsClinicWide();
   const isEdit = Boolean(appointment);
 
   const [form, setForm] = useState(EMPTY);
@@ -64,9 +67,9 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
           dispatch(showErrorDialog({ message: t('common.loadFailedList') }));
         });
       if (patientsStatus === 'idle') dispatch(fetchPatients({ page: 1, limit: 100 }));
-      if (isSuperAdmin && branchesStatus === 'idle') dispatch(fetchBranches({ isActive: 'true' }));
+      if (canPickBranch && branchesStatus === 'idle') dispatch(fetchBranches({ isActive: 'true' }));
     }
-  }, [dispatch, open, isSuperAdmin, branchesStatus, patientsStatus, t]);
+  }, [dispatch, open, canPickBranch, branchesStatus, patientsStatus, t]);
 
   useEffect(() => {
     if (!open) return;
@@ -83,11 +86,22 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
       });
       setPatientSearch('');
     } else {
-      setForm((prev) => ({ ...EMPTY, start: defaultStart ? toLocalInput(defaultStart) : '', branch: prev.branch || branches[0]?._id || '' }));
+      // Clean slate: never carry the previously edited appointment's branch
+      // into a new one. The default is applied by the effect below, once the
+      // branch list has loaded.
+      setForm({ ...EMPTY, start: defaultStart ? toLocalInput(defaultStart) : '' });
       setPatientSearch('');
     }
     dispatch(resetFormState());
   }, [open, appointment, defaultStart, dispatch]);
+
+  // Default a new appointment to the first available branch, but only once the
+  // list has loaded and only while the field is untouched. Kept separate from
+  // the reset effect so a late-arriving branch list cannot wipe typed input.
+  useEffect(() => {
+    if (!open || appointment) return;
+    setForm((f) => (f.branch || !branches?.length ? f : { ...f, branch: branches[0]._id }));
+  }, [open, appointment, branches]);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -118,7 +132,7 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
     };
     if (form.start) payload.start = new Date(form.start).toISOString();
     if (form.end) payload.end = new Date(form.end).toISOString();
-    if (isSuperAdmin && form.branch) payload.branch = form.branch;
+    if (canPickBranch && form.branch) payload.branch = form.branch;
 
     try {
       if (isEdit) {
@@ -259,7 +273,8 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
             <input value={form.chair} onChange={set('chair')} placeholder={t('appointments.form.chairPlaceholder')} className={inputCls} />
           </label>
 
-          {isSuperAdmin && (
+            {canPickBranch && (
+
             <label className="block">
               <span className={labelCls}>{t('appointments.form.branch')} <span className="text-red-500">*</span></span>
               <select value={form.branch} onChange={set('branch')} required disabled={branchesStatus === 'loading'} className={inputCls}>

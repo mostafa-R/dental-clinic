@@ -1,8 +1,10 @@
 import { Navigate } from 'react-router-dom';
-import { useSelector } from 'react-redux';
-import { defaultRouteFor } from '../lib/roles';
+import { useLandingPath } from '../lib/roles';
 
 export default function RoleRedirect() {
-  const user = useSelector((s) => s.auth.user);
-  return <Navigate to={defaultRouteFor(user?.role)} replace />;
+  // Reactive, and permission-aware: falls back to the first page this user can
+  // actually open, so a role without its preferred module is not redirected
+  // into a 403 loop.
+  const to = useLandingPath();
+  return <Navigate to={to} replace />;
 }

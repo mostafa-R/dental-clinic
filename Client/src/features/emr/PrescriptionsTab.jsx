@@ -12,7 +12,7 @@ import { useSocketEvent } from '../../lib/socket';
 import { useCanManagePrescriptions } from '../../lib/roles';
 import { formatDate } from '../../lib/format';
 import { useT } from '../../lib/i18n';
-import { PhiField } from '../../hooks/usePhi';
+import PhiField from '../../components/ui/PhiField';
 
 export default function PrescriptionsTab({ patientId, patient }) {
   const dispatch = useDispatch();

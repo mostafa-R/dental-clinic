@@ -6,6 +6,7 @@ import { showErrorDialog } from '../ui/uiSlice';
 import { fetchBranches } from '../branches/branchSlice';
 import { createPatient, resetFormState, updatePatient } from './patientSlice';
 import { useT } from '../../lib/i18n';
+import { useIsClinicWide } from '../../lib/roles';
 
 const GENDERS = [
   { value: 'male', key: 'patients.gender.male' },
@@ -35,7 +36,7 @@ function toDateInput(dob) {
   return d.toISOString().slice(0, 10);
 }
 
-function fromForm(form, isSuperAdmin) {
+function fromForm(form, canPickBranch) {
   const payload = {
     firstName: form.firstName.trim(),
     lastName: form.lastName.trim(),
@@ -44,7 +45,7 @@ function fromForm(form, isSuperAdmin) {
     gender: form.gender,
     address: form.address.trim(),
   };
-  if (isSuperAdmin && form.branch) {
+  if (canPickBranch && form.branch) {
     payload.branch = form.branch;
   }
   if (form.dateOfBirth) {
@@ -113,8 +114,10 @@ export default function PatientFormModal({ open, patient, onClose, onSaved }) {
   const { t } = useT();
   const { formStatus } = useSelector((s) => s.patients);
   const { items: branches, status: branchesStatus } = useSelector((s) => s.branches);
-  const myPermissions = useSelector((s) => s.users.myPermissions);
-  const isSuperAdmin = myPermissions?.isSystemAdmin ?? false;
+  // Clinic-wide roles (not just system admins) must be able to choose a branch:
+  // the server's `resolveBranchForCreate` requires an explicit branch from them,
+  // so hiding the field makes every create fail with "branch is required".
+  const canPickBranch = useIsClinicWide();
   const isEdit = Boolean(patient);
 
   const [form, setForm] = useState(EMPTY);
@@ -123,10 +126,10 @@ export default function PatientFormModal({ open, patient, onClose, onSaved }) {
     'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500';
 
   useEffect(() => {
-    if (open && isSuperAdmin && branchesStatus === 'idle') {
+    if (open && canPickBranch && branchesStatus === 'idle') {
       dispatch(fetchBranches({ isActive: 'true' }));
     }
-  }, [open, isSuperAdmin, branchesStatus, dispatch]);
+  }, [open, canPickBranch, branchesStatus, dispatch]);
 
   useEffect(() => {
     if (open) {
@@ -145,11 +148,26 @@ export default function PatientFormModal({ open, patient, onClose, onSaved }) {
           notes: patient.medicalHistory?.notes || '',
         });
       } else {
-        setForm((prev) => ({ ...EMPTY, branch: prev.branch || branches[0]?._id || '' }));
+        // Start from a clean slate. The previous patient's branch must NOT be
+        // carried over — this modal is reused for create after edit, so reading
+        // `prev.branch` silently filed new patients into whichever branch was
+        // last edited.
+        setForm(EMPTY);
       }
       dispatch(resetFormState());
     }
   }, [open, patient, dispatch]);
+
+  // Default a new patient to the first available branch, but only once the
+  // branch list has actually loaded and only while the field is untouched.
+  // This is deliberately separate from the reset effect above: adding
+  // `branches` to that effect's deps would re-run it whenever the list arrived
+  // and wipe whatever the user had already typed.
+  useEffect(() => {
+    if (!open || patient) return;
+    if (form.branch || !branches?.length) return;
+    setForm((f) => (f.branch ? f : { ...f, branch: branches[0]._id }));
+  }, [open, patient, branches, form.branch]);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -157,7 +175,7 @@ export default function PatientFormModal({ open, patient, onClose, onSaved }) {
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    const payload = fromForm(form, isSuperAdmin);
+    const payload = fromForm(form, canPickBranch);
     try {
       if (isEdit) {
         await dispatch(updatePatient({ id: patient._id, payload })).unwrap();
@@ -224,7 +242,8 @@ export default function PatientFormModal({ open, patient, onClose, onSaved }) {
               ))}
             </select>
           </Field>
-          {isSuperAdmin && (
+            {canPickBranch && (
+
             <Field label={t('patients.form.branch')} required>
               <select
                 value={form.branch}

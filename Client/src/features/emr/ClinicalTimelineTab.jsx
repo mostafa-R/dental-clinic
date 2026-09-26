@@ -12,7 +12,7 @@ import { useSocketEvent } from '../../lib/socket';
 import { useCanManageEmr } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
 import { formatDate } from '../../lib/format';
-import { PhiField } from '../../hooks/usePhi';
+import PhiField from '../../components/ui/PhiField';
 
 function Section({ label, value, phi }) {
   if (!value) return null;

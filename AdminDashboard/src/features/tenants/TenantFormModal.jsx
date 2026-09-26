@@ -112,6 +112,7 @@ export default function TenantFormModal({ isOpen, onClose, tenant }) {
     address: "",
     city: "",
     country: "",
+    adminName: "",
     adminPassword: "",
   });
 
@@ -145,6 +146,9 @@ export default function TenantFormModal({ isOpen, onClose, tenant }) {
         address: tenant.address || "",
         city: tenant.city || "",
         country: tenant.country || "",
+        // The owner is not editable here — renaming a person is a user-record
+        // change, not a tenant one, and the update schema is strict.
+        adminName: "",
         adminPassword: "",
       });
       if (tenant.address || tenant.city || tenant.country) {
@@ -160,6 +164,7 @@ export default function TenantFormModal({ isOpen, onClose, tenant }) {
         address: "",
         city: "",
         country: "",
+        adminName: "",
         adminPassword: "",
       });
       setShowAddress(false);
@@ -185,6 +190,11 @@ export default function TenantFormModal({ isOpen, onClose, tenant }) {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
       errors.email = t("invalidEmail", language);
     if (!tenant) {
+      // Optional: blank means "same as the clinic name", which is what the API
+      // falls back to. A non-blank value still has to be a usable name, so a
+      // single stray character is caught here instead of returning a 400.
+      if (formData.adminName.trim() && formData.adminName.trim().length < 2)
+        errors.adminName = t("clinicAdminNameTooShort", language);
       if (!formData.adminPassword.trim())
         errors.adminPassword = t("adminPasswordRequired", language);
       else if (formData.adminPassword.length < 8)
@@ -202,7 +212,11 @@ export default function TenantFormModal({ isOpen, onClose, tenant }) {
     try {
       if (tenant) {
         const updateData = { ...formData };
+        // Provisioning-only fields. `adminName` in particular would be rejected
+        // outright: the update schema is strict, and the owner's name is a user
+        // attribute rather than a clinic one.
         delete updateData.adminPassword;
+        delete updateData.adminName;
         const result = await dispatch(
           updateTenant({ id: tenant._id, data: updateData }),
         );
@@ -218,6 +232,10 @@ export default function TenantFormModal({ isOpen, onClose, tenant }) {
         } else {
           setCredentials(
             result.payload?.adminCredentials || {
+              // Echo the owner name so it is visible in the one-time
+              // credentials panel, defaulting to the clinic name exactly as
+              // the server does when the field was left blank.
+              name: formData.adminName.trim() || formData.name,
               email: formData.email,
               password: formData.adminPassword,
               loginUrl: `${import.meta.env.VITE_CLINIC_URL || "http://localhost:5173"}/login`,
@@ -477,20 +495,44 @@ export default function TenantFormModal({ isOpen, onClose, tenant }) {
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
               {t("clinicAdminDesc", language)}
             </p>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                {t("adminPassword", language)}{" "}
-                <span className="text-red-500">*</span>
-              </label>
-              <PasswordInput
-                name="adminPassword"
-                value={formData.adminPassword}
-                onChange={handleChange}
-                required
-                placeholder={t("setAdminPassword", language)}
-                className={inputClass("adminPassword")}
-              />
-              <FieldError error={formErrors.adminPassword} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  {t("clinicAdminName", language)}
+                </label>
+                <input
+                  type="text"
+                  name="adminName"
+                  value={formData.adminName}
+                  onChange={handleChange}
+                  className={inputClass("adminName")}
+                  placeholder={t("clinicAdminNamePlaceholder", language)}
+                />
+                {/* Spelled out rather than left implicit: the fallback is the
+                    behaviour people expect, and a blank field next to a
+                    required clinic name otherwise looks like an oversight. */}
+                {!formErrors.adminName && (
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                    {t("clinicAdminNameSameAsClinic", language)}
+                  </p>
+                )}
+                <FieldError error={formErrors.adminName} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  {t("adminPassword", language)}{" "}
+                  <span className="text-red-500">*</span>
+                </label>
+                <PasswordInput
+                  name="adminPassword"
+                  value={formData.adminPassword}
+                  onChange={handleChange}
+                  required
+                  placeholder={t("setAdminPassword", language)}
+                  className={inputClass("adminPassword")}
+                />
+                <FieldError error={formErrors.adminPassword} />
+              </div>
             </div>
           </div>
         )}
@@ -505,6 +547,16 @@ export default function TenantFormModal({ isOpen, onClose, tenant }) {
               </h4>
             </div>
             <div className="space-y-2">
+              {/* The account belongs to a person, so show which one — this is
+                  the whole point of the separate field. */}
+              {credentials.name && (
+                <CredentialRow
+                  label={t("credentialsName", language)}
+                  value={credentials.name}
+                  onCopy={() => copyToClipboard(credentials.name)}
+                  copyLabel={t("copy", language)}
+                />
+              )}
               <CredentialRow
                 label={t("email", language)}
                 value={credentials.email}

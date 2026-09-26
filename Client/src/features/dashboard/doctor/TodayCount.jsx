@@ -3,6 +3,7 @@ import { useSelector } from "react-redux";
 import StatCard from "../../../components/ui/StatCard";
 import { formatNumber } from "../../../lib/format";
 import { useT } from "../../../lib/i18n";
+import { usePermission } from "../../../lib/roles";
 import { doctorDashboardApi } from "../doctorDashboardApi";
 
 function CalendarIcon() {
@@ -28,11 +29,9 @@ function CalendarIcon() {
 export default function TodayCount() {
   const { t } = useT();
   const user = useSelector((s) => s.auth.user);
-  const perms = useSelector((s) => s.users.myPermissions);
   const [count, setCount] = useState(null);
 
-  const hasAccess =
-    perms?.isSystemAdmin || perms?.permissions?.appointments?.includes("read");
+  const hasAccess = usePermission("appointments", "read");
 
   useEffect(() => {
     if (!hasAccess || !user?._id) return;

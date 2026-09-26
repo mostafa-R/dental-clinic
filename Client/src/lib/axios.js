@@ -16,6 +16,21 @@ function redirectToLogin() {
   }
 }
 
+/**
+ * Decide whether a failed token refresh should end the session.
+ *
+ * Only a 401/403 from the server means the token was genuinely rejected. A
+ * dropped connection, DNS failure, CORS block or timeout rejects with no
+ * `response` at all, and treating those as an expired session logs the user out
+ * over a transient blip and throws away a still-valid session.
+ *
+ * Exported so this decision is directly testable.
+ */
+export function shouldEndSession(refreshError) {
+  const status = refreshError?.response?.status;
+  return status === 401 || status === 403;
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -55,8 +70,7 @@ api.interceptors.response.use(
         // away a still-valid session over a transient Wi-Fi blip. The queued
         // requests are rejected either way, and the next user action will try
         // the refresh again once connectivity returns.
-        const refreshStatus = refreshError?.response?.status;
-        if (refreshStatus === 401 || refreshStatus === 403) {
+        if (shouldEndSession(refreshError)) {
           redirectToLogin();
         }
         return Promise.reject(refreshError);
@@ -71,7 +85,7 @@ api.interceptors.response.use(
 
     // Plan gate denied: the tenant's subscription changed (downgrade /
     // reassignment) while the user is logged in with stale Redux perms.
-    // Refresh effective permissions so Sidebar/RequirePermission hide the
+    // Refresh effective permissions so the sidebar and the route guard hide the
     // module immediately instead of after logout/login. Throttled via
     // _planRefreshed flag to avoid refresh loops on repeated 403s.
     if (status === 403 && !original?._planRefreshed) {

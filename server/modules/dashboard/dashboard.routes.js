@@ -11,7 +11,7 @@ const router = Router();
  *   get:
  *     tags: [Dashboard]
  *     summary: Get dashboard statistics
- *     description: Requires `dashboard:read`. Returns today's overview, staff and appointment breakdowns, billing outstanding, and the module catalog with enabled flags.
+ *     description: Requires `dashboard:read`. Returns today's overview, staff and appointment breakdowns, billing outstanding, and the list of modules this caller can open (plan ∩ granted permissions).
  *     security:
  *       - cookieAuth: []
  *     responses:
@@ -60,12 +60,17 @@ const router = Router();
  *                           staffCount: { type: integer }
  *                     modules:
  *                       type: array
+ *                       description: >
+ *                         Only the modules this caller can actually open: the
+ *                         tenant's plan includes them AND the caller's role
+ *                         grants at least one action. Unsold or unopenable
+ *                         modules are omitted rather than returned with a
+ *                         disabled flag, and `dashboard` itself is excluded.
  *                       items:
  *                         type: object
  *                         properties:
  *                           key: { type: string }
  *                           label: { type: string }
- *                           enabled: { type: boolean }
  *       '401':
  *         $ref: '#/components/responses/Unauthorized'
  *       '403':

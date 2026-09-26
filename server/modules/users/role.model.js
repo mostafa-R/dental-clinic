@@ -51,8 +51,15 @@ const roleSchema = new mongoose.Schema(
       default: '',
     },
     /**
-     * If true, this role bypasses all permission checks (platform/clinic owner).
-     * Built-in clinic_admin roles are system-managed and always isSystemAdmin.
+     * If true, this role bypasses all permission checks AND the tenant's plan.
+     * Reserved for platform roles (platform_admin / super_admin, tenant ===
+     * null) plus any deliberately system-managed owner role.
+     *
+     * A clinic role must NOT set this. In particular `clinic_manager` is a
+     * normal tenant-scoped role: its access is the intersection of the
+     * permissions granted to it and `tenant.planModules`. See
+     * `checkPermission`, which tests this flag before the plan — so flipping it
+     * on silently grants every module in the product.
      */
     isSystemAdmin: {
       type: Boolean,
@@ -60,7 +67,10 @@ const roleSchema = new mongoose.Schema(
     },
     /**
      * If true, the role cannot be deleted or renamed (built-in roles).
-     * Its permissions can still be edited by a clinic admin.
+     * Its permissions CAN still be edited — a clinic manager adjusts the
+     * permissions granted to its own role, bounded by
+     * `assertCanGrantPermissions` so it can never grant an action it does not
+     * itself hold.
      */
     isBuiltIn: {
       type: Boolean,
