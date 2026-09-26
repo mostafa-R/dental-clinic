@@ -109,6 +109,14 @@ const userSlice = createSlice({
         state.status = 'failed';
         state.error = action.payload;
       })
+      .addCase(createUser.pending, (state) => {
+        // Required so the modal's Save button can disable: without a pending
+        // case the button never enters a loading state and a double click
+        // fires two POST /users, where the second fails on duplicate email and
+        // reads as if the whole operation failed.
+        state.formStatus = 'loading';
+        state.formError = null;
+      })
       .addCase(createUser.fulfilled, (state, action) => {
         const u = action.payload.user;
         const idx = state.items.findIndex((x) => x._id === u._id);
@@ -116,9 +124,22 @@ const userSlice = createSlice({
         else state.items.unshift(u);
         state.formStatus = 'succeeded';
       })
+      .addCase(createUser.rejected, (state, action) => {
+        state.formStatus = 'failed';
+        state.formError = action.payload;
+      })
+      .addCase(updateUser.pending, (state) => {
+        state.formStatus = 'loading';
+        state.formError = null;
+      })
       .addCase(updateUser.fulfilled, (state, action) => {
         const idx = state.items.findIndex((u) => u._id === action.payload._id);
         if (idx >= 0) state.items[idx] = action.payload;
+        state.formStatus = 'succeeded';
+      })
+      .addCase(updateUser.rejected, (state, action) => {
+        state.formStatus = 'failed';
+        state.formError = action.payload;
       })
       .addCase(deleteUser.fulfilled, (state, action) => {
         state.items = state.items.filter((u) => u._id !== action.payload);

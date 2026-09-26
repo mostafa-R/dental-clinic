@@ -721,16 +721,17 @@ export const getDayClosePreview = asyncHandler(async (req, res) => {
  * The snapshot is immutable — re-closing returns 409.
  */
 export const closeDay = asyncHandler(async (req, res) => {
-  const branchFilter = filterByBranch(req);
   const tenant = currentTenant(req);
   const { date: dateStr, branch: branchId, countedCash, notes } = req.validatedBody;
 
-  // Day close is always scoped to ONE branch — system admins must pass one in
-  // the (validated) body. The raw req.query.branch is intentionally NOT
-  // trusted here; only the scoped branch from filterByBranch (which itself
-  // derives from the verified query filter for admins) or the validated body
-  // branch is used.
-  const resolvedBranch = branchFilter.branch ?? (branchId ? toObjectId(branchId) : null);
+  // Day close is always scoped to ONE branch. Resolve it with the same helper
+  // every other write path in this module uses (`createExpense`, `createDrawing`)
+  // so the branch is verified to belong to the caller's tenant. Taking the
+  // body value via `toObjectId` alone let a clinic owner stamp a DayClose onto
+  // another clinic's branch, which both leaked via `emitToBranch` and — because
+  // dayClose has a unique index on { branch, date } — permanently blocked the
+  // victim from ever closing that day.
+  const resolvedBranch = await resolveBranchForCreate(req, branchId);
   if (!resolvedBranch) {
     throw ApiError.badRequest('A branch is required to close the day', {
       branch: 'required',

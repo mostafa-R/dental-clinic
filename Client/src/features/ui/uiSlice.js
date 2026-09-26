@@ -3,6 +3,20 @@ import { toFriendlyError } from '../../lib/errors';
 
 let toastSeq = 0;
 
+// Toasts auto-dismiss on a timer, but a timer only runs while the item is
+// mounted, and a failing poll/socket reconnect can emit errors faster than they
+// expire. Without a ceiling the array (and the DOM/timers per entry) grew
+// without bound, so keep only the newest few.
+const MAX_TOASTS = 5;
+
+function appendToast(state, toast) {
+  toastSeq += 1;
+  state.toasts.push({ id: toastSeq, ...toast });
+  if (state.toasts.length > MAX_TOASTS) {
+    state.toasts.splice(0, state.toasts.length - MAX_TOASTS);
+  }
+}
+
 const initialState = {
   open: false,
   title: '',
@@ -26,15 +40,13 @@ const uiSlice = createSlice({
         state.fields = fields;
         return;
       }
-      toastSeq += 1;
-      state.toasts.push({ id: toastSeq, type: 'error', title, message });
+      appendToast(state, { type: 'error', title, message });
     },
     clearErrorDialog(state) {
       state.open = false;
     },
     pushToast(state, action) {
-      toastSeq += 1;
-      state.toasts.push({ id: toastSeq, ...action.payload });
+      appendToast(state, action.payload);
     },
     dismissToast(state, action) {
       state.toasts = state.toasts.filter((t) => t.id !== action.payload);

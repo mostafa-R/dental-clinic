@@ -23,11 +23,25 @@ export async function authenticateUser(emailOrUsername, password) {
   await assertNotLocked(identifier);
 
   // PRD §6.1: login accepts either the email address or the username.
-  const user = await User.findOne({
+  const matches = await User.find({
     $or: [{ email: identifier }, { username: identifier }],
   })
     .select('+password')
     .populate('branch');
+
+  // The same email can legitimately exist in two different clinics, and
+  // findOne() would then return an arbitrary one — either signing the user into
+  // the WRONG tenant, or reporting "Invalid email or password" for credentials
+  // that are in fact valid. Refuse to guess when the identifier is ambiguous;
+  // this only triggers for genuinely duplicated accounts.
+  const tenants = [...new Set(matches.map((u) => String(u.tenant)).filter(Boolean))];
+  if (tenants.length > 1) {
+    throw ApiError.conflict(
+      'This account exists in more than one clinic. Please sign in from your clinic page or contact your administrator.',
+    );
+  }
+
+  const user = matches[0];
   if (!user) {
     // No lockout state for unknown accounts (avoids lockout-DoS via account
     // enumeration); the per-IP/per-account rate limiters still apply.

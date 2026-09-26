@@ -10,6 +10,7 @@ import {
   toObjectId,
 } from '../../utils/branchScope.js';
 import { auditTenantAction } from '../../middleware/audit.js';
+import { stripPHI } from '../../middleware/phiRestrict.js';
 import {
   completeRecall,
   createRecall,
@@ -28,6 +29,31 @@ function requireTenant(req) {
   return tenant;
 }
 
+/**
+ * Recall rows carry patient names, phone numbers and free-text staff notes, and
+ * every recall route applies `phiRestrict`. These handlers used to ignore
+ * `req.isImpersonation` entirely, so a support admin holding an impersonation
+ * token read all of it in the clear — the `phiRestrict` middleware on the routes
+ * was inert. Mask whenever the request is an impersonation session.
+ */
+function serialize(recall, req) {
+  if (!req.isImpersonation) return recall;
+  return stripPHI(
+    recall && typeof recall.toJSON === 'function' ? recall.toJSON() : recall,
+  );
+}
+
+/** Same masking, for the paginated list payload (`{ items, total, page, limit }`). */
+function serializeList(data, req) {
+  if (!req.isImpersonation) return data;
+  return {
+    ...data,
+    items: (data?.items || []).map((r) =>
+      stripPHI(r && typeof r.toJSON === 'function' ? r.toJSON() : r),
+    ),
+  };
+}
+
 function auditTarget(recall, extra = {}) {
   return {
     type: 'recall',
@@ -42,14 +68,14 @@ export const listRecallHandler = asyncHandler(async (req, res) => {
   const tenant = requireTenant(req);
   const scope = filterByBranch(req);
   const data = await listRecalls({ tenant, ...scope, ...req.validatedQuery });
-  return sendSuccess(res, data);
+  return sendSuccess(res, serializeList(data, req));
 });
 
 export const getRecallHandler = asyncHandler(async (req, res) => {
   const tenant = requireTenant(req);
   const scope = filterByBranch(req);
   const recall = await findScopedRecall({ tenant, ...scope, id: req.params.id });
-  return sendSuccess(res, { recall });
+  return sendSuccess(res, { recall: serialize(recall, req) });
 });
 
 export const createRecallHandler = asyncHandler(async (req, res) => {
@@ -68,7 +94,7 @@ export const createRecallHandler = asyncHandler(async (req, res) => {
     recallType: recall.recallType,
     dueDate: recall.dueDate,
   });
-  return sendSuccess(res, { recall }, 201);
+  return sendSuccess(res, { recall: serialize(recall, req) }, 201);
 });
 
 export const updateRecallHandler = asyncHandler(async (req, res) => {
@@ -78,7 +104,7 @@ export const updateRecallHandler = asyncHandler(async (req, res) => {
     tenant, ...scope, id: req.params.id, patch: req.validatedBody, actorId: req.user._id,
   });
   await auditTenantAction(req, 'recall.update', auditTarget(recall));
-  return sendSuccess(res, { recall });
+  return sendSuccess(res, { recall: serialize(recall, req) });
 });
 
 export const contactRecallHandler = asyncHandler(async (req, res) => {
@@ -90,7 +116,7 @@ export const contactRecallHandler = asyncHandler(async (req, res) => {
   await auditTenantAction(req, 'recall.contacted', auditTarget(recall), {
     contactAttempts: recall.contactAttempts,
   });
-  return sendSuccess(res, { recall });
+  return sendSuccess(res, { recall: serialize(recall, req) });
 });
 
 export const postponeRecallHandler = asyncHandler(async (req, res) => {
@@ -102,7 +128,7 @@ export const postponeRecallHandler = asyncHandler(async (req, res) => {
   await auditTenantAction(req, 'recall.postpone', auditTarget(recall), {
     postponedUntil: recall.postponedUntil,
   });
-  return sendSuccess(res, { recall });
+  return sendSuccess(res, { recall: serialize(recall, req) });
 });
 
 export const scheduleRecallHandler = asyncHandler(async (req, res) => {
@@ -114,7 +140,7 @@ export const scheduleRecallHandler = asyncHandler(async (req, res) => {
   await auditTenantAction(req, 'recall.schedule', auditTarget(recall), {
     appointment: String(recall.scheduledAppointment),
   });
-  return sendSuccess(res, { recall });
+  return sendSuccess(res, { recall: serialize(recall, req) });
 });
 
 export const completeRecallHandler = asyncHandler(async (req, res) => {
@@ -124,7 +150,7 @@ export const completeRecallHandler = asyncHandler(async (req, res) => {
     tenant, ...scope, id: req.params.id, actorId: req.user._id, ...req.validatedBody,
   });
   await auditTenantAction(req, 'recall.complete', auditTarget(recall));
-  return sendSuccess(res, { recall });
+  return sendSuccess(res, { recall: serialize(recall, req) });
 });
 
 export const dismissRecallHandler = asyncHandler(async (req, res) => {
@@ -134,7 +160,7 @@ export const dismissRecallHandler = asyncHandler(async (req, res) => {
     tenant, ...scope, id: req.params.id, actorId: req.user._id, ...req.validatedBody,
   });
   await auditTenantAction(req, 'recall.dismiss', auditTarget(recall));
-  return sendSuccess(res, { recall });
+  return sendSuccess(res, { recall: serialize(recall, req) });
 });
 
 export default {

@@ -11,6 +11,7 @@ import {
 import AppointmentFormModal from '../features/appointments/AppointmentFormModal';
 import CalendarView from '../features/appointments/CalendarView';
 import LiveQueue from '../features/appointments/LiveQueue';
+import { showErrorDialog } from '../features/ui/uiSlice';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import PageHeader from '../components/ui/PageHeader';
@@ -73,8 +74,16 @@ export default function Appointments() {
   }, [searchParams, setSearchParams, canCreate]);
 
   useEffect(() => {
-    api.get('/users/doctors').then((d) => setDoctors(d.data.data.doctors)).catch(() => {});
-  }, []);
+    // The doctor filter silently rendering empty looks identical to "this
+    // clinic has no doctors", so report the failure.
+    api
+      .get('/users/doctors')
+      .then((d) => setDoctors(d.data.data.doctors))
+      .catch(() => {
+        setDoctors([]);
+        dispatch(showErrorDialog({ message: t('common.loadFailedList') }));
+      });
+  }, [dispatch, t]);
 
   useEffect(() => {
     dispatch(setDate(dateInputValue(anchor)));
@@ -283,11 +292,13 @@ export default function Appointments() {
                 value={query.patient}
                 onChange={(e) => dispatch(setPatientFilter(e.target.value))}
                 placeholder={t('appointments.searchPatient')}
+                aria-label={t('appointments.searchPatient')}
                 className={inputCls}
               />
               <select
                 value={query.doctor}
                 onChange={(e) => dispatch(setDoctorFilter(e.target.value))}
+                aria-label={t('appointments.allDoctors')}
                 className={inputCls}
               >
                 <option value="">{t('appointments.allDoctors')}</option>
@@ -304,11 +315,13 @@ export default function Appointments() {
               value={query.patient}
               onChange={(e) => dispatch(setPatientFilter(e.target.value))}
               placeholder={t('appointments.searchPatient')}
+              aria-label={t('appointments.searchPatient')}
               className={`w-44 ${inputCls}`}
             />
             <select
               value={query.doctor}
               onChange={(e) => dispatch(setDoctorFilter(e.target.value))}
+              aria-label={t('appointments.allDoctors')}
               className={inputCls}
             >
               <option value="">{t('appointments.allDoctors')}</option>

@@ -301,11 +301,16 @@ export const verifyConsent = asyncHandler(async (req, res) => {
 
   const valid = isSignatureValid(consent);
   const sig = consent.signature || {};
+  // The signer name is the patient or their legal guardian, so it is PHI. It
+  // is not in PHI_FIELDS (`name` is also used for non-PHI staff references),
+  // so stripPHI cannot remove it — it has to be omitted explicitly. This
+  // handler is the only consent path that builds a raw literal rather than
+  // going through `serialize()`, which is how the name slipped through.
   return sendSuccess(res, {
     verified: valid,
     signed: consent.status === 'signed',
     signedAt: sig.signedAt || null,
-    signerName: sig.name || '',
+    ...(req.isImpersonation ? {} : { signerName: sig.name || '' }),
     method: sig.method || '',
     type: consent.type,
     version: consent.version,

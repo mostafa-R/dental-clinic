@@ -219,7 +219,11 @@ export const getUser = asyncHandler(async (req, res) => {
     throw ApiError.badRequest('Invalid user id');
   }
   const tenant = currentTenant(req);
-  const filter = { _id: req.params.id };
+  // Tenant-scoped is not enough: intersect with the caller's own branch the
+  // same way `listUsers` does, otherwise anyone holding users:read/update/delete
+  // can read — and, via updateUser, reset the password of — a clinic owner in
+  // a different branch of the same tenant.
+  const filter = { ...filterByBranch(req), _id: req.params.id };
   if (tenant) filter.tenant = tenant;
   const user = await User.findOne(filter).populate(POPULATE);
   if (!user) throw ApiError.notFound('User not found');
@@ -236,7 +240,10 @@ export const updateUser = asyncHandler(async (req, res) => {
   }
   const data = req.validatedBody;
   const tenant = currentTenant(req);
-  const filter = { _id: req.params.id };
+  // Branch-scoped, not just tenant-scoped (see `getUser`). Without this a
+  // caller with users:update can set another branch's clinic owner password,
+  // which bumps their tokenVersion and silently takes over their sessions.
+  const filter = { ...filterByBranch(req), _id: req.params.id };
   if (tenant) filter.tenant = tenant;
   const user = await User.findOne(filter);
   if (!user) throw ApiError.notFound('User not found');
@@ -379,7 +386,8 @@ export const deleteUser = asyncHandler(async (req, res) => {
     throw ApiError.badRequest('Invalid user id');
   }
   const tenant = currentTenant(req);
-  const filter = { _id: req.params.id };
+  // Branch-scoped, not just tenant-scoped (see `getUser`).
+  const filter = { ...filterByBranch(req), _id: req.params.id };
   if (tenant) filter.tenant = tenant;
   const user = await User.findOne(filter);
   if (!user) throw ApiError.notFound('User not found');
@@ -407,7 +415,8 @@ export const toggleUserActive = asyncHandler(async (req, res) => {
     throw ApiError.badRequest('Invalid user id');
   }
   const tenant = currentTenant(req);
-  const filter = { _id: req.params.id };
+  // Branch-scoped, not just tenant-scoped (see `getUser`).
+  const filter = { ...filterByBranch(req), _id: req.params.id };
   if (tenant) filter.tenant = tenant;
   const user = await User.findOne(filter);
   if (!user) throw ApiError.notFound('User not found');

@@ -9,7 +9,7 @@ export default function DataTable({
   footer,
   maxHeight,
   className,
-  emptyTitle = 'Nothing here yet',
+  emptyTitle,
   emptyMessage,
   emptyIcon,
 }) {

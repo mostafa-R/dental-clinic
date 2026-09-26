@@ -1,4 +1,4 @@
-﻿import { useEffect } from 'react';
+﻿import { useCallback, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { dismissToast } from '../../features/ui/uiSlice';
 import { useT } from '../../lib/i18n';
@@ -29,12 +29,19 @@ const icons = {
   ),
 };
 
-function ToastItem({ toast, onClose }) {
+function ToastItem({ toast }) {
   const { t } = useT();
+  const dispatch = useDispatch();
+  // Dispatch from inside the item rather than taking an `onClose` prop. The prop
+  // was an inline arrow in the parent, so it got a new identity on every render
+  // of the container; because it was in this effect's deps, every unrelated
+  // re-render tore down and restarted the dismiss timer. With a steady stream of
+  // toasts that meant none of them ever expired.
+  const close = useCallback(() => dispatch(dismissToast(toast.id)), [dispatch, toast.id]);
   useEffect(() => {
-    const id = setTimeout(onClose, toast.type === 'error' ? 6000 : 4000);
+    const id = setTimeout(close, toast.type === 'error' ? 6000 : 4000);
     return () => clearTimeout(id);
-  }, [toast.id, toast.type, onClose]);
+  }, [close, toast.type]);
 
   return (
     <div
@@ -52,7 +59,7 @@ function ToastItem({ toast, onClose }) {
       </div>
       <button
         type="button"
-        onClick={onClose}
+        onClick={close}
         className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
         aria-label={t('common.close')}
       >
@@ -66,7 +73,6 @@ function ToastItem({ toast, onClose }) {
 
 export default function ToastContainer() {
   const toasts = useSelector((s) => s.ui.toasts);
-  const dispatch = useDispatch();
 
   return (
     <div
@@ -74,7 +80,7 @@ export default function ToastContainer() {
       className="pointer-events-none fixed end-4 top-4 z-[70] flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2"
     >
       {toasts.map((toast) => (
-        <ToastItem key={toast.id} toast={toast} onClose={() => dispatch(dismissToast(toast.id))} />
+        <ToastItem key={toast.id} toast={toast} />
       ))}
     </div>
   );

@@ -47,6 +47,22 @@ export default function Billing() {
   const [refunding, setRefunding] = useState(null);
   const [voiding, setVoiding] = useState(null);
   const [agingOpen, setAgingOpen] = useState(false);
+
+  // Search is held locally and pushed into the store on a debounce. Dispatching
+  // setSearch on every keystroke made `query` change on every character, and the
+  // effect below refetches on each `query` change — so typing a 6-character
+  // term fired 6 full list requests.
+  const [searchInput, setSearchInput] = useState(() => query.search || '');
+  useEffect(() => {
+    if (searchInput === (query.search || '')) return undefined;
+    const id = setTimeout(() => dispatch(setSearch(searchInput)), 300);
+    return () => clearTimeout(id);
+  }, [dispatch, query.search, searchInput]);
+  // Pull external changes to the stored query back into the input, so the
+  // debounce cannot leave the box showing a term the list is not filtered by.
+  useEffect(() => {
+    setSearchInput((prev) => (prev === (query.search || '') ? prev : query.search || ''));
+  }, [query.search]);
   const [voidLoading, setVoidLoading] = useState(false);
 
   useEffect(() => {
@@ -174,14 +190,16 @@ export default function Billing() {
         <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4 dark:border-slate-800">
           <input
             type="text"
-            value={query.search}
-            onChange={(e) => dispatch(setSearch(e.target.value))}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             placeholder={t('billing.searchPlaceholder')}
+            aria-label={t('billing.searchPlaceholder')}
             className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500"
           />
           <select
             value={query.status || ''}
             onChange={(e) => dispatch(setStatusFilter(e.target.value))}
+            aria-label={t('billing.allStatuses')}
             className={inputCls}
           >
             <option value="">{t('billing.allStatuses')}</option>

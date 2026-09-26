@@ -96,11 +96,13 @@ export default function Inventory() {
             value={query.search}
             onChange={(e) => dispatch(setSearch(e.target.value))}
             placeholder={t('inventory.searchPlaceholder')}
+            aria-label={t('inventory.searchPlaceholder')}
             className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:border-brand-light"
           />
           <select
             value={query.category}
             onChange={(e) => dispatch(setCategoryFilter(e.target.value))}
+            aria-label={t('inventory.categoryLabel')}
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:border-brand-light"
           >
             <option value="">{t('common.all')}</option>

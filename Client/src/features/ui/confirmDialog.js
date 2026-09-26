@@ -16,6 +16,12 @@ function emit() {
 
 export function requestConfirm(opts) {
   return new Promise((resolve) => {
+    // A new request supersedes any prompt still on screen (e.g. a double
+    // submit, or a second delete while the first dialog is open). Settle the
+    // superseded promise as `false` before replacing it: simply overwriting
+    // `_resolve` would strand that first caller forever, which in practice
+    // leaves a form stuck in its loading/submitting state with no way out.
+    _resolve?.(false);
     _state = { open: true, ...opts };
     _resolve = resolve;
     emit();

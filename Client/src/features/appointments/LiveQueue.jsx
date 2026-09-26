@@ -60,7 +60,13 @@ export default function LiveQueue() {
   }, []);
 
   useEffect(() => {
-    dispatch(setDate(today));
+    // Seed the date only when the store has none. This used to dispatch
+    // unconditionally, and because it runs on every mount it reset the day
+    // whenever the user switched tabs away and came back — the queue then
+    // silently showed today instead of the day they had selected.
+    if (!queryRef.current.date) {
+      dispatch(setDate(today));
+    }
   }, [dispatch, today]);
 
   useEffect(() => {

@@ -49,7 +49,16 @@ api.interceptors.response.use(
       } catch (refreshError) {
         queue.forEach((p) => p.reject(refreshError));
         queue = [];
-        redirectToLogin();
+        // Only end the session when the server actually rejected the token.
+        // A dropped connection, DNS failure, or timeout also lands in this
+        // catch — with no `response` at all — and logging out on those threw
+        // away a still-valid session over a transient Wi-Fi blip. The queued
+        // requests are rejected either way, and the next user action will try
+        // the refresh again once connectivity returns.
+        const refreshStatus = refreshError?.response?.status;
+        if (refreshStatus === 401 || refreshStatus === 403) {
+          redirectToLogin();
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

@@ -108,6 +108,7 @@ export default function Recalls() {
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') setAppliedSearch(search); }}
           placeholder={t('recall.searchHint')}
+          aria-label={t('recall.searchHint')}
           className="min-w-52 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-brand dark:border-slate-700 dark:bg-slate-800 dark:text-white sm:max-w-xs"
         />
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={selectCls} aria-label={t('recall.status')}>

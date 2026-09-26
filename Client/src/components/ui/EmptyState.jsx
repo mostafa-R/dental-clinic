@@ -1,4 +1,9 @@
-export default function EmptyState({ title = 'Nothing here yet', message, description, icon, action }) {
+import { useT } from '../../lib/i18n';
+
+export default function EmptyState({ title, message, description, icon, action }) {
+  const { t } = useT();
+  // Resolved through the dictionary so an Arabic UI never falls back to English.
+  const heading = title || t('common.empty');
   const desc = message || description;
   return (
     <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
@@ -9,7 +14,7 @@ export default function EmptyState({ title = 'Nothing here yet', message, descri
           </svg>
         )}
       </div>
-      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</p>
+      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{heading}</p>
       {desc && <p className="mt-1 max-w-sm text-xs text-slate-400 dark:text-slate-500">{desc}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>

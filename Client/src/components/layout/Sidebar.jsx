@@ -29,7 +29,7 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    label: 'Clinical',
+    labelKey: 'nav.section.clinical',
     items: [
       { to: '/patients', labelKey: 'nav.patients', module: 'patients', icon: PatientsIcon },
       { to: '/appointments', labelKey: 'nav.appointments', module: 'appointments', icon: AppointmentsIcon },
@@ -37,7 +37,7 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    label: 'Business',
+    labelKey: 'nav.section.business',
     items: [
       { to: '/billing', labelKey: 'nav.billing', module: 'billing', icon: BillingIcon },
       { to: '/accounting', labelKey: 'nav.accounting', module: 'accounting', icon: AccountingIcon },
@@ -46,13 +46,13 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    label: 'Communication',
+    labelKey: 'nav.section.communication',
     items: [
       { to: '/chat', labelKey: 'nav.chat', module: 'chat', icon: ChatIcon },
     ],
   },
   {
-    label: 'Administration',
+    labelKey: 'nav.section.administration',
     items: [
       { to: '/users', labelKey: 'nav.users', module: 'users', icon: UsersIcon },
       { to: '/roles', labelKey: 'nav.roles', module: 'roles', icon: RolesIcon },
@@ -247,12 +247,12 @@ function SidebarContent({ collapsed, sections, location, totalChatUnread, t, onT
       <nav className="scrollbar-dark flex-1 overflow-y-auto px-3 py-4">
         {sections.map((section, si) => (
           <div key={si} className={si > 0 ? 'mt-6' : ''}>
-            {section.label && !collapsed && (
+            {section.labelKey && !collapsed && (
               <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-white/50">
-                {section.label}
+                {t(section.labelKey)}
               </p>
             )}
-            {section.label && collapsed && (
+            {section.labelKey && collapsed && (
               <div className="mx-auto mb-2 h-px w-6 bg-white/15" />
             )}
             <div className="space-y-1">

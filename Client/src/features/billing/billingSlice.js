@@ -104,6 +104,9 @@ const billingSlice = createSlice({
     query: { ...initialQuery },
     status: 'idle',
     error: null,
+    // requestId of the newest in-flight invoice list request; older responses
+    // are ignored so a slow earlier page cannot overwrite the newest results.
+    currentRequestId: null,
     summary: null,
     summaryStatus: 'idle',
     formStatus: 'idle',
@@ -152,16 +155,22 @@ const billingSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(fetchInvoices.pending, (state) => {
+      .addCase(fetchInvoices.pending, (state, action) => {
         state.status = 'loading';
         state.error = null;
+        state.currentRequestId = action.meta.requestId;
       })
       .addCase(fetchInvoices.fulfilled, (state, action) => {
+        // Typing in the search box and the socket-driven refresh can leave
+        // several list requests in flight. Drop responses from superseded
+        // requests so a slow earlier page cannot overwrite the newest results.
+        if (action.meta.requestId !== state.currentRequestId) return;
         state.items = action.payload.invoices;
         state.pagination = action.payload.pagination;
         state.status = 'succeeded';
       })
       .addCase(fetchInvoices.rejected, (state, action) => {
+        if (action.meta.requestId !== state.currentRequestId) return;
         state.status = 'failed';
         state.error = action.payload;
       })

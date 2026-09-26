@@ -75,7 +75,11 @@ export default function DuplicatesPanel() {
                   <span className="text-xs text-slate-400 dark:text-slate-500">{group.count} {t('patients.duplicates.records')}</span>
                 </div>
 
-                <div className="space-y-1.5">
+                <div
+                  className="space-y-1.5"
+                  role="radiogroup"
+                  aria-label={t('patients.duplicates.pickSurvivor')}
+                >
                   {selectable.map((p) => {
                     const isSurvivor = p._id === survivorId;
                     return (
@@ -88,26 +92,31 @@ export default function DuplicatesPanel() {
                         }`}
                       >
                         <div className="flex min-w-0 items-center gap-2">
-                          <input
-                            type="radio"
-                            name={`survivor-${group.key}`}
-                            checked={isSurvivor}
-                            onChange={() => setSurvivorByGroup((prev) => ({ ...prev, [group.key]: p._id }))}
-                            className="h-3.5 w-3.5 accent-emerald-600"
-                          />
-                          <div className="min-w-0">
-                            <p className="truncate font-medium text-slate-800 dark:text-slate-100">
-                              {p.firstName} {p.lastName}
-                              {isSurvivor && (
-                                <span className="ms-2 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
-                                  {t('patients.duplicates.survivor')}
-                                </span>
-                              )}
-                            </p>
-                            <p className="text-xs text-slate-400 dark:text-slate-500">
-                              {p.patientId} · <PhiField>{p.phone || '—'}</PhiField> · {formatDate(p.createdAt)}
-                            </p>
-                          </div>
+                          {/* The row is the label, so clicking anywhere on it
+                              selects — the 14px input alone was below the
+                              24px minimum target size. */}
+                          <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                            <input
+                              type="radio"
+                              name={`survivor-${group.key}`}
+                              checked={isSurvivor}
+                              onChange={() => setSurvivorByGroup((prev) => ({ ...prev, [group.key]: p._id }))}
+                              className="h-4 w-4 shrink-0 accent-emerald-600"
+                            />
+                            <span className="min-w-0">
+                              <span className="block truncate font-medium text-slate-800 dark:text-slate-100">
+                                {p.firstName} {p.lastName}
+                                {isSurvivor && (
+                                  <span className="ms-2 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
+                                    {t('patients.duplicates.survivor')}
+                                  </span>
+                                )}
+                              </span>
+                              <span className="block text-xs text-slate-400 dark:text-slate-500">
+                                {p.patientId} · <PhiField>{p.phone || '—'}</PhiField> · {formatDate(p.createdAt)}
+                              </span>
+                            </span>
+                          </label>
                         </div>
                         <span className="text-xs text-slate-400 dark:text-slate-500">{p.branch?.name || ''}</span>
                       </div>

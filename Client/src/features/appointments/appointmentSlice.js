@@ -102,6 +102,9 @@ const appointmentsSlice = createSlice({
     query: { ...initialQuery },
     status: 'idle',
     error: null,
+    // requestId of the newest in-flight list request; older responses are
+    // ignored so they cannot overwrite the current day's appointments.
+    currentRequestId: null,
     formStatus: 'idle',
     formError: null,
     queue: { waiting: [], inChair: [], completedToday: 0, updatedAt: null },
@@ -200,16 +203,24 @@ const appointmentsSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(fetchAppointments.pending, (state) => {
+      .addCase(fetchAppointments.pending, (state, action) => {
         state.status = 'loading';
         state.error = null;
+        state.currentRequestId = action.meta.requestId;
       })
       .addCase(fetchAppointments.fulfilled, (state, action) => {
+        // The queue mounts, seeds its date, and polls, so two list requests are
+        // routinely in flight at once. Without this guard a slow response for a
+        // previously-selected day can land after the current one and silently
+        // replace the list, which is how the queue ends up showing the wrong
+        // day. Only the newest request is allowed to write.
+        if (action.meta.requestId !== state.currentRequestId) return;
         state.items = action.payload.appointments;
         state.pagination = action.payload.pagination;
         state.status = 'succeeded';
       })
       .addCase(fetchAppointments.rejected, (state, action) => {
+        if (action.meta.requestId !== state.currentRequestId) return;
         state.status = 'failed';
         state.error = action.payload;
       })

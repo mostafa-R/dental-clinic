@@ -41,6 +41,7 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
 
   const [form, setForm] = useState(EMPTY);
   const [doctors, setDoctors] = useState([]);
+  const [doctorsError, setDoctorsError] = useState('');
   const [patientSearch, setPatientSearch] = useState('');
   const [invItems, setInvItems] = useState([{ description: '', quantity: 1, unitPrice: 0 }]);
   const [showInvoiceSection, setShowInvoiceSection] = useState(false);
@@ -50,11 +51,22 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
 
   useEffect(() => {
     if (open) {
-      api.get('/users/doctors').then((d) => setDoctors(d.data.data.doctors)).catch(() => {});
+      // A silent failure here left an empty doctor dropdown that looked like
+      // "no doctors configured", and the appointment could not be saved
+      // without a doctor. Report it instead.
+      setDoctorsError('');
+      api
+        .get('/users/doctors')
+        .then((d) => setDoctors(d.data.data.doctors))
+        .catch(() => {
+          setDoctors([]);
+          setDoctorsError(t('common.loadFailedList'));
+          dispatch(showErrorDialog({ message: t('common.loadFailedList') }));
+        });
       if (patientsStatus === 'idle') dispatch(fetchPatients({ page: 1, limit: 100 }));
       if (isSuperAdmin && branchesStatus === 'idle') dispatch(fetchBranches({ isActive: 'true' }));
     }
-  }, [open, isSuperAdmin, branchesStatus, patientsStatus, dispatch]);
+  }, [dispatch, open, isSuperAdmin, branchesStatus, patientsStatus, t]);
 
   useEffect(() => {
     if (!open) return;
@@ -214,12 +226,22 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
 
           <label className="block">
             <span className={labelCls}>{t('appointments.form.doctor')} <span className="text-red-500">*</span></span>
-            <select value={form.doctor} onChange={set('doctor')} required className={inputCls}>
+            <select
+              value={form.doctor}
+              onChange={set('doctor')}
+              required
+              aria-label={t('appointments.form.doctor')}
+              aria-invalid={doctorsError ? 'true' : undefined}
+              className={inputCls}
+            >
               <option value="" disabled>{t('appointments.form.selectDoctor')}</option>
               {doctors.map((d) => (
                 <option key={d._id} value={d._id}>{d.name}</option>
               ))}
             </select>
+            {doctorsError && (
+              <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{doctorsError}</span>
+            )}
           </label>
 
           <label className="block">

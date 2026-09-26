@@ -13,6 +13,7 @@ import { useCanManageEmr } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
 import { formatMoney } from '../../lib/format';
 import { PROCEDURE_STATUS_STYLES, toothFdi, toothChartPayload } from './dental';
+import { showErrorDialog } from '../ui/uiSlice';
 
 export default function ChartTab({ patientId }) {
   const dispatch = useDispatch();
@@ -69,8 +70,11 @@ export default function ChartTab({ patientId }) {
         payload: toothChartPayload(selectedTooth, payload),
       })).unwrap();
       dispatch(resetFormState());
-    } catch {
-      /* formError surfaced via the panel */
+    } catch (err) {
+      // Must not be swallowed: the chart panel never renders `emr.formError`,
+      // so an empty catch left a rejected tooth save with no feedback at all
+      // and the clinician believed the condition had been recorded.
+      dispatch(showErrorDialog(err));
     }
   }, [dispatch, patientId, selectedFdi, selectedTooth]);
 

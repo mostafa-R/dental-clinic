@@ -176,10 +176,20 @@ const walletSlice = createSlice({
         state.formError = action.payload;
       })
 
+      .addCase(payInstallmentPlan.pending, (state) => {
+        // Without this the Pay button never sees a loading state, so a double
+        // click could fire two concurrent payments against one installment.
+        state.formStatus = 'loading';
+        state.formError = null;
+      })
       .addCase(payInstallmentPlan.fulfilled, (state, action) => {
         const idx = state.plans.items.findIndex((p) => p._id === action.payload._id);
         if (idx >= 0) state.plans.items[idx] = action.payload;
         state.formStatus = 'succeeded';
+      })
+      .addCase(payInstallmentPlan.rejected, (state, action) => {
+        state.formStatus = 'failed';
+        state.formError = action.payload;
       })
 
       .addCase(updateInstallmentPlan.pending, (state) => {

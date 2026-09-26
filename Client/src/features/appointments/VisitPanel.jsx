@@ -459,12 +459,29 @@ function PrescriptionModal({ patientId, onClose }) {
     if (isDoctor) {
       setDoctor(currentUser._id);
     } else {
-      api.get('/users/doctors').then((r) => setDoctors(r.data.data.doctors || [])).catch(() => {});
+      // Previously swallowed: the list rendered empty, `doctor` stayed '', and
+      // `submit` then returned early — so Save looked broken with no message.
+      api
+        .get('/users/doctors')
+        .then((r) => setDoctors(r.data.data.doctors || []))
+        .catch(() => {
+          setDoctors([]);
+          dispatch(showErrorDialog({ message: t('common.loadFailedList') }));
+        });
     }
-  }, [isDoctor, currentUser]);
+  }, [dispatch, isDoctor, currentUser, t]);
 
   const submit = async () => {
-    if (!medication.trim() || !doctor) return;
+    // Surface the missing prerequisites instead of returning silently, which
+    // left Save looking like it did nothing at all.
+    if (!medication.trim()) {
+      dispatch(showErrorDialog({ message: t('common.required') }));
+      return;
+    }
+    if (!doctor) {
+      dispatch(showErrorDialog({ message: t('appointments.form.selectDoctor') }));
+      return;
+    }
     setSaving(true);
     try {
       await api.post(`/patients/${patientId}/prescriptions`, {

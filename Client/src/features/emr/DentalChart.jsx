@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 
 import {
   PERMANENT_TEETH,
@@ -273,7 +273,11 @@ export default function DentalChart({ teeth, selectedFdi, onSelect, onSurfaceCli
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900">
-        <svg viewBox={viewBox} className="h-auto w-full min-w-[680px]" role="img" aria-label={t('emr.chart.aria')}>
+        {/* NOT role="img": that makes the whole subtree presentational, so
+            assistive tech announces only the chart label while the 32 tooth
+            targets below stay in the tab order announcing nothing. role="group"
+            keeps the group named and the descendants individually reachable. */}
+        <svg viewBox={viewBox} className="h-auto w-full min-w-[680px]" role="group" aria-label={t('emr.chart.aria')}>
           <line x1={PAD_X} y1={(TOP_Y + CROWN_H + BOTTOM_Y) / 2} x2={width - PAD_X} y2={(TOP_Y + CROWN_H + BOTTOM_Y) / 2} stroke="#e2e8f0" strokeWidth={1.5} strokeDasharray="2 4" />
           <text x={PAD_X + 4} y={34} className="fill-slate-300 dark:fill-slate-600" style={{ fontSize: 9, fontWeight: 700 }}>{t('emr.quadrant.ur')}</text>
           <text x={width - PAD_X - 4} y={34} textAnchor="end" className="fill-slate-300 dark:fill-slate-600" style={{ fontSize: 9, fontWeight: 700 }}>{t('emr.quadrant.ul')}</text>

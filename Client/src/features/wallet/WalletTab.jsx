@@ -40,7 +40,7 @@ export default function WalletTab({ patientId }) {
   const [planTotal, setPlanTotal] = useState('');
   const [planFrequency, setPlanFrequency] = useState('monthly');
   const [planInstallments, setPlanInstallments] = useState([{ dueDate: '', amount: '' }]);
-  const [payingPlanId, setPayingPlanId] = useState(null);
+  const [paying, setPaying] = useState(null);
   const [payAmount, setPayAmount] = useState('');
   const [editingPlan, setEditingPlan] = useState(null);
   const [editTitle, setEditTitle] = useState('');
@@ -103,45 +103,55 @@ export default function WalletTab({ patientId }) {
     const validated = planInstallments.filter((i) => i.dueDate && i.amount);
     if (validated.length === 0) return;
 
-    const result = await dispatch(createInstallmentPlan({
-      patientId,
-      payload: {
-        title: planTitle,
-        totalAmount: Number(planTotal),
-        frequency: planFrequency,
-        installments: validated.map((i) => ({
-          dueDate: new Date(i.dueDate).toISOString(),
-          amount: Number(i.amount),
-        })),
-      },
-    }));
-    setShowNewPlan(false);
-    setPlanTitle('');
-    setPlanTotal('');
-    setPlanFrequency('monthly');
-    setPlanInstallments([{ dueDate: '', amount: '' }]);
-    dispatch(resetFormState());
-    if (result.meta.requestStatus === 'fulfilled' && result.payload) {
-      setViewingPlan(result.payload);
+    // Unwrap and only reset the form on success. Resetting unconditionally
+    // closed the modal and discarded everything the user typed whenever the
+    // server rejected the plan, with no error surfaced at all.
+    try {
+      const created = await dispatch(createInstallmentPlan({
+        patientId,
+        payload: {
+          title: planTitle,
+          totalAmount: Number(planTotal),
+          frequency: planFrequency,
+          installments: validated.map((i) => ({
+            dueDate: new Date(i.dueDate).toISOString(),
+            amount: Number(i.amount),
+          })),
+        },
+      })).unwrap();
+      setShowNewPlan(false);
+      setPlanTitle('');
+      setPlanTotal('');
+      setPlanFrequency('monthly');
+      setPlanInstallments([{ dueDate: '', amount: '' }]);
+      setViewingPlan(created);
+    } catch (err) {
+      dispatch(showErrorDialog(err));
+    } finally {
+      dispatch(resetFormState());
     }
   }, [dispatch, patientId, planTitle, planTotal, planFrequency, planInstallments]);
 
-  const handlePayInstallment = useCallback(async (planId) => {
+  const handlePayInstallment = useCallback(async () => {
+    if (!paying) return;
     if (!payAmount || Number(payAmount) <= 0) return;
     try {
       await dispatch(payInstallmentPlan({
         patientId,
-        planId,
-        payload: { amount: Number(payAmount) },
+        planId: paying.planId,
+        // The server requires the installment's own id so it can settle the
+        // right line and reject an already-paid one; without it every payment
+        // failed with "Installment ID is required".
+        payload: { installmentId: paying.installmentId, amount: Number(payAmount) },
       })).unwrap();
-      setPayingPlanId(null);
+      setPaying(null);
       setPayAmount('');
     } catch (err) {
       dispatch(showErrorDialog(err));
     } finally {
       dispatch(resetFormState());
     }
-  }, [dispatch, patientId, payAmount]);
+  }, [dispatch, patientId, payAmount, paying]);
 
   const handleEditPlan = useCallback(async () => {
     if (!editingPlan || !editTitle.trim()) return;
@@ -341,7 +351,7 @@ export default function WalletTab({ patientId }) {
                           </td>
                           <td className="py-1.5">
                             {inst.status === 'pending' && canManage && (
-                              <button type="button" onClick={() => { setPayingPlanId(plan._id); setPayAmount(inst.amount - inst.paidAmount); }}
+                              <button type="button" onClick={() => { setPaying({ planId: plan._id, installmentId: inst._id }); setPayAmount(inst.amount - inst.paidAmount); }}
                                 className="text-brand hover:text-brand-dark dark:text-brand-light">
                                 {t('wallet.pay')}
                               </button>
@@ -360,8 +370,8 @@ export default function WalletTab({ patientId }) {
 
       {/* Pay Installment Modal */}
       <Modal
-        open={Boolean(payingPlanId)}
-        onClose={() => { setPayingPlanId(null); setPayAmount(''); }}
+        open={Boolean(paying)}
+        onClose={() => { setPaying(null); setPayAmount(''); }}
         title={t('wallet.pay')}
         size="sm"
       >
@@ -379,11 +389,11 @@ export default function WalletTab({ patientId }) {
           />
         </Field>
         <div className="flex gap-2">
-          <button type="button" onClick={() => handlePayInstallment(payingPlanId)} disabled={formStatus === 'loading'}
+          <button type="button" onClick={handlePayInstallment} disabled={formStatus === 'loading' || !payAmount || Number(payAmount) <= 0}
             className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark disabled:opacity-50">
             {formStatus === 'loading' ? t('common.saving') : t('wallet.pay')}
           </button>
-          <button type="button" onClick={() => { setPayingPlanId(null); setPayAmount(''); }}
+          <button type="button" onClick={() => { setPaying(null); setPayAmount(''); }}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800">
             {t('common.cancel')}
           </button>

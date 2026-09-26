@@ -89,6 +89,10 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [patients, setPatients] = useState([]);
   const [patientsLoading, setPatientsLoading] = useState(false);
+  // These two lists are the only way to pick a patient and a branch, so a
+  // silent failure left an empty dropdown that looked identical to "no data"
+  // and blocked saving with no explanation.
+  const [optionsError, setOptionsError] = useState('');
   const [branches, setBranches] = useState([]);
 
   const inputCls =
@@ -98,13 +102,17 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
     if (!open) return undefined;
     let cancelled = false;
     setPatientsLoading(true);
+    setOptionsError('');
     patientApi
       .list({ limit: 100, isActive: 'true' })
       .then((d) => {
         if (!cancelled) setPatients(d.patients || []);
       })
       .catch(() => {
-        if (!cancelled) setPatients([]);
+        if (cancelled) return;
+        setPatients([]);
+        setOptionsError(t('patients.loadFailed'));
+        dispatch(showErrorDialog({ message: t('patients.loadFailed') }));
       })
       .finally(() => {
         if (!cancelled) setPatientsLoading(false);
@@ -112,15 +120,19 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [dispatch, open, t]);
 
   useEffect(() => {
     if (!open || !isSuperAdmin) return;
     api
       .get('/branches')
       .then((r) => setBranches(r.data.data?.branches || []))
-      .catch(() => {});
-  }, [open, isSuperAdmin]);
+      .catch(() => {
+        setBranches([]);
+        setOptionsError(t('branches.loadFailed'));
+        dispatch(showErrorDialog({ message: t('branches.loadFailed') }));
+      });
+  }, [dispatch, open, isSuperAdmin, t]);
 
   useEffect(() => {
     if (!open) return;
@@ -224,6 +236,8 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
               onChange={set('patient')}
               required
               disabled={isEdit || patientsLoading}
+              aria-label={t('billing.form.selectPatient')}
+              aria-invalid={optionsError ? 'true' : undefined}
               className={inputCls}
             >
               <option value="">{patientsLoading ? t('common.loading') : t('billing.form.selectPatient')}</option>
@@ -233,6 +247,9 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
                 </option>
               ))}
             </select>
+            {optionsError && (
+              <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{optionsError}</span>
+            )}
           </label>
           {isSuperAdmin && (
             <label className="block">
