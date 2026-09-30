@@ -40,12 +40,12 @@ export const refreshSession = createAsyncThunk(
 
 export const verifyImpersonation = createAsyncThunk(
   'auth/verifyImpersonation',
-  async (token, { rejectWithValue }) => {
+  async ({ code }, { rejectWithValue }) => {
     try {
-      const { user } = await authApi.verifyImpersonation(token);
+      const { user } = await authApi.verifyImpersonation(code);
       return user;
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Invalid impersonation token');
+      return rejectWithValue(err.response?.data?.message || 'Invalid or expired impersonation link');
     }
   },
 );

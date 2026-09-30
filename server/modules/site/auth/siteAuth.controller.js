@@ -5,6 +5,7 @@ import { clearAuthCookies, setAuthCookies, SITE_REFRESH_COOKIE, verifyRefreshTok
 import { logInfo, logWarn } from '../../../utils/logger.js';
 import { sendSuccess } from '../../../utils/sendSuccess.js';
 import * as siteAuthService from './siteAuth.service.js';
+import { enrollmentQrDataUrl } from './site2fa.service.js';
 
 export const siteLogin = asyncHandler(async (req, res) => {
   const { email, password } = req.validatedBody;
@@ -77,12 +78,6 @@ export const siteLogout = asyncHandler(async (req, res) => {
   }
   clearAuthCookies(res, 'site');
   return sendSuccess(res, { message: 'Logged out' });
-});
-
-export const createSiteAdmin = asyncHandler(async (req, res) => {
-  const { name, email, password, role } = req.validatedBody;
-  const admin = await siteAuthService.createSiteAdmin({ name, email, password, role });
-  return sendSuccess(res, { admin: admin.toSafeObject() }, 201);
 });
 
 export const initiateRecovery = asyncHandler(async (req, res) => {
@@ -202,6 +197,9 @@ export const verifyRecoveryOtp = asyncHandler(async (req, res) => {
     requires2faSetup: true,
     secret,
     otpauth,
+    // Rendered server-side so the TOTP secret never reaches a third-party
+    // image service.
+    qrCodeDataUrl: await enrollmentQrDataUrl(otpauth),
     backupCodes,
   });
 });

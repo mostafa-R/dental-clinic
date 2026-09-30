@@ -101,7 +101,7 @@ router.post('/refresh', refresh);
  *   post:
  *     tags: [Auth]
  *     summary: Activate an impersonation session
- *     description: Exchanges a bearer impersonation token (from `/site/impersonation/start`) for a clinic session cookie so the admin can act as the target user with PHI masking.
+ *     description: Activates an impersonation session so an admin can act as the target user with PHI masking. Accepts either a 60-second single-use `code` (what the dashboard puts in the URL, so the grant never enters history or logs) or a raw `token`. Both forms are single-use.
  *     requestBody:
  *       required: true
  *       content:

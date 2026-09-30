@@ -23,7 +23,6 @@ import { canUserAccess } from "../../lib/permissions";
 import { getRelativeTime } from "../../lib/format";
 import { t } from "../../lib/i18n";
 import { openCommandPalette } from "../../lib/commandPalette";
-import { getSiteSocket } from "../../lib/realtime";
 
 const TOAST_DURATION = 8000;
 const FOCUSABLE_SELECTOR =
@@ -123,15 +122,25 @@ export default function Topbar({ title }) {
 
   useEffect(() => {
     if (!canViewAlerts) return undefined;
-    const s = getSiteSocket();
-    if (!s) return undefined;
-    const onAlertsChanged = () => {
-      dispatch(fetchActiveAlerts());
-      dispatch(fetchAlertSummary());
-    };
-    s.on("admin:alerts-changed", onAlertsChanged);
+    let socket = null;
+    let onAlertsChanged = null;
+    let cancelled = false;
+    // Dynamic, not static: authSlice's logout path also imports this module
+    // lazily, so a static import here would keep the socket client in the main
+    // bundle and defeat both lazy loads.
+    import("../../lib/realtime").then(({ getSiteSocket }) => {
+      if (cancelled) return;
+      socket = getSiteSocket();
+      if (!socket) return;
+      onAlertsChanged = () => {
+        dispatch(fetchActiveAlerts());
+        dispatch(fetchAlertSummary());
+      };
+      socket.on("admin:alerts-changed", onAlertsChanged);
+    });
     return () => {
-      s.off("admin:alerts-changed", onAlertsChanged);
+      cancelled = true;
+      if (socket && onAlertsChanged) socket.off("admin:alerts-changed", onAlertsChanged);
     };
   }, [dispatch, canViewAlerts]);
 

@@ -178,13 +178,23 @@ export default function Settings() {
             </h3>
             <p className="text-sm text-slate-500">{t("scanQrCode", language)}</p>
             <div className="flex justify-center">
-              {twofa.setupData.otpauth && (
+              {/*
+                Rendered by our own server from the otpauth URI. This used to be
+                an <img> pointing at api.qrserver.com, which sent the TOTP
+                secret — enough to generate valid codes for a super-admin
+                account — to a third party, along with the admin's email.
+              */}
+              {twofa.setupData.qrCodeDataUrl ? (
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(twofa.setupData.otpauth)}`}
+                  src={twofa.setupData.qrCodeDataUrl}
                   alt="QR Code"
                   className="rounded-lg border border-slate-200"
                 />
-              )}
+              ) : twofa.setupData.otpauth ? (
+                <p className="max-w-sm text-center text-xs text-slate-500">
+                  {t("scanQrCode", language)}
+                </p>
+              ) : null}
             </div>
             <p className="text-xs text-slate-400 text-center font-mono break-all">
               {twofa.setupData.secret}

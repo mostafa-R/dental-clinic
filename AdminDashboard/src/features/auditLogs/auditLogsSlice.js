@@ -25,6 +25,18 @@ export const fetchAuditActions = createAsyncThunk(
   },
 );
 
+export const verifyAuditChain = createAsyncThunk(
+  "auditLogs/verifyChain",
+  async (_, { rejectWithValue }) => {
+    try {
+      const { data } = await api.get("/audit-logs/verify");
+      return data;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to verify audit chain");
+    }
+  },
+);
+
 const auditLogsSlice = createSlice({
   name: "auditLogs",
   initialState: {
@@ -32,9 +44,15 @@ const auditLogsSlice = createSlice({
     actions: [],
     pagination: { page: 1, limit: 50, total: 0, pages: 1 },
     loading: false,
+    verifying: false,
+    verification: null,
     error: null,
   },
-  reducers: {},
+  reducers: {
+    clearVerification: (state) => {
+      state.verification = null;
+    },
+  },
   extraReducers: (builder) => {
     builder
       .addCase(fetchAuditLogs.pending, (state) => { state.loading = true; state.error = null; })
@@ -49,8 +67,21 @@ const auditLogsSlice = createSlice({
       })
       .addCase(fetchAuditActions.fulfilled, (state, action) => {
         state.actions = action.payload;
+      })
+      .addCase(verifyAuditChain.pending, (state) => {
+        state.verifying = true;
+        state.error = null;
+      })
+      .addCase(verifyAuditChain.fulfilled, (state, action) => {
+        state.verifying = false;
+        state.verification = action.payload;
+      })
+      .addCase(verifyAuditChain.rejected, (state, action) => {
+        state.verifying = false;
+        state.error = action.payload;
       });
   },
 });
 
+export const { clearVerification } = auditLogsSlice.actions;
 export default auditLogsSlice.reducer;

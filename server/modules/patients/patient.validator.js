@@ -65,3 +65,56 @@ export const listPatientsQuerySchema = z.object({
 export const mergePatientSchema = z.object({
   duplicateOf: z.string().length(24, 'Invalid patient id'),
 });
+
+/**
+ * Batch form of the above. Merging a duplicate group is one operator decision,
+ * so it is one request and one transaction: if the third pair is invalid the
+ * first two must not be left committed.
+ *
+ * The refinement rejects the shapes that are ambiguous rather than merely
+ * unusual - in particular a chain (A into B, B into C) or a record that is
+ * both merged away and merged into within the same batch, where the outcome
+ * would depend on the order the pairs happen to be processed in.
+ */
+export const mergePatientsBatchSchema = z
+  .object({
+    merges: z
+      .array(
+        z.object({
+          duplicateId: z.string().length(24, 'Invalid patient id'),
+          survivorId: z.string().length(24, 'Invalid patient id'),
+        }),
+      )
+      .min(1, 'At least one merge is required')
+      .max(50, 'Too many merges in one request'),
+  })
+  .superRefine(({ merges }, ctx) => {
+    const survivors = new Set();
+    const duplicates = new Set();
+
+    merges.forEach((pair, index) => {
+      if (pair.duplicateId === pair.survivorId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['merges', index, 'survivorId'],
+          message: 'A patient cannot be merged into itself',
+        });
+      }
+      if (duplicates.has(pair.duplicateId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['merges', index, 'duplicateId'],
+          message: 'Duplicate record appears more than once in this batch',
+        });
+      }
+      if (survivors.has(pair.duplicateId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['merges', index, 'duplicateId'],
+          message: 'Record is merged away and merged into within the same batch',
+        });
+      }
+      duplicates.add(pair.duplicateId);
+      survivors.add(pair.survivorId);
+    });
+  });

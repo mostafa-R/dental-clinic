@@ -19,10 +19,15 @@ const CHANNELS = [
   },
 ];
 
+// Stable empty map so the selector's fallback keeps a constant identity and does
+// not re-render the list on every store update while `unread` is missing.
+const EMPTY_UNREAD = {};
+const EMPTY_STAFF = [];
+
 export default function ChatSidebar({ activeChat, onSelectChat, onClose, className = '' }) {
   const { t } = useT();
-  const staff = useSelector((s) => s.chat.staff);
-  const unread = useSelector((s) => s.chat.unread);
+  const staff = useSelector((s) => s.chat?.staff ?? EMPTY_STAFF);
+  const unread = useSelector((s) => s.chat?.unread ?? EMPTY_UNREAD);
 
   const activeClass =
     "bg-brand/5 font-medium text-brand-dark dark:bg-brand/20 dark:text-brand-light";

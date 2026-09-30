@@ -35,12 +35,27 @@ function refreshExpiry() {
   return process.env.REFRESH_TOKEN_EXPIRY || "7d";
 }
 
-export const cookieOptions = {
-  httpOnly: true,
-  sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
-  secure: process.env.NODE_ENV === "production",
-  path: "/",
-};
+function isProduction() {
+  return process.env.NODE_ENV === "production";
+}
+
+/**
+ * Cookie flags are resolved at CALL time, never at module-evaluation time.
+ * ESM evaluates every import before the importing module's body runs, so a
+ * module-scope `process.env` read here would execute before `dotenv.config()`
+ * in app.js and silently produce development flags in production.
+ */
+export function cookieOptions() {
+  return {
+    httpOnly: true,
+    // The clinic front end is served from a different origin than the API, so
+    // production requires SameSite=None. That in turn mandates Secure, which
+    // browsers refuse to honour over plain HTTP.
+    sameSite: isProduction() ? "None" : "Lax",
+    secure: isProduction(),
+    path: "/",
+  };
+}
 
 function buildPayload(user, type = "clinic", extra = {}) {
   return {
@@ -83,20 +98,20 @@ export function setAuthCookies(res, user, type = "clinic", extra = {}) {
 
   if (type === "site") {
     res.cookie(SITE_ACCESS_COOKIE, accessToken, {
-      ...cookieOptions,
+      ...cookieOptions(),
       maxAge: msFromExpiry(accessExpiry()),
     });
     res.cookie(SITE_REFRESH_COOKIE, refreshToken, {
-      ...cookieOptions,
+      ...cookieOptions(),
       maxAge: msFromExpiry(refreshExpiry()),
     });
   } else {
     res.cookie(ACCESS_COOKIE, accessToken, {
-      ...cookieOptions,
+      ...cookieOptions(),
       maxAge: msFromExpiry(accessExpiry()),
     });
     res.cookie(REFRESH_COOKIE, refreshToken, {
-      ...cookieOptions,
+      ...cookieOptions(),
       maxAge: msFromExpiry(refreshExpiry()),
     });
   }
@@ -115,7 +130,7 @@ export function setCsrfCookie(res) {
     res.cookie("_csrf", token, {
       httpOnly: false,
       sameSite: "strict",
-      secure: res.req?.secure ?? process.env.NODE_ENV === "production",
+      secure: isProduction(),
       path: "/",
     });
   }
@@ -126,14 +141,15 @@ export function clearAuthCookies(res, _type = "clinic") {
   // hold clinic + site cookies at once (e.g. "login as" / impersonation
   // flows), and leaving any of them behind keeps session material alive
   // after logout. `_type` is kept for backward compatibility but ignored.
-  res.clearCookie(ACCESS_COOKIE, cookieOptions);
-  res.clearCookie(REFRESH_COOKIE, cookieOptions);
-  res.clearCookie(SITE_ACCESS_COOKIE, cookieOptions);
-  res.clearCookie(SITE_REFRESH_COOKIE, cookieOptions);
+  const opts = cookieOptions();
+  res.clearCookie(ACCESS_COOKIE, opts);
+  res.clearCookie(REFRESH_COOKIE, opts);
+  res.clearCookie(SITE_ACCESS_COOKIE, opts);
+  res.clearCookie(SITE_REFRESH_COOKIE, opts);
   const csrfClearOptions = {
     httpOnly: false,
     sameSite: "strict",
-    secure: res.req?.secure ?? process.env.NODE_ENV === "production",
+    secure: isProduction(),
     path: "/",
   };
   res.clearCookie(CSRF_COOKIE, csrfClearOptions);
@@ -154,7 +170,7 @@ export function clearAuthCookies(res, _type = "clinic") {
     SITE_REFRESH_COOKIE,
   ]) {
     res.cookie(name, "", {
-      ...cookieOptions,
+      ...opts,
       maxAge: 0,
       expires: new Date(0),
     });

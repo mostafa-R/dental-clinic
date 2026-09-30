@@ -60,7 +60,7 @@ class SecurityScanner {
       {
         name: 'JWT secrets are configured',
         check: () => {
-          const requiredSecrets = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'JWT_2FA_SECRET'];
+          const requiredSecrets = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'JWT_2FA_SECRET', 'JWT_IMPERSONATION_SECRET'];
           return requiredSecrets.every(secret => process.env[secret] && process.env[secret] !== 'REPLACE_WITH');
         },
         severity: 'failure',

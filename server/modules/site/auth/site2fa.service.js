@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import QRCode from 'qrcode';
 import { generateSecret, NobleCryptoPlugin, ScureBase32Plugin, TOTP } from 'otplib';
 import { getRedis } from '../../../config/redis.js';
 import ApiError from '../../../utils/ApiError.js';
@@ -11,6 +12,35 @@ const totp = new TOTP({
   crypto: new NobleCryptoPlugin(),
   base32: new ScureBase32Plugin(),
 });
+
+/**
+ * Render the enrollment QR locally, as a data URL.
+ *
+ * The dashboard used to hand the `otpauth://` URI to
+ * `https://api.qrserver.com/v1/create-qr-code/`. That URI *contains the TOTP
+ * secret* — the single factor standing between a leaked password and a full
+ * takeover of a super-admin account. Sending it to a third-party image service
+ * handed that secret to another company, where it landed in their access logs
+ * and whatever image/CDN cache sits behind them, and it leaked the admin's
+ * email address too.
+ *
+ * Generating the PNG here keeps the secret on the server that issued it.
+ */
+export async function enrollmentQrDataUrl(otpauth) {
+  try {
+    return await QRCode.toDataURL(otpauth, {
+      errorCorrectionLevel: 'M',
+      margin: 2,
+      width: 240,
+      color: { dark: '#0f172a', light: '#ffffff' },
+    });
+  } catch (err) {
+    // Never fail enrollment because a QR could not be drawn — the secret is
+    // still shown as text and can be typed in by hand.
+    console.error('[2FA] Failed to render enrollment QR code:', err?.message || err);
+    return null;
+  }
+}
 
 // Per-account 2FA attempt throttle (H8): brute-forcing a 6-digit TOTP or
 // backup code is a game of probability — a lock caps the attempts per account
@@ -72,7 +102,7 @@ export async function bootstrap2fa(admin) {
   admin.tokenVersion = (admin.tokenVersion || 0) + 1;
   await admin.save();
 
-  return { secret, otpauth, backupCodes };
+  return { secret, otpauth, qrCodeDataUrl: await enrollmentQrDataUrl(otpauth), backupCodes };
 }
 
 export async function setup2fa(adminId) {
@@ -94,7 +124,7 @@ export async function setup2fa(adminId) {
   admin.twoFactorBackupCodes = hashedCodes;
   await admin.save();
 
-  return { secret, otpauth, backupCodes };
+  return { secret, otpauth, qrCodeDataUrl: await enrollmentQrDataUrl(otpauth), backupCodes };
 }
 
 export async function verify2fa(adminId, token) {

@@ -73,6 +73,18 @@ export const acknowledgeAllAlerts = createAsyncThunk(
   },
 );
 
+export const fetchAlertById = createAsyncThunk(
+  "alerts/fetchById",
+  async (id, { rejectWithValue }) => {
+    try {
+      const { data } = await api.get(`/alerts/${id}`);
+      return data.alert;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to fetch alert");
+    }
+  },
+);
+
 const applyMutation = (state, action) => {
   const alert = action.payload?.alert;
   if (!alert) return;
@@ -90,11 +102,16 @@ const alertsSlice = createSlice({
     pagination: { page: 1, limit: 25, total: 0, pages: 1 },
     loading: false,
     managingId: null,
+    detail: null,
+    detailLoading: false,
     error: null,
   },
   reducers: {
     clearAlertsError: (state) => {
       state.error = null;
+    },
+    clearAlertDetail: (state) => {
+      state.detail = null;
     },
   },
   extraReducers: (builder) => {
@@ -131,9 +148,18 @@ const alertsSlice = createSlice({
         state.summary.open = 0;
         state.summary.active = 0;
       })
-      .addCase(acknowledgeAllAlerts.rejected, (state, action) => { state.error = action.payload; });
+      .addCase(acknowledgeAllAlerts.rejected, (state, action) => { state.error = action.payload; })
+      .addCase(fetchAlertById.pending, (state) => { state.detailLoading = true; })
+      .addCase(fetchAlertById.fulfilled, (state, action) => {
+        state.detailLoading = false;
+        state.detail = action.payload;
+      })
+      .addCase(fetchAlertById.rejected, (state, action) => {
+        state.detailLoading = false;
+        state.error = action.payload;
+      });
   },
 });
 
-export const { clearAlertsError } = alertsSlice.actions;
+export const { clearAlertsError, clearAlertDetail } = alertsSlice.actions;
 export default alertsSlice.reducer;

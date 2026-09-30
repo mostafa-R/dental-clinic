@@ -5,7 +5,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import Card from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
 import Spinner from '../../components/ui/Spinner';
-import { closeDuplicates, fetchDuplicates, mergePatients } from './patientSlice';
+import { closeDuplicates, fetchDuplicates, mergePatientsBatch } from './patientSlice';
 import { pushToast, showErrorDialog } from '../ui/uiSlice';
 import { requestConfirm } from '../ui/confirmDialog';
 import { formatDate } from '../../lib/format';
@@ -44,27 +44,23 @@ export default function DuplicatesPanel() {
     });
     if (!ok) return;
 
-    // Each merge is its own server-side write, so a failure part-way through
-    // leaves the earlier ones committed. Running them together and reporting
-    // the exact tally is the only honest option without a transactional
-    // batch endpoint - the previous loop stopped at the first error and
-    // reported a bare failure while some records had already been merged.
-    const results = await Promise.allSettled(
-      duplicatesToMerge.map((dup) =>
-        dispatch(mergePatients({ duplicateId: dup._id, survivorId })).unwrap(),
-      ),
-    );
-    const done = results.filter((r) => r.status === 'fulfilled').length;
-    const firstError = results.find((r) => r.status === 'rejected');
-
-    if (done === duplicatesToMerge.length) {
+    // One request for the whole group. The server runs every pair in a single
+    // transaction, so this either lands completely or not at all. The previous
+    // `Promise.allSettled` fan-out was only honest, not correct: each merge was
+    // its own transaction, so a failure on the third pair left the first two
+    // committed and the operator had to work out which records had moved.
+    try {
+      await dispatch(
+        mergePatientsBatch({
+          merges: duplicatesToMerge.map((dup) => ({
+            duplicateId: dup._id,
+            survivorId,
+          })),
+        }),
+      ).unwrap();
       dispatch(pushToast({ type: 'success', message: t('patients.duplicates.merged') }));
-    } else if (done > 0) {
-      dispatch(showErrorDialog({
-        message: t('patients.duplicates.partialFailure', { done, total: duplicatesToMerge.length }),
-      }));
-    } else {
-      dispatch(showErrorDialog(firstError?.reason || t('patients.duplicates.mergeFailed')));
+    } catch (err) {
+      dispatch(showErrorDialog(err || t('patients.duplicates.mergeFailed')));
     }
 
     dispatch(fetchDuplicates());

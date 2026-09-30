@@ -12,6 +12,7 @@ import healthReducer from "../features/health/healthSlice";
 import impersonationReducer from "../features/impersonation/impersonationSlice";
 import perfReducer from "../features/perf/perfSlice";
 import plansReducer from "../features/plans/plansSlice";
+import platformAnalyticsReducer from "../features/platformAnalytics/platformAnalyticsSlice";
 import platformReducer from "../features/platform/platformSlice";
 import quarantineReducer from "../features/quarantine/quarantineSlice";
 import subscriptionsReducer from "../features/subscriptions/subscriptionsSlice";
@@ -34,6 +35,7 @@ export const store = configureStore({
     errorLogs: errorLogsReducer,
     plans: plansReducer,
     platform: platformReducer,
+    platformAnalytics: platformAnalyticsReducer,
     ui: uiReducer,
     twofa: twofaReducer,
     featureFlags: featureFlagsReducer,

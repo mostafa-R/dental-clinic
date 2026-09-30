@@ -7,9 +7,10 @@ import EmptyState from "../components/ui/EmptyState";
 import Pagination from "../components/ui/Pagination";
 import StatCard from "../components/ui/StatCard";
 import { PageLoader } from "../components/ui/Spinner";
-import { ArrowDownTrayIcon } from "../components/ui/icons";
-import { fetchErrorLogs, fetchErrorLogStats } from "../features/errorLogs/errorLogsSlice";
+import { ArrowDownTrayIcon, CheckIcon } from "../components/ui/icons";
+import { fetchErrorLogs, fetchErrorLogStats, resolveErrorLog } from "../features/errorLogs/errorLogsSlice";
 import { fetchTenants } from "../features/tenants/tenantsSlice";
+import { canUserAccess } from "../lib/permissions";
 import { formatDateTime } from "../lib/format";
 import { downloadCsv } from "../lib/exportCsv";
 import { t } from "../lib/i18n";
@@ -22,12 +23,15 @@ const statusVariant = (code) => {
 
 export default function ErrorLogs() {
   const dispatch = useDispatch();
-  const { logs, stats, loading, pagination } = useSelector((state) => state.errorLogs);
+  const { logs, stats, loading, pagination, resolvingId } = useSelector((state) => state.errorLogs);
   const { items: tenants } = useSelector((state) => state.tenants);
   const { language } = useSelector((state) => state.ui);
+  const user = useSelector((state) => state.auth?.user);
   const [tenantFilter, setTenantFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
+
+  const canResolve = canUserAccess(user, "errorLogs.resolve");
 
   useEffect(() => {
     dispatch(fetchTenants({ limit: 100 }));
@@ -114,6 +118,9 @@ export default function ErrorLogs() {
                   <th scope="col" className="text-start px-4 py-3 font-medium text-slate-500">{t("url", language)}</th>
                   <th scope="col" className="text-start px-4 py-3 font-medium text-slate-500">{t("tenantName", language)}</th>
                   <th scope="col" className="text-start px-4 py-3 font-medium text-slate-500">{t("message", language)}</th>
+                  {canResolve && (
+                    <th scope="col" className="text-start px-4 py-3 font-medium text-slate-500">{t("actions", language)}</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -125,6 +132,25 @@ export default function ErrorLogs() {
                     <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400 max-w-[200px] truncate font-mono">{log.url}</td>
                     <td className="px-4 py-3 text-xs">{log.tenant?.name || <span className="text-slate-400">—</span>}</td>
                     <td className="px-4 py-3 text-xs text-slate-600 max-w-[250px] truncate">{log.message || "—"}</td>
+                    {canResolve && (
+                      <td className="px-4 py-3">
+                        {log.resolved ? (
+                          <Badge variant="success" size="sm">
+                            {t("resolved", language)}
+                          </Badge>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            icon={CheckIcon}
+                            loading={resolvingId === log._id}
+                            onClick={() => dispatch(resolveErrorLog(log._id))}
+                          >
+                            {t("resolveError", language)}
+                          </Button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

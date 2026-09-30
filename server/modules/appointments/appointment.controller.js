@@ -80,7 +80,12 @@ function emitQueueStatusChange(appointment) {
     appointment: stripPHI(json),
   };
   emitToBranch(String(appointment.branch), 'queue.status.changed', payload);
-  emitToTenantQueue(appointment.tenant ? String(appointment.tenant) : null, 'queue.status.changed', payload);
+  emitToTenantQueue(
+    appointment.tenant ? String(appointment.tenant) : null,
+    'queue.status.changed',
+    payload,
+    appointment.branch ? String(appointment.branch) : null,
+  );
 }
 
 /**

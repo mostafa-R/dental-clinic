@@ -30,5 +30,6 @@ export const authApi = {
   getMe: () => api.get('/auth/me').then((r) => r.data.data),
   // Silent variant for public pages: never triggers the login redirect.
   getMeSilent: () => api.get('/auth/me', { _silent: true }).then((r) => r.data.data),
-  verifyImpersonation: (token) => api.post('/auth/verify-impersonation', { token }).then((r) => r.data.data),
+  // `code` is the 60-second single-use handoff code, not the grant itself.
+  verifyImpersonation: (code) => api.post('/auth/verify-impersonation', { code }).then((r) => r.data.data),
 };

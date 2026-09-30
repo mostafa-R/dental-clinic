@@ -32,7 +32,14 @@ function serializeQueueEntry(appointment, req) {
 function broadcastQueueEvent(branchId, tenantId, event, appointment) {
   const payload = { appointment: appointment.toJSON ? appointment.toJSON() : appointment };
   emitToBranch(String(branchId), event, payload);
-  emitToTenantQueue(tenantId ? String(tenantId) : null, event, payload);
+  // The branch id is forwarded so the event also reaches branch-scoped staff,
+  // who sit in a per-branch queue room rather than the clinic-wide one.
+  emitToTenantQueue(
+    tenantId ? String(tenantId) : null,
+    event,
+    payload,
+    branchId ? String(branchId) : null,
+  );
 }
 
 /**

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { authorizeSite, protectSite } from '../../../middleware/siteAuth.js';
 import { passwordSchema } from '../../../utils/passwordSchema.js';
 import { validate } from '../../../middleware/validate.js';
-import { createSiteAdmin, getSiteMe, initiateRecovery, siteLogin, siteLogout, siteRefresh, verifyRecoveryOtp } from './siteAuth.controller.js';
+import { getSiteMe, initiateRecovery, siteLogin, siteLogout, siteRefresh, verifyRecoveryOtp } from './siteAuth.controller.js';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -21,12 +21,10 @@ const recoveryVerifySchema = z.object({
   recoveryToken: z.string().min(1, 'Recovery token is required'),
 });
 
-const createAdminSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().email('Invalid email address'),
-  password: passwordSchema,
-  role: z.enum(['super_admin', 'admin', 'support']).optional(),
-});
+// Site admin creation lives on POST /api/v1/site/admins, which is additionally
+// gated by require2faSuperAdmin and audited via audit('admin.create', 'admin').
+// The former POST /api/v1/site/auth/create alias was removed: it performed the
+// same insert with weaker guarantees, so it was a bypass of both checks.
 
 const router = Router();
 
@@ -220,55 +218,5 @@ router.post('/refresh', siteRefresh);
  *         $ref: '#/components/responses/Unauthorized'
  */
 router.post('/logout', protectSite, siteLogout);
-
-/**
- * @swagger
- * /api/v1/site/auth/create:
- *   post:
- *     tags: [Site Auth]
- *     summary: Create a site admin
- *     description: Site realm. Requires `super_admin` role. Creates an additional site admin account.
- *     security:
- *       - bearerAuth: []
- *       - siteCookieAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [name, email, password]
- *             properties:
- *               name: { type: string, minLength: 2 }
- *               email: { type: string }
- *               password: { type: string, minLength: 8 }
- *               role: { type: string, enum: [super_admin, admin, support] }
- *     responses:
- *       '201':
- *         description: Admin created
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean, example: true }
- *                 data:
- *                   type: object
- *                   properties:
- *                     admin: { $ref: '#/components/schemas/SiteAdmin' }
- *       '400':
- *         $ref: '#/components/responses/ValidationError'
- *       '401':
- *         $ref: '#/components/responses/Unauthorized'
- *       '403':
- *         $ref: '#/components/responses/Forbidden'
- */
-router.post(
-  '/create',
-  protectSite,
-  authorizeSite('super_admin'),
-  validate(createAdminSchema),
-  createSiteAdmin
-);
 
 export default router;

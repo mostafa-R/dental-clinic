@@ -11,9 +11,15 @@
 // establish that connection themselves so a missing mongod produces a clear
 // per-suite failure instead of a global one that looks like a broken runner.
 process.env.NODE_ENV = 'test';
-process.env.JWT_ACCESS_SECRET =
-  process.env.JWT_ACCESS_SECRET || 'test-access-secret-do-not-use-in-production';
+// `utils/jwt.js` reads JWT_SECRET / JWT_REFRESH_SECRET. The old names below
+// were never read by anything, so signing helpers threw "JWT_SECRET is not
+// defined" the moment a test exercised a real token.
+process.env.JWT_SECRET =
+  process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || 'test-access-secret-do-not-use-in-production';
+process.env.JWT_ACCESS_SECRET = process.env.JWT_SECRET;
 process.env.JWT_REFRESH_SECRET =
   process.env.JWT_REFRESH_SECRET || 'test-refresh-secret-do-not-use-in-production';
+process.env.JWT_IMPERSONATION_SECRET =
+  process.env.JWT_IMPERSONATION_SECRET || 'test-impersonation-secret-do-not-use-in-production';
 process.env.ENCRYPTION_KEY =
   process.env.ENCRYPTION_KEY || '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';

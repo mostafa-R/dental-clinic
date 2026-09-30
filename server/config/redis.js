@@ -1,20 +1,37 @@
 import Redis from 'ioredis';
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
-
 let redis = null;
 let isConnected = false;
 let shuttingDown = false;
 let cacheHits = 0;
 let cacheMisses = 0;
 
+/**
+ * Resolved at call time, never at module-evaluation time. ESM evaluates every
+ * import before the importing module's body runs, so a module-scope read here
+ * would run before `dotenv.config()` in app.js and silently discard the
+ * configured REDIS_URL in favour of the unauthenticated local default.
+ */
+function redisUrl() {
+  return process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+}
+
+/** Never log the password embedded in a redis:// URL. */
+function redactUrl(url) {
+  return String(url).replace(/\/\/([^@/]*):([^@/]*)@/, '//$1:***@');
+}
+
 export function getRedis() {
   if (!redis) {
-    redis = new Redis(REDIS_URL, {
+    redis = new Redis(redisUrl(), {
       maxRetriesPerRequest: 3,
       retryStrategy(times) {
-        if (times > 5) return null;
-        return Math.min(times * 200, 2000);
+        if (times > 10) return null;
+        // Jittered exponential backoff with a ceiling, so a fleet of replicas
+        // does not retry in lockstep and turn a Redis blip into a synchronized
+        // reconnect storm.
+        const ceiling = Math.min(times * 200, 30000);
+        return Math.round(ceiling * (0.5 + Math.random() / 2));
       },
       lazyConnect: true,
     });
@@ -28,9 +45,12 @@ export function getRedis() {
     });
     redis.on('end', () => {
       isConnected = false;
+      // A transient Redis outage must NOT kill the process. Callers already
+      // degrade to in-memory stores, and exiting here previously turned a
+      // few seconds of Redis unavailability into a full outage (all replicas
+      // exiting together, then restarting into the same broken Redis).
       if (process.env.NODE_ENV === 'production' && !shuttingDown) {
-        console.error('[Redis] FATAL: Redis connection permanently lost in production. Failing fast — shutting down instead of falling back to in-memory stores.');
-        process.exit(1);
+        console.error('[Redis] FATAL: Redis connection permanently lost. Continuing with in-memory fallback so in-flight requests can drain; rate limits and caches are degraded until it recovers.');
       }
     });
     redis.on('error', (err) => { console.warn('[Redis]', err.message); });
@@ -48,12 +68,12 @@ export async function connectRedis() {
     isConnected = false;
     if (process.env.NODE_ENV === 'production') {
       console.error(
-        `[Redis] FATAL: Redis unavailable in production (${err.message}). Failing fast — refusing to start without Redis. Check REDIS_URL=${REDIS_URL}`,
+        `[Redis] FATAL: Redis unavailable in production (${err.message}). Failing fast — refusing to start without Redis. Check REDIS_URL=${redactUrl(redisUrl())}`,
       );
       throw err;
     }
     console.warn(
-      `[Redis] WARN: Redis unavailable (${err.message}). Caching, distributed rate limits, and abuse detection are DISABLED — running on in-memory fallback. Check REDIS_URL=${REDIS_URL}`,
+      `[Redis] WARN: Redis unavailable (${err.message}). Caching, distributed rate limits, and abuse detection are DISABLED — running on in-memory fallback. Check REDIS_URL=${redactUrl(redisUrl())}`,
     );
   }
 }

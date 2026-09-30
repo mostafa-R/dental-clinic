@@ -57,6 +57,14 @@ function validateEnv() {
     process.exit(1);
   }
 
+  // Impersonation grants are signed with their own key. Failing to boot is
+  // deliberate: silently falling back to JWT_SECRET in production would let a
+  // compromised session key mint clinic sessions.
+  if (process.env.NODE_ENV === "production" && !process.env.JWT_IMPERSONATION_SECRET) {
+    console.error("JWT_IMPERSONATION_SECRET is required in production");
+    process.exit(1);
+  }
+
   // Token lifetimes drive cookie security, so a malformed value must fail the
   // boot rather than be silently reinterpreted at first login.
   for (const key of ["ACCESS_TOKEN_EXPIRY", "REFRESH_TOKEN_EXPIRY"]) {

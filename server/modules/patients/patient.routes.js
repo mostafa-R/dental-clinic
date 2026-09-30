@@ -11,12 +11,14 @@ import {
   getPatient,
   listPatients,
   mergePatients,
+  mergePatientsBatch,
   updatePatient,
 } from './patient.controller.js';
 import {
   createPatientSchema,
   listPatientsQuerySchema,
   mergePatientSchema,
+  mergePatientsBatchSchema,
   updatePatientSchema,
 } from './patient.validator.js';
 
@@ -335,5 +337,71 @@ router.delete('/:id', protect, checkPermission('patients', 'delete'), phiRestric
  *         $ref: '#/components/responses/NotFound'
  */
 router.post('/:id/merge', protect, checkPermission('patients', 'update'), phiRestrict, validate(mergePatientSchema), mergePatients);
+
+/**
+ * @swagger
+ * /api/v1/patients/merge-batch:
+ *   post:
+ *     tags: [Patients]
+ *     summary: Merge a whole duplicate group atomically
+ *     description: Requires `patients:update`. Every pair is applied in a single transaction, so a failure on any pair leaves the group untouched - unlike calling `/{id}/merge` once per record, which commits each one separately.
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [merges]
+ *             properties:
+ *               merges:
+ *                 type: array
+ *                 minItems: 1
+ *                 maxItems: 50
+ *                 items:
+ *                   type: object
+ *                   required: [duplicateId, survivorId]
+ *                   properties:
+ *                     duplicateId: { $ref: '#/components/schemas/ObjectId' }
+ *                     survivorId: { $ref: '#/components/schemas/ObjectId' }
+ *     responses:
+ *       '200':
+ *         description: Every pair merged
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     message: { type: string }
+ *                     merged: { type: integer, example: 2 }
+ *                     results:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           mergedId: { $ref: '#/components/schemas/ObjectId' }
+ *                           survivorId: { $ref: '#/components/schemas/ObjectId' }
+ *       '400':
+ *         $ref: '#/components/responses/ValidationError'
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ *       '404':
+ *         $ref: '#/components/responses/NotFound'
+ */
+router.post(
+  '/merge-batch',
+  protect,
+  checkPermission('patients', 'update'),
+  phiRestrict,
+  validate(mergePatientsBatchSchema),
+  mergePatientsBatch,
+);
 
 export default router;

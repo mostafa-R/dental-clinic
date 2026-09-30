@@ -74,9 +74,11 @@ export const getErrorLogStats = asyncHandler(async (req, res) => {
 });
 
 export const resolveErrorLog = asyncHandler(async (req, res) => {
+  // Site-realm routes populate `req.siteAdmin` (see middleware/siteAuth.js),
+  // never `req.user` — reading req.user here always yielded null.
   const log = await ErrorLog.findByIdAndUpdate(
     req.params.id,
-    { resolved: true, resolvedAt: new Date(), resolvedBy: req.user?._id || null },
+    { resolved: true, resolvedAt: new Date(), resolvedBy: req.siteAdmin?._id || null },
     { returnDocument: "after" },
   );
   if (!log) throw ApiError.notFound('Error log not found');

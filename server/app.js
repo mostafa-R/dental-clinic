@@ -36,9 +36,14 @@ dotenv.config({ path: path.join(__dirname, ".env"), quiet: true });
 const app = express();
 const isProd = process.env.NODE_ENV === "production";
 
-// Must be set before any middleware that inspects req.ip (rate limiters,
-// CSRF, abuse monitor) so the proxy hop is correctly skipped.
-app.set("trust proxy", 1);
+// Trusting `X-Forwarded-For` is what makes `req.ip` meaningful, but it also
+// makes it attacker-controlled: with `trust proxy` enabled and the origin
+// reachable directly, a client rotates the header per request and gets a fresh
+// identity, defeating the login throttle, the IP allowlist, and the recovery
+// rate limiters. The safe default is therefore OFF; deployments behind a
+// known proxy opt in by declaring the exact hop count.
+const TRUST_PROXY_HOPS = Number.parseInt(process.env.TRUST_PROXY_HOPS || "0", 10);
+app.set("trust proxy", Number.isFinite(TRUST_PROXY_HOPS) && TRUST_PROXY_HOPS > 0 ? TRUST_PROXY_HOPS : false);
 
 const allowedOrigins = process.env.CLIENT_URL
   ? process.env.CLIENT_URL.split(",").map((url) => url.trim()).filter(Boolean)
@@ -145,11 +150,9 @@ const emailAuthLimiter = rateLimit({
 const authLoginPaths = [
   "/api/auth/login",
   "/api/site/auth/login",
-  "/api/site/auth/create",
   "/api/site/2fa/verify-login",
   "/api/v1/auth/login",
   "/api/v1/site/auth/login",
-  "/api/v1/site/auth/create",
   "/api/v1/site/2fa/verify-login",
 ];
 authLoginPaths.forEach((p) => {

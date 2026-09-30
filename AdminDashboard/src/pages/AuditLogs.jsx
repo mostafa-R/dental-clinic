@@ -13,11 +13,14 @@ import { PageLoader } from "../components/ui/Spinner";
 import {
   ArrowDownTrayIcon,
   FilterIcon,
+  ShieldCheckIcon,
 } from "../components/ui/icons";
 import {
   fetchAuditActions,
   fetchAuditLogs,
+  verifyAuditChain,
 } from "../features/auditLogs/auditLogsSlice";
+import { canUserAccess } from "../lib/permissions";
 import { formatDateTime } from "../lib/format";
 import { actionVariant } from "../lib/audit";
 import { downloadCsv } from "../lib/exportCsv";
@@ -28,10 +31,11 @@ const TARGET_TYPES = ["tenant", "branch", "admin", "subscription", "plan", "plat
 export default function AuditLogs() {
   const dispatch = useDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { logs, loading, pagination, actions } = useSelector(
+  const { logs, loading, pagination, actions, verifying, verification } = useSelector(
     (state) => state.auditLogs,
   );
   const { language } = useSelector((state) => state.ui);
+  const user = useSelector((state) => state.auth?.user);
   const [actionFilter, setActionFilter] = useState("");
   const [targetTypeFilter, setTargetTypeFilter] = useState(
     searchParams.get("targetType") || "",
@@ -52,6 +56,7 @@ export default function AuditLogs() {
     dispatch(fetchAuditActions());
   }, [dispatch, page, actionFilter, targetTypeFilter, startDate, endDate]);
 
+  const canVerify = canUserAccess(user, "auditLogs.verify");
   const handlePageChange = (p) => setPage(p);
 
   const hasFilters = actionFilter || targetTypeFilter || startDate || endDate;
@@ -88,11 +93,54 @@ export default function AuditLogs() {
         title={t("auditLogs", language)}
         subtitle={t("auditLogsDesc", language)}
         actions={
-          <Button variant="outline" onClick={exportRows} icon={ArrowDownTrayIcon}>
-            {t("exportCsv", language)}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {canVerify && (
+              <Button
+                variant="outline"
+                icon={ShieldCheckIcon}
+                loading={verifying}
+                onClick={() => dispatch(verifyAuditChain())}
+              >
+                {t("verifyChain", language)}
+              </Button>
+            )}
+            <Button variant="outline" onClick={exportRows} icon={ArrowDownTrayIcon}>
+              {t("exportCsv", language)}
+            </Button>
+          </div>
         }
       />
+
+      {canVerify && verification && (
+        <div className="mb-4">
+          <Card
+            className={verification.valid ? "border-emerald-300" : "border-red-400"}
+          >
+            <div className="p-4 flex items-start gap-3">
+              <Badge variant={verification.valid ? "success" : "danger"}>
+                {verification.valid ? t("chainValid", language) : t("chainInvalid", language)}
+              </Badge>
+              <div className="text-sm">
+                <div className="font-medium">
+                  {verification.valid
+                    ? t("auditChainValid", language)
+                    : t("auditChainInvalid", language)}
+                </div>
+                <div className="text-xs text-slate-500">
+                  {t("recordsChecked", language)}: {verification.checked ?? 0}
+                </div>
+                {verification.errors?.length > 0 && (
+                  <ul className="mt-2 list-disc ps-5 text-xs text-red-600">
+                    {verification.errors.map((err) => (
+                      <li key={err}>{err}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
 
       <Card>
         <div className="p-4 border-b border-slate-200 dark:border-slate-700">

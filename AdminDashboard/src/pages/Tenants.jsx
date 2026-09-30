@@ -91,13 +91,16 @@ export default function Tenants() {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [selected, setSelected] = useState([]);
 
+  // Open the clinic tab using the 60-second, single-use handoff code — never the
+  // grant itself. A token in the query string lands in browser history, the
+  // Referer header of every later navigation, and any proxy access log.
   useEffect(() => {
-    if (impersonation.active && impersonation.token) {
+    if (impersonation.active && impersonation.handoffCode) {
       const clinicUrl = import.meta.env.VITE_CLINIC_URL || 'http://localhost:5173';
-      const url = `${clinicUrl}/login?impersonation=${impersonation.token}`;
+      const url = `${clinicUrl}/login?impersonation_code=${encodeURIComponent(impersonation.handoffCode)}`;
       window.open(url, '_blank', 'noopener,noreferrer');
     }
-  }, [impersonation.active, impersonation.token]);
+  }, [impersonation.active, impersonation.handoffCode]);
 
   useEffect(() => {
     dispatch(fetchTenants({ page: pagination.page, ...filters }));

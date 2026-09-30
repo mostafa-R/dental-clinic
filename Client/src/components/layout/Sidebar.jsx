@@ -63,7 +63,11 @@ export default function Sidebar() {
   const permissionsStatus = useSelector((s) => s.users.permissionsStatus);
   const collapsed = useSelector((s) => s.ui.sidebarCollapsed);
   const mobileOpen = useSelector((s) => s.ui.mobileSidebarOpen);
-  const chatUnread = useSelector((s) => s.chat.unread);
+  // Read defensively: this sidebar wraps every authenticated page, so an
+  // unexpected `unread` shape must not be able to throw here and blank the
+  // whole shell. `chat` is always registered, but `unread` is only as good as
+  // the last response that wrote it.
+  const chatUnread = useSelector((s) => s.chat?.unread);
   const landingPath = useLandingPath();
 
   const [hovered, setHovered] = useState(false);
@@ -122,7 +126,7 @@ export default function Sidebar() {
   }, [mobileOpen, dispatch]);
 
   const totalChatUnread = useMemo(
-    () => Object.values(chatUnread).reduce((sum, n) => sum + n, 0),
+    () => Object.values(chatUnread ?? {}).reduce((sum, n) => sum + (Number(n) || 0), 0),
     [chatUnread],
   );
 

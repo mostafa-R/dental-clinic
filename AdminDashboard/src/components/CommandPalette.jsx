@@ -19,6 +19,7 @@ const PAGE_NAV = [
   { nameKey: "plans", href: "/plans", accessKey: "plans" },
   { nameKey: "billing", href: "/billing", accessKey: "billing" },
   { nameKey: "analytics", href: "/analytics", accessKey: "analytics" },
+  { nameKey: "platformInsights", href: "/platform-insights", accessKey: "platformInsights" },
   { nameKey: "admins", href: "/admins", accessKey: "admins" },
   { nameKey: "featureFlags", href: "/feature-flags", accessKey: "featureFlags" },
   { nameKey: "quarantine", href: "/quarantine", accessKey: "quarantine" },

@@ -209,7 +209,9 @@ export default function Topbar() {
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const menuRef = useRef(null);
   const notifRef = useRef(null);
-  const chatUnread = useSelector((s) => s.chat.unread);
+  // Defensive for the same reason as the Sidebar: the topbar renders on every
+  // authenticated route, so a bad `unread` payload must not throw here.
+  const chatUnread = useSelector((s) => s.chat?.unread);
   const mobileOpen = useSelector((s) => s.ui.mobileSidebarOpen);
   // Quick-action entitlements, resolved once per render.
   const canNewPatient = useCanCreatePatients();

@@ -14,12 +14,17 @@ export default function ProtectedRoute() {
   const permissionsStatus = useSelector((s) => s.users.permissionsStatus);
   const [searchParams] = useSearchParams();
 
-  // Handle impersonation token from URL query param — verify server-side
+  // Redeem an impersonation handoff code that landed on a protected route
+  // directly. The code is single-use and 60s-lived, and is stripped from the
+  // address bar before the request so it cannot be re-shared.
   useEffect(() => {
-    const token = searchParams.get('impersonation');
-    if (!token) return;
-    dispatch(verifyImpersonation(token));
-    window.history.replaceState({}, '', window.location.pathname);
+    const code = searchParams.get('impersonation_code');
+    if (!code) return;
+    dispatch(verifyImpersonation({ code }));
+    const clean = new URLSearchParams(window.location.search);
+    clean.delete('impersonation_code');
+    const qs = clean.toString();
+    window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

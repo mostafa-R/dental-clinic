@@ -61,17 +61,43 @@ export const fetchDuplicates = createAsyncThunk(
   },
 );
 
-export const mergePatients = createAsyncThunk(
-  'patients/merge',
-  async ({ duplicateId, survivorId }, { rejectWithValue }) => {
+/**
+ * Merges every duplicate in a group in one request. The server wraps the whole
+ * set in a single transaction, so this either lands completely or not at all -
+ * there is no partial-merge state left behind for the operator to reconcile.
+ *
+ * Replaces the per-record `mergePatients` thunk: merging a group is one
+ * operator decision, and fanning it out into N requests made "some merged"
+ * a reachable outcome.
+ */
+export const mergePatientsBatch = createAsyncThunk(
+  'patients/mergeBatch',
+  async ({ merges }, { rejectWithValue }) => {
     try {
-      const result = await patientApi.merge(duplicateId, survivorId);
-      return { result, duplicateId };
+      const result = await patientApi.mergeBatch(merges);
+      return result;
     } catch (err) {
       return rejectWithValue(err.response?.data || { message: 'Failed to merge patients' });
     }
   },
 );
+
+/**
+ * Drops merged records from the duplicate groups.
+ *
+ * `count` has to be recomputed from the filtered list. The single-merge case
+ * got away with `g.patients.length - 1` only because one record left per call;
+ * for a batch that would leave a stale count and keep empty groups on screen.
+ */
+function pruneMerged(groups, mergedIds) {
+  const removed = new Set(mergedIds);
+  return groups
+    .map((g) => {
+      const patients = g.patients.filter((p) => !removed.has(p._id));
+      return { ...g, patients, count: patients.length };
+    })
+    .filter((g) => g.count > 1);
+}
 
 const patientsSlice = createSlice({
   name: 'patients',
@@ -178,24 +204,23 @@ const patientsSlice = createSlice({
         state.duplicates.status = 'failed';
         state.duplicates.error = action.payload;
       })
-      .addCase(mergePatients.pending, (state) => {
+      .addCase(mergePatientsBatch.pending, (state) => {
         state.mergeStatus = 'loading';
         state.mergeError = null;
       })
-      .addCase(mergePatients.fulfilled, (state, action) => {
-        state.items = state.items.filter((p) => p._id !== action.payload.duplicateId);
-        state.duplicates.groups = state.duplicates.groups
-          .map((g) => ({
-            ...g,
-            patients: g.patients.filter((p) => p._id !== action.payload.duplicateId),
-            count: g.patients.length - 1,
-          }))
-          .filter((g) => g.count > 1);
-        state.duplicates.total = state.duplicates.groups.length;
+      .addCase(mergePatientsBatch.fulfilled, (state, action) => {
+        const mergedIds = (action.payload?.results || []).map((r) => r.mergedId);
+        if (mergedIds.length > 0) {
+          state.items = state.items.filter((p) => !mergedIds.includes(p._id));
+          state.duplicates.groups = pruneMerged(state.duplicates.groups, mergedIds);
+          state.duplicates.total = state.duplicates.groups.length;
+        }
         state.mergeStatus = 'succeeded';
         state.mergeError = null;
       })
-      .addCase(mergePatients.rejected, (state, action) => {
+      // A rejected batch means nothing was merged, so the groups are left
+      // exactly as they were - there is nothing to reconcile.
+      .addCase(mergePatientsBatch.rejected, (state, action) => {
         state.mergeStatus = 'failed';
         state.mergeError = action.payload;
       });

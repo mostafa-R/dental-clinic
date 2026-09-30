@@ -10,7 +10,7 @@
  * failure mode cannot come back.
  *
  * Requires `BACKEND_API_URL` (e.g. `https://api.example.com`) in the Vercel
- * project environment.
+ * project environment. Optional: `BACKEND_TIMEOUT_MS` (default 25000).
  *
  * Note on WebSockets: the edge runtime proxies `fetch`, not the HTTP upgrade,
  * so Socket.IO completes over its HTTP long-polling transport here. Set
@@ -37,7 +37,11 @@ const HOP_BY_HOP = [
   'content-length',
 ];
 
-const TIMEOUT_MS = 25000;
+// Our own ceiling, not the platform's. Vercel kills an Edge Function that
+// outlives the plan's duration limit regardless of what this is set to, so
+// keep it comfortably below that - a timeout this low is far better than a
+// hard platform kill, which surfaces as an opaque 500 with no body.
+const TIMEOUT_MS = Number(process.env.BACKEND_TIMEOUT_MS) || 25000;
 
 export default async function middleware(request) {
   const backendUrl = process.env.BACKEND_API_URL;
@@ -87,10 +91,25 @@ export default async function middleware(request) {
       statusText: response.statusText,
       headers: responseHeaders,
     });
-  } catch {
+  } catch (error) {
+    // A timeout and a refused connection both land here, and they mean very
+    // different things: one is a slow backend or too low a `BACKEND_TIMEOUT_MS`,
+    // the other is a wrong `BACKEND_API_URL` or a backend that is down. They
+    // used to collapse into one opaque "Backend unreachable", which made a
+    // misconfigured environment indistinguishable from an outage.
+    const timedOut = controller.signal.aborted;
     return Response.json(
-      { success: false, message: 'Backend unreachable' },
-      { status: 502 },
+      {
+        success: false,
+        message: timedOut
+          ? `Backend timed out after ${TIMEOUT_MS}ms`
+          : 'Backend unreachable',
+        ...(timedOut ? {} : { detail: error instanceof Error ? error.message : String(error) }),
+      },
+      // 504 says "the upstream was too slow" and 502 says "the upstream was
+      // unreachable" - the distinction the client, monitoring and any retry
+      // policy all need.
+      { status: timedOut ? 504 : 502 },
     );
   } finally {
     clearTimeout(timer);

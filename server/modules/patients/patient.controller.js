@@ -409,22 +409,34 @@ export const findDuplicatePatients = asyncHandler(async (req, res) => {
  * balances are combined, and the duplicate is archived with `mergedInto`
  * pointing at the survivor.
  */
-export const mergePatients = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const targetId = req.validatedBody?.duplicateOf;
-  if (!mongoose.isValidObjectId(id) || !mongoose.isValidObjectId(targetId)) {
+/**
+ * Repoints every clinical and financial reference from one patient record onto
+ * another, inside the caller's transaction.
+ *
+ * Shared by the single and batch endpoints on purpose: the batch endpoint is
+ * only trustworthy if it is *this* function run N times in one transaction,
+ * not a second implementation that can drift from the single-record one.
+ *
+ * Validation runs here, on the session, rather than before the transaction
+ * opens. A record can be merged or deactivated by someone else between a
+ * pre-flight check and the write, and a merge must fail if the record it is
+ * about to archive is no longer mergeable. A throw propagates out of
+ * `withTransaction`, which aborts and rolls back everything - that is what
+ * gives the batch endpoint its all-or-nothing guarantee.
+ */
+async function mergeIntoSurvivor({ duplicateId, survivorId, branchFilter, session }) {
+  if (!mongoose.isValidObjectId(duplicateId) || !mongoose.isValidObjectId(survivorId)) {
     throw ApiError.badRequest('Invalid patient id');
   }
-  if (String(id) === String(targetId)) {
+  if (String(duplicateId) === String(survivorId)) {
     throw ApiError.badRequest('A patient cannot be merged into itself', {
       duplicateOf: 'must differ from the merged patient',
     });
   }
 
-  const branchFilter = filterByBranch(req);
   const [source, target] = await Promise.all([
-    Patient.findOne({ _id: id, ...branchFilter }),
-    Patient.findOne({ _id: toObjectId(targetId), ...branchFilter }),
+    Patient.findOne({ _id: duplicateId, ...branchFilter }).session(session),
+    Patient.findOne({ _id: toObjectId(survivorId), ...branchFilter }).session(session),
   ]);
   if (!source || !target) {
     throw ApiError.notFound('Patient not found');
@@ -447,80 +459,144 @@ export const mergePatients = asyncHandler(async (req, res) => {
     });
   }
 
-  await withTransaction(async (session) => {
-    // 1. Repoint every clinical/financial reference to the surviving record.
-    const refModels = [
-      Appointment,
-      Invoice,
-      Commission,
-      OwnerDrawing,
-      InstallmentPlan,
-      TreatmentPlan,
-      Prescription,
-      MedicalAttachment,
-      ClinicalNote,
-    ];
-    for (const Model of refModels) {
-      await Model.updateMany({ patient: source._id }, { $set: { patient: target._id } }, { session });
-    }
+  // 1. Repoint every clinical/financial reference to the surviving record.
+  const refModels = [
+    Appointment,
+    Invoice,
+    Commission,
+    OwnerDrawing,
+    InstallmentPlan,
+    TreatmentPlan,
+    Prescription,
+    MedicalAttachment,
+    ClinicalNote,
+  ];
+  for (const Model of refModels) {
+    await Model.updateMany({ patient: source._id }, { $set: { patient: target._id } }, { session });
+  }
 
-    // 2. Dental chart: unique per (branch, patient). Move it only if the
-    // survivor has none; otherwise fold the history in and drop the duplicate.
-    const sourceChart = await DentalChart.findOne({ patient: source._id }).session(session);
-    if (sourceChart) {
-      const targetChart = await DentalChart.findOne({ patient: target._id }).session(session);
-      if (!targetChart) {
-        sourceChart.patient = target._id;
-        await sourceChart.save({ session });
-      } else {
-        targetChart.history.push(...sourceChart.history);
-        if (!targetChart.notes && sourceChart.notes) targetChart.notes = sourceChart.notes;
-        await targetChart.save({ session });
-        await sourceChart.deleteOne({ session });
+  // 2. Dental chart: unique per (branch, patient). Move it only if the
+  // survivor has none; otherwise fold the history in and drop the duplicate.
+  const sourceChart = await DentalChart.findOne({ patient: source._id }).session(session);
+  if (sourceChart) {
+    const targetChart = await DentalChart.findOne({ patient: target._id }).session(session);
+    if (!targetChart) {
+      sourceChart.patient = target._id;
+      await sourceChart.save({ session });
+    } else {
+      targetChart.history.push(...sourceChart.history);
+      if (!targetChart.notes && sourceChart.notes) targetChart.notes = sourceChart.notes;
+      await targetChart.save({ session });
+      await sourceChart.deleteOne({ session });
+    }
+  }
+
+  // 3. Wallet: unique per (patient, branch). Combine balances + ledger.
+  const sourceWallet = await Wallet.findOne({ patient: source._id }).session(session);
+  if (sourceWallet) {
+    const targetWallet = await Wallet.findOne({ patient: target._id }).session(session);
+    if (!targetWallet) {
+      sourceWallet.patient = target._id;
+      await sourceWallet.save({ session });
+    } else {
+      for (const tx of sourceWallet.transactions) {
+        targetWallet.transactions.push({
+          ...tx.toObject(),
+          description: `[merged] ${tx.description || ''}`.trim(),
+        });
       }
+      // L4: keep the ledger bounded (mirror the wallet's own -1000 slice)
+      // and round the combined balance to cents so it never drifts by a
+      // floating-point residue.
+      targetWallet.transactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      targetWallet.balance = round2(targetWallet.balance + sourceWallet.balance);
+      await targetWallet.save({ session });
+      await sourceWallet.deleteOne({ session });
     }
+  }
 
-    // 3. Wallet: unique per (patient, branch). Combine balances + ledger.
-    const sourceWallet = await Wallet.findOne({ patient: source._id }).session(session);
-    if (sourceWallet) {
-      const targetWallet = await Wallet.findOne({ patient: target._id }).session(session);
-      if (!targetWallet) {
-        sourceWallet.patient = target._id;
-        await sourceWallet.save({ session });
-      } else {
-        for (const tx of sourceWallet.transactions) {
-          targetWallet.transactions.push({
-            ...tx.toObject(),
-            description: `[merged] ${tx.description || ''}`.trim(),
-          });
-        }
-        // L4: keep the ledger bounded (mirror the wallet's own -1000 slice)
-        // and round the combined balance to cents so it never drifts by a
-        // floating-point residue.
-        targetWallet.transactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        targetWallet.balance = round2(targetWallet.balance + sourceWallet.balance);
-        await targetWallet.save({ session });
-        await sourceWallet.deleteOne({ session });
-      }
-    }
+  // 4. Archive the duplicate with an audit pointer to the survivor, and
+  //    release its plan slot (the record is retired, so it must no longer
+  //    count toward the tenant's patient quota).
+  source.isActive = false;
+  source.mergedInto = target._id;
+  await source.save({ session });
+  await releasePatientSlot(source.tenant, session);
 
-    // 4. Archive the duplicate with an audit pointer to the survivor, and
-    //    release its plan slot (the record is retired, so it must no longer
-    //    count toward the tenant's patient quota).
-    source.isActive = false;
-    source.mergedInto = target._id;
-    await source.save({ session });
-    await releasePatientSlot(source.tenant, session);
-  });
+  return { mergedId: source._id, survivorId: target._id, branch: target.branch };
+}
 
-  emitToBranch(String(target.branch), 'patient:merged', {
-    mergedId: source._id,
-    survivorId: target._id,
+/**
+ * POST /patients/:id/merge
+ * PRD 6.3: merge a duplicate record into the surviving record. All clinical
+ * and financial references are repointed inside a single transaction, wallet
+ * balances are combined, and the duplicate is archived with `mergedInto`
+ * pointing at the survivor.
+ */
+export const mergePatients = asyncHandler(async (req, res) => {
+  const branchFilter = filterByBranch(req);
+
+  const merged = await withTransaction((session) =>
+    mergeIntoSurvivor({
+      duplicateId: req.params.id,
+      survivorId: req.validatedBody?.duplicateOf,
+      branchFilter,
+      session,
+    }),
+  );
+
+  emitToBranch(String(merged.branch), 'patient:merged', {
+    mergedId: merged.mergedId,
+    survivorId: merged.survivorId,
   });
 
   return sendSuccess(res, {
     message: 'Patients merged',
-    mergedId: source._id,
-    survivorId: target._id,
+    mergedId: merged.mergedId,
+    survivorId: merged.survivorId,
+  });
+});
+
+/**
+ * POST /patients/merge-batch
+ *
+ * Merges a whole duplicate group in one transaction. The panel used to fire
+ * one request per duplicate, so a failure part-way through left the earlier
+ * records committed - the operator saw "2 of 3 merged" and had to work out
+ * which two. Here either every pair lands or none does.
+ *
+ * Emitted events are published only after the commit: a merge that is rolled
+ * back must not be broadcast to other branches.
+ */
+export const mergePatientsBatch = asyncHandler(async (req, res) => {
+  const pairs = req.validatedBody?.merges || [];
+  const branchFilter = filterByBranch(req);
+
+  const results = await withTransaction(async (session) => {
+    const merged = [];
+    for (const pair of pairs) {
+      // Sequential by necessity: a later pair may target a survivor that an
+      // earlier pair in this same transaction already changed, and it has to
+      // observe those changes rather than a stale read.
+      merged.push(
+        await mergeIntoSurvivor({
+          duplicateId: pair.duplicateId,
+          survivorId: pair.survivorId,
+          branchFilter,
+          session,
+        }),
+      );
+    }
+    return merged;
+  });
+
+  for (const { branch, mergedId, survivorId } of results) {
+    emitToBranch(String(branch), 'patient:merged', { mergedId, survivorId });
+  }
+
+  return sendSuccess(res, {
+    message: 'Patients merged',
+    merged: results.length,
+    results: results.map(({ mergedId, survivorId }) => ({ mergedId, survivorId })),
   });
 });

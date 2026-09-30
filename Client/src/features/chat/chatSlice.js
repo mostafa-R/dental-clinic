@@ -193,7 +193,14 @@ const chatSlice = createSlice({
       });
     builder
       .addCase(fetchUnreadCounts.fulfilled, (state, action) => {
-        state.unread = action.payload.unread;
+        // `unread` is read by the Sidebar on every authenticated page. Storing
+        // whatever came back meant one 200 with an unexpected body (or an
+        // absent payload) set it to `undefined`, and the Sidebar's
+        // `Object.values(chatUnread)` then threw and took down the whole app
+        // shell. An empty map is the correct "nothing unread" state, so clamp
+        // here rather than trusting the response shape.
+        const unread = action.payload?.unread;
+        state.unread = unread && typeof unread === 'object' ? unread : {};
       });
     builder.addCase(markRead.fulfilled, (state, action) => {
       const readIds = action.payload;

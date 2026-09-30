@@ -45,6 +45,25 @@ export const SITE_PERMISSIONS = {
   // Monitoring v1 — platform alerts
   MONITORING_ALERTS_VIEW: "monitoring:alerts:view",
   MONITORING_ALERTS_MANAGE: "monitoring:alerts:manage",
+
+  // Platform analytics (system-wide, aggregated). `analytics:view` is the
+  // coarse legacy grant; these finer strings gate individual dashboards.
+  // Mirrors server/constants/sitePermissions.js — keep both in sync.
+  PLATFORM_OVERVIEW_VIEW: "platform:overview:view",
+  FINANCIAL_VIEW: "financial:view",
+  INVENTORY_VIEW: "inventory:view",
+  PATIENT_ANALYTICS_VIEW: "patient:analytics:view",
+  APPOINTMENTS_VIEW: "appointments:view",
+  DOCTORS_VIEW: "doctors:view",
+  TREATMENTS_VIEW: "treatments:view",
+  USAGE_VIEW: "usage:view",
+  ACTIVITY_VIEW: "activity:view",
+  SAAS_BILLING_VIEW: "saas-billing:view",
+  SECURITY_VIEW: "security:view",
+  REPORTS_EXPORT: "reports:export",
+
+  // Raw protected-health-information access. Never granted by a role default.
+  PATIENT_PHI_VIEW: "patient:phi:view",
 };
 
 // Default role permissions
@@ -65,6 +84,16 @@ export const ROLE_PERMISSIONS = {
       SITE_PERMISSIONS.SETTINGS_VIEW,
       SITE_PERMISSIONS.MONITORING_ALERTS_VIEW,
       SITE_PERMISSIONS.MONITORING_ALERTS_MANAGE,
+      SITE_PERMISSIONS.PLATFORM_OVERVIEW_VIEW,
+      SITE_PERMISSIONS.FINANCIAL_VIEW,
+      SITE_PERMISSIONS.INVENTORY_VIEW,
+      SITE_PERMISSIONS.PATIENT_ANALYTICS_VIEW,
+      SITE_PERMISSIONS.APPOINTMENTS_VIEW,
+      SITE_PERMISSIONS.DOCTORS_VIEW,
+      SITE_PERMISSIONS.TREATMENTS_VIEW,
+      SITE_PERMISSIONS.USAGE_VIEW,
+      SITE_PERMISSIONS.ACTIVITY_VIEW,
+      SITE_PERMISSIONS.SAAS_BILLING_VIEW,
     ],
   },
   support: {
@@ -74,6 +103,11 @@ export const ROLE_PERMISSIONS = {
       SITE_PERMISSIONS.SUBSCRIPTIONS_VIEW,
       SITE_PERMISSIONS.ANALYTICS_VIEW,
       SITE_PERMISSIONS.MONITORING_ALERTS_VIEW,
+      SITE_PERMISSIONS.PLATFORM_OVERVIEW_VIEW,
+      SITE_PERMISSIONS.PATIENT_ANALYTICS_VIEW,
+      SITE_PERMISSIONS.APPOINTMENTS_VIEW,
+      SITE_PERMISSIONS.USAGE_VIEW,
+      SITE_PERMISSIONS.ACTIVITY_VIEW,
     ],
   },
 };
@@ -120,6 +154,10 @@ export const SITE_ACCESS = {
   plans: { roles: [SUPER_ADMIN, ADMIN, SUPPORT] },
   billing: { roles: [SUPER_ADMIN, ADMIN, SUPPORT] },
   analytics: { roles: [SUPER_ADMIN, ADMIN, SUPPORT] },
+  platformInsights: {
+    roles: [SUPER_ADMIN, ADMIN, SUPPORT],
+    permission: SITE_PERMISSIONS.PLATFORM_OVERVIEW_VIEW,
+  },
   admins: { roles: [SUPER_ADMIN, ADMIN] },
   auditLogs: { roles: [SUPER_ADMIN, ADMIN, SUPPORT] },
   errorLogs: { roles: [SUPER_ADMIN, ADMIN] },
@@ -159,7 +197,86 @@ export const SITE_ACCESS = {
 
   // ---- Billing actions ----
   "billing.update": { roles: [SUPER_ADMIN], strict: true },
-  "billing.payment": { roles: [SUPER_ADMIN, ADMIN], strict: true },
+  "billing.payment": {
+    roles: [SUPER_ADMIN, ADMIN],
+    permission: SITE_PERMISSIONS.SUBSCRIPTIONS_MANAGE_PAYMENTS,
+    strict: true,
+  },
+
+  // ---- Platform insights tabs (mirror the per-route requireSitePermission
+  // gates on /analytics/platform/*). super_admin bypasses via canUserAccess. ----
+  "platformInsights.overview": {
+    roles: [SUPER_ADMIN, ADMIN, SUPPORT],
+    permission: SITE_PERMISSIONS.PLATFORM_OVERVIEW_VIEW,
+    strict: true,
+  },
+  "platformInsights.financial": {
+    roles: [SUPER_ADMIN, ADMIN],
+    permission: SITE_PERMISSIONS.FINANCIAL_VIEW,
+    strict: true,
+  },
+  "platformInsights.inventory": {
+    roles: [SUPER_ADMIN, ADMIN],
+    permission: SITE_PERMISSIONS.INVENTORY_VIEW,
+    strict: true,
+  },
+  "platformInsights.patients": {
+    roles: [SUPER_ADMIN, ADMIN, SUPPORT],
+    permission: SITE_PERMISSIONS.PATIENT_ANALYTICS_VIEW,
+    strict: true,
+  },
+  "platformInsights.appointments": {
+    roles: [SUPER_ADMIN, ADMIN, SUPPORT],
+    permission: SITE_PERMISSIONS.APPOINTMENTS_VIEW,
+    strict: true,
+  },
+  "platformInsights.doctors": {
+    roles: [SUPER_ADMIN, ADMIN],
+    permission: SITE_PERMISSIONS.DOCTORS_VIEW,
+    strict: true,
+  },
+  "platformInsights.treatments": {
+    roles: [SUPER_ADMIN, ADMIN],
+    permission: SITE_PERMISSIONS.TREATMENTS_VIEW,
+    strict: true,
+  },
+  "platformInsights.billing": {
+    roles: [SUPER_ADMIN, ADMIN],
+    permission: SITE_PERMISSIONS.SAAS_BILLING_VIEW,
+    strict: true,
+  },
+  "platformInsights.security": {
+    roles: [SUPER_ADMIN],
+    permission: SITE_PERMISSIONS.SECURITY_VIEW,
+    strict: true,
+  },
+  "platformInsights.activity": {
+    roles: [SUPER_ADMIN, ADMIN, SUPPORT],
+    permission: SITE_PERMISSIONS.ACTIVITY_VIEW,
+    strict: true,
+  },
+  "platformInsights.usage": {
+    roles: [SUPER_ADMIN, ADMIN, SUPPORT],
+    permission: SITE_PERMISSIONS.USAGE_VIEW,
+    strict: true,
+  },
+  "platformInsights.jobs": {
+    roles: [SUPER_ADMIN, ADMIN, SUPPORT],
+    permission: SITE_PERMISSIONS.ACTIVITY_VIEW,
+    strict: true,
+  },
+  // /analytics/platform/roles is gated by ACTIVITY_VIEW on the server.
+  "platformInsights.roles": {
+    roles: [SUPER_ADMIN, ADMIN, SUPPORT],
+    permission: SITE_PERMISSIONS.ACTIVITY_VIEW,
+    strict: true,
+  },
+
+  // ---- Audit chain integrity (super_admin only on the server) ----
+  "auditLogs.verify": {
+    roles: [SUPER_ADMIN],
+    strict: true,
+  },
 
   // ---- Plans management actions ----
   "plans.create": {
@@ -206,6 +323,16 @@ export const SITE_ACCESS = {
     permission: SITE_PERMISSIONS.MONITORING_ALERTS_MANAGE,
     strict: true,
   },
+  // GET /alerts/:id — same gate as the alert list.
+  "alerts.detail": {
+    roles: [SUPER_ADMIN, ADMIN],
+    permission: SITE_PERMISSIONS.MONITORING_ALERTS_VIEW,
+    strict: true,
+  },
+  // PATCH /error-logs/:id/resolve is authorizeSite('super_admin','admin') only.
+  "errorLogs.resolve": { roles: [SUPER_ADMIN, ADMIN], strict: true },
+  // PUT /feature-flags/:tenantId/modules is requireSitePermission('super_admin') + 2FA.
+  "featureFlags.setModules": { roles: [SUPER_ADMIN], strict: true },
   "quarantine.set": { roles: [SUPER_ADMIN], strict: true },
   "quarantine.remove": { roles: [SUPER_ADMIN], strict: true },
   "backups.trigger": { roles: [SUPER_ADMIN], strict: true },

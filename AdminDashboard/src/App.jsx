@@ -15,6 +15,7 @@ const TenantDetail = lazy(() => import("./pages/TenantDetail"));
 const Branches = lazy(() => import("./pages/Branches"));
 const Billing = lazy(() => import("./pages/Billing"));
 const Analytics = lazy(() => import("./pages/Analytics"));
+const PlatformInsights = lazy(() => import("./pages/PlatformInsights"));
 const Admins = lazy(() => import("./pages/Admins"));
 const Alerts = lazy(() => import("./pages/Alerts"));
 const AuditLogs = lazy(() => import("./pages/AuditLogs"));
@@ -99,6 +100,14 @@ function App() {
               element={
                 <RequireAccess accessKey="analytics">
                   <Analytics />
+                </RequireAccess>
+              }
+            />
+            <Route
+              path="/platform-insights"
+              element={
+                <RequireAccess accessKey="platformInsights">
+                  <PlatformInsights />
                 </RequireAccess>
               }
             />

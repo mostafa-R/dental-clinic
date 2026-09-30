@@ -25,11 +25,22 @@ export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
   const isLoading = status === 'loading';
 
-  // Handle impersonation token from URL — verify server-side
+  // Redeem the impersonation handoff code from the URL.
+  //
+  // The dashboard puts a 60-second, single-use code here rather than the grant
+  // itself, so the credential never reaches browser history, the Referer header,
+  // or an access log. The code is stripped from the address bar before the
+  // request goes out, so it cannot be re-shared by copy-pasting the URL.
   useEffect(() => {
-    const token = searchParams.get('impersonation');
-    if (!token) return;
-    dispatch(verifyImpersonation(token));
+    const code = searchParams.get('impersonation_code');
+    if (!code) return;
+
+    // Remove it from the visible URL immediately.
+    const clean = new URLSearchParams(searchParams);
+    clean.delete('impersonation_code');
+    navigate({ pathname: '/login', search: clean.toString() }, { replace: true });
+
+    dispatch(verifyImpersonation({ code }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Redirect if already authenticated
@@ -53,7 +64,7 @@ export default function Login() {
   };
 
   // If impersonating, show brief loading then redirect
-  if (searchParams.get('impersonation') && user) {
+  if (searchParams.get('impersonation_code') && user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100 dark:bg-slate-950">
         <div className="text-sm text-slate-500">{t('common.loading')}</div>

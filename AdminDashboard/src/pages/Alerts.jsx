@@ -7,10 +7,12 @@ import Pagination from "../components/ui/Pagination";
 import StatCard from "../components/ui/StatCard";
 import { PageLoader } from "../components/ui/Spinner";
 import { CheckIcon } from "../components/ui/icons";
+import Modal from "../components/ui/Modal";
 import {
   acknowledgeAlert,
   acknowledgeAllAlerts,
   fetchActiveAlerts,
+  fetchAlertById,
   fetchAlerts,
   fetchAlertSummary,
   resolveAlert,
@@ -36,7 +38,7 @@ const ALERT_TYPES = ["error_rate", "memory", "redis", "mongodb", "response_time"
 
 export default function Alerts() {
   const dispatch = useDispatch();
-  const { alerts, summary, pagination, loading, managingId } = useSelector((state) => state.alerts);
+  const { alerts, summary, pagination, loading, managingId, detail, detailLoading } = useSelector((state) => state.alerts);
   const { items: tenants } = useSelector((state) => state.tenants);
   const { user } = useSelector((state) => state.auth);
   const { language } = useSelector((state) => state.ui);
@@ -45,8 +47,15 @@ export default function Alerts() {
   const [typeFilter, setTypeFilter] = useState("");
   const [tenantFilter, setTenantFilter] = useState("");
   const [page, setPage] = useState(1);
+  const [detailId, setDetailId] = useState(null);
 
   const canManage = canUserAccess(user, "alerts.acknowledge") || canUserAccess(user, "alerts.resolve");
+  const canViewDetail = canUserAccess(user, "alerts.detail");
+
+  // GET /alerts/:id — the list endpoint omits the populated tenant/actor refs.
+  useEffect(() => {
+    if (detailId) dispatch(fetchAlertById(detailId));
+  }, [dispatch, detailId]);
 
   useEffect(() => {
     dispatch(fetchTenants({ limit: 100 }));
@@ -148,7 +157,7 @@ export default function Alerts() {
                   <th scope="col" className="text-start px-4 py-3 font-medium text-slate-500">{t("alertsStatus", language)}</th>
                   <th scope="col" className="text-start px-4 py-3 font-medium text-slate-500">{t("alertsOccurrences", language)}</th>
                   <th scope="col" className="text-start px-4 py-3 font-medium text-slate-500">{t("alertsLastSeen", language)}</th>
-                  {canManage && (
+                  {(canManage || canViewDetail) && (
                     <th scope="col" className="text-start px-4 py-3 font-medium text-slate-500">{t("actions", language)}</th>
                   )}
                 </tr>
@@ -180,25 +189,37 @@ export default function Alerts() {
                     <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
                       <span title={formatDateTime(alert.lastSeenAt, language)}>{getRelativeTime(alert.lastSeenAt, language)}</span>
                     </td>
-                    {canManage && alert.status !== "resolved" && (
+                    {(canManage || canViewDetail) && (
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          {alert.status === "active" && (
+                          {canViewDetail && (
                             <button
-                              onClick={() => dispatch(acknowledgeAlert(alert._id))}
-                              disabled={managingId === alert._id}
-                              className="rounded-md border border-slate-300 dark:border-slate-600 px-2 py-1 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50"
+                              onClick={() => setDetailId(alert._id)}
+                              className="rounded-md border border-slate-300 dark:border-slate-600 px-2 py-1 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
                             >
-                              {t("alertsAcknowledge", language)}
+                              {t("viewDetails", language)}
                             </button>
                           )}
-                          <button
-                            onClick={() => dispatch(resolveAlert(alert._id))}
-                            disabled={managingId === alert._id}
-                            className="rounded-md bg-emerald-600 hover:bg-emerald-700 px-2 py-1 text-xs text-white disabled:opacity-50"
-                          >
-                            {t("alertsResolve", language)}
-                          </button>
+                          {canManage && alert.status !== "resolved" && (
+                            <>
+                              {alert.status === "active" && (
+                                <button
+                                  onClick={() => dispatch(acknowledgeAlert(alert._id))}
+                                  disabled={managingId === alert._id}
+                                  className="rounded-md border border-slate-300 dark:border-slate-600 px-2 py-1 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50"
+                                >
+                                  {t("alertsAcknowledge", language)}
+                                </button>
+                              )}
+                              <button
+                                onClick={() => dispatch(resolveAlert(alert._id))}
+                                disabled={managingId === alert._id}
+                                className="rounded-md bg-emerald-600 hover:bg-emerald-700 px-2 py-1 text-xs text-white disabled:opacity-50"
+                              >
+                                {t("alertsResolve", language)}
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     )}
@@ -213,6 +234,62 @@ export default function Alerts() {
           <Pagination currentPage={pagination.page} totalPages={pagination.pages} onPageChange={setPage} />
         )}
       </Card>
+
+      <Modal
+        isOpen={!!detailId}
+        onClose={() => setDetailId(null)}
+        title={detail?.title || t("viewDetails", language)}
+        size="lg"
+      >
+        {detailLoading || !detail ? (
+          <PageLoader />
+        ) : (
+          <div className="space-y-4 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={severityVariant(detail.severity)} size="sm">
+                {detail.severity}
+              </Badge>
+              <Badge variant={statusVariant(detail.status)} size="sm">
+                {t(`status${detail.status.charAt(0).toUpperCase()}${detail.status.slice(1)}`, language)}
+              </Badge>
+              <span className="text-xs text-slate-500">
+                {t(`alertType.${detail.type}`, language)}
+              </span>
+            </div>
+
+            {detail.message && (
+              <p className="text-slate-700 dark:text-slate-300">{detail.message}</p>
+            )}
+
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+              <div>
+                <dt className="text-xs text-slate-500">{t("tenantName", language)}</dt>
+                <dd>{detail.tenant?.name || (detail.scope === "tenant" ? "—" : t("alertsPlatform", language))}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">{t("alertsOccurrences", language)}</dt>
+                <dd>{detail.occurrenceCount}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">{t("alertsLastSeen", language)}</dt>
+                <dd>{formatDateTime(detail.lastSeenAt, language)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">{t("acknowledgedBy", language)}</dt>
+                <dd>{detail.acknowledgedBy?.name || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">{t("resolvedBy", language)}</dt>
+                <dd>{detail.resolvedBy?.name || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">{t("resolvedAt", language)}</dt>
+                <dd>{detail.resolvedAt ? formatDateTime(detail.resolvedAt, language) : "—"}</dd>
+              </div>
+            </dl>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

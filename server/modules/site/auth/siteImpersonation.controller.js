@@ -5,6 +5,24 @@ import { sendSuccess } from "../../../utils/sendSuccess.js";
 import Role from "../../users/role.model.js";
 import User from "../../users/user.model.js";
 import Tenant from "../tenant/tenant.model.js";
+import { newGrantId, registerGrant, revokeGrant, createHandoff } from "../../../utils/impersonationGrant.js";
+
+/**
+ * Impersonation grants are signed with their own secret, not the access-token
+ * secret, so a compromise of the long-lived session key cannot be used to mint
+ * impersonation grants. Falls back to JWT_SECRET only outside production.
+ */
+function impersonationSecret() {
+  const secret = process.env.JWT_IMPERSONATION_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_IMPERSONATION_SECRET must be set in production');
+  }
+  return process.env.JWT_SECRET;
+}
+
+const IMPERSONATION_TTL = '30m';
+const IMPERSONATION_TTL_MS = 30 * 60 * 1000;
 
 /**
  * POST /site/impersonation/start
@@ -54,6 +72,9 @@ export const startImpersonation = asyncHandler(async (req, res) => {
     throw ApiError.forbidden('Only super_admin can impersonate the clinic owner');
   }
 
+  // `jti` makes the grant single-use: it is registered in the redemption
+  // registry on issue and consumed atomically by /auth/verify-impersonation.
+  const grantId = newGrantId();
   const impersonationToken = jwt.sign(
     {
       sub: user._id.toString(),
@@ -64,16 +85,25 @@ export const startImpersonation = asyncHandler(async (req, res) => {
       impersonator: req.siteAdmin._id.toString(),
       impersonatorName: req.siteAdmin.name,
       tokenVersion: user.tokenVersion || 0,
+      jti: grantId,
     },
-    process.env.JWT_SECRET,
-    { expiresIn: '30m' },
+    impersonationSecret(),
+    { expiresIn: IMPERSONATION_TTL },
   );
+
+  await registerGrant(grantId, IMPERSONATION_TTL_MS);
 
   req.auditTargetName = `${tenant.name} / ${user.name}`;
   req.auditDetails = { userId: user._id.toString(), tenantId: tenant._id.toString() };
 
   return sendSuccess(res, {
     impersonationToken,
+    // The URL handed to the clinic login page carries ONLY this code. Putting
+    // `impersonationToken` in the query string would leak it into browser
+    // history, the Referer header of every later request, and proxy access logs.
+    // The code is single-use and expires in 60s.
+    handoffCode: await createHandoff(impersonationToken),
+    handoffExpiresIn: 60,
     expiresIn: '30m',
     user: {
       _id: user._id,
@@ -104,7 +134,7 @@ export const endImpersonation = asyncHandler(async (req, res) => {
 
   let decoded;
   try {
-    decoded = jwt.verify(impersonationToken, process.env.JWT_SECRET);
+    decoded = jwt.verify(impersonationToken, impersonationSecret());
   } catch {
     throw ApiError.badRequest('Invalid or expired impersonation token');
   }
@@ -112,6 +142,9 @@ export const endImpersonation = asyncHandler(async (req, res) => {
   if (decoded.type !== 'impersonation') {
     throw ApiError.badRequest('Not an impersonation token');
   }
+
+  // Ending the session consumes the grant, so a leaked token cannot outlive it.
+  await revokeGrant(decoded.jti);
 
   let targetUserId = null;
   if (String(decoded.impersonator) === String(req.siteAdmin._id)) {

@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Badge from "../components/ui/Badge";
+import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import { PageLoader } from "../components/ui/Spinner";
 import { fetchTenants } from "../features/tenants/tenantsSlice";
 import {
   fetchTenantModules,
+  setTenantModules,
   toggleModule,
 } from "../features/featureFlags/featureFlagsSlice";
 import { t } from "../lib/i18n";
@@ -32,11 +34,18 @@ export default function FeatureFlags() {
   const current = selectedTenant ? moduleData[selectedTenant] : null;
   const allModules = current?.availableModules || [];
   const canToggle = canUserAccess(user, "featureFlags.toggle");
+  // PUT /feature-flags/:tenantId/modules is super_admin + 2FA only.
+  const canSetAll = canUserAccess(user, "featureFlags.setModules");
 
   const handleToggle = (mod) => {
     if (!selectedTenant) return;
     const enabled = current.enabledModules.includes(mod);
     dispatch(toggleModule({ tenantId: selectedTenant, module: mod, enabled: !enabled }));
+  };
+
+  const handleSetAll = (modules) => {
+    if (!selectedTenant) return;
+    dispatch(setTenantModules({ tenantId: selectedTenant, modules }));
   };
 
   return (
@@ -71,6 +80,28 @@ export default function FeatureFlags() {
               <span className="text-sm text-slate-500">
                 {current.enabledModules.length} / {allModules.length} {t("modules", language)}
               </span>
+              {canSetAll && allModules.length > 0 && (
+                <div className="ms-auto flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    loading={toggling}
+                    disabled={current.enabledModules.length === allModules.length}
+                    onClick={() => handleSetAll(allModules)}
+                  >
+                    {t("enableAllModules", language)}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    loading={toggling}
+                    disabled={current.enabledModules.length === 0}
+                    onClick={() => handleSetAll([])}
+                  >
+                    {t("disableAllModules", language)}
+                  </Button>
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {allModules.map((mod) => {

@@ -1,6 +1,7 @@
 import { Server } from 'socket.io';
 
 import { planIncludesModule } from '../constants/plans.js';
+import { isClinicWideRole } from '../middleware/checkPermission.js';
 import { stripPHI } from '../middleware/phiRestrict.js';
 import Tenant from '../modules/site/tenant/tenant.model.js';
 import Branch from '../modules/users/branch.model.js';
@@ -27,6 +28,13 @@ function chatChannelRoom(tenantId, channel) {
 // tenant queue room so they see called patients across all branches.
 function tenantQueueRoom(tenantId) {
   return tenantId ? `queue:${String(tenantId)}` : null;
+}
+
+// Branch-scoped staff subscribe to their own branch's queue instead. The
+// tenant-wide room carries patient names/ids for every branch, so a
+// branch-scoped user must never be placed in it.
+function branchQueueRoom(tenantId, branchId) {
+  return tenantId && branchId ? `queue:${String(tenantId)}:${String(branchId)}` : null;
 }
 
 const ADMIN_ROOM = 'admin';
@@ -114,6 +122,9 @@ export function initSocket(httpServer) {
             branch: null,
             tenant: null,
             isSystemAdmin: admin.role === 'super_admin',
+            // A dashboard session is never clinic staff: it must not be able to
+            // join a clinic branch room or the live queue.
+            isTenantWide: false,
             siteRole: admin.role,
             siteAdmin: true,
           };
@@ -133,11 +144,30 @@ export function initSocket(httpServer) {
           return next(new Error('Token revoked — please log in again'));
         }
 
-        // Resolve system admin status from Role document
+        // Resolve system-admin and clinic-wide status from the Role document.
+        // The tenant check matters: an `isSystemAdmin` role belonging to a
+        // DIFFERENT tenant must not grant this socket platform privileges.
         let isSystemAdmin = false;
+        let isTenantWide = false;
         if (user.roleId) {
-          const roleDoc = await Role.findById(user.roleId).select('isSystemAdmin').lean();
-          isSystemAdmin = !!roleDoc?.isSystemAdmin;
+          const roleFilter = { _id: user.roleId };
+          if (user.tenant) {
+            // Caller has a tenant: the role must belong to it or be a platform role.
+            roleFilter.$or = [{ tenant: user.tenant }, { tenant: null }];
+          }
+          const roleDoc = await Role.findOne(roleFilter).lean();
+          if (roleDoc?.isActive !== false) {
+            isSystemAdmin = !!roleDoc?.isSystemAdmin;
+            // Reuse the HTTP layer's helper so a socket can never disagree with
+            // the REST routes about who is clinic-wide. `isTenantWide` — not
+            // `isSystemAdmin` — is the correct signal: making clinic_manager
+            // plan-bound must not shrink a multi-branch manager to one branch.
+            const perms = {};
+            for (const perm of roleDoc?.permissions || []) {
+              perms[perm.module] = perm.actions || [];
+            }
+            isTenantWide = roleDoc ? isClinicWideRole(roleDoc, perms) : false;
+          }
         }
 
         socket.user = {
@@ -146,6 +176,7 @@ export function initSocket(httpServer) {
           branch: user.branch ? user.branch._id.toString() : null,
           tenant: user.tenant ? user.tenant.toString() : null,
           isSystemAdmin,
+          isTenantWide,
         };
 
         // Tag impersonated sessions so room membership below can restrict
@@ -229,7 +260,18 @@ export function initSocket(httpServer) {
           socket.join(branchRoom(branchId));
           return;
         }
-        // Clinic-level users can subscribe to branches in their own tenant.
+        // Branch-scoped users may only ever subscribe to their OWN branch.
+        // Checking the tenant alone let a receptionist at branch A join
+        // branch B's room and receive every patient record broadcast to it.
+        if (!socket.user.isTenantWide) {
+          if (!socket.user.branch || String(socket.user.branch) !== String(branchId)) {
+            socket.emit('error', { message: 'Not authorized to subscribe to this branch' });
+            return;
+          }
+          socket.join(branchRoom(branchId));
+          return;
+        }
+        // Clinic-wide users can subscribe to branches in their own tenant.
         if (socket.user.tenant) {
           const branch = await Branch.findOne({ _id: branchId, tenant: socket.user.tenant }).select('_id').lean();
           if (branch) {
@@ -251,14 +293,25 @@ export function initSocket(httpServer) {
     socket.on('subscribe:queue', () => {
       // Only authenticated clinic staff of the tenant (never impersonated
       // sessions) may watch the live queue room.
-      if (!socket.user.impersonating && socket.user.tenant) {
-        socket.join(tenantQueueRoom(socket.user.tenant));
+      if (socket.user.impersonating || !socket.user.tenant) return;
+      // The tenant queue room carries patient names/ids for every branch, so
+      // a branch-scoped user must use their own per-branch room instead.
+      if (!socket.user.isTenantWide) {
+        if (socket.user.branch) {
+          socket.join(branchQueueRoom(socket.user.tenant, socket.user.branch));
+        }
+        return;
       }
+      socket.join(tenantQueueRoom(socket.user.tenant));
     });
 
     socket.on('unsubscribe:queue', () => {
-      if (socket.user.tenant) {
-        socket.leave(tenantQueueRoom(socket.user.tenant));
+      if (!socket.user.tenant) return;
+      // Leave both the clinic-wide and the per-branch room, so a role change
+      // mid-session cannot leave a stale subscription behind.
+      socket.leave(tenantQueueRoom(socket.user.tenant));
+      if (socket.user.branch) {
+        socket.leave(branchQueueRoom(socket.user.tenant, socket.user.branch));
       }
     });
   });
@@ -319,18 +372,35 @@ export function emitToBranch(branchId, event, payload) {
  * Emit a Live Queue event (PRD §6.2) to the tenant queue room
  * (`queue:{tenantId}`). Impersonated sockets in the room receive PHI-stripped
  * payloads, mirroring emitToBranch semantics.
+ *
+ * When `branchId` is supplied the event also goes to that branch's queue room,
+ * which is where branch-scoped staff are placed. Without this a branch-scoped
+ * receptionist would stop receiving live queue updates after the room split.
  */
-export function emitToTenantQueue(tenantId, event, payload) {
+export function emitToTenantQueue(tenantId, event, payload, branchId) {
   if (!io) return;
-  const room = tenantQueueRoom(tenantId);
-  if (!room) return;
-  const roomSockets = io.sockets.adapter.rooms.get(room);
-  if (!roomSockets) return;
-  for (const socketId of roomSockets) {
-    const socket = io.sockets.sockets.get(socketId);
-    if (!socket) continue;
-    const data = socket.user?.impersonating ? sanitize(payload) : payload;
-    io.to(socketId).emit(event, data);
+  const rooms = new Set();
+  const tenantRoom = tenantQueueRoom(tenantId);
+  if (tenantRoom) rooms.add(tenantRoom);
+  if (branchId) {
+    const branchRoomName = branchQueueRoom(tenantId, branchId);
+    if (branchRoomName) rooms.add(branchRoomName);
+  }
+
+  const delivered = new Set();
+  for (const room of rooms) {
+    const roomSockets = io.sockets.adapter.rooms.get(room);
+    if (!roomSockets) continue;
+    for (const socketId of roomSockets) {
+      // A socket can only be in one of the two rooms, but guard anyway so a
+      // duplicate delivery can never occur.
+      if (delivered.has(socketId)) continue;
+      const socket = io.sockets.sockets.get(socketId);
+      if (!socket) continue;
+      delivered.add(socketId);
+      const data = socket.user?.impersonating ? sanitize(payload) : payload;
+      io.to(socketId).emit(event, data);
+    }
   }
 }
 

@@ -93,7 +93,10 @@ export default function Appointments() {
     // clinic has no doctors", so report the failure.
     api
       .get('/users/doctors')
-      .then((d) => setDoctors(d.data.data.doctors))
+      // `?? []`: the filter below reads `doctors.length` on every render, so a
+      // 200 whose body lacks the key would crash the whole page rather than
+      // show an empty filter.
+      .then((d) => setDoctors(d.data?.data?.doctors ?? []))
       .catch(() => {
         setDoctors([]);
         dispatch(showErrorDialog({ message: t('common.loadFailedList') }));

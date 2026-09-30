@@ -1,6 +1,8 @@
 import * as authService from './auth.service.js';
+import jwt from 'jsonwebtoken';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
+import { consumeGrant, consumeHandoff } from '../../utils/impersonationGrant.js';
 import {
   ACCESS_COOKIE,
   REFRESH_COOKIE,
@@ -8,7 +10,6 @@ import {
   cookieOptions,
   setAuthCookies,
   setCsrfCookie,
-  verifyAccessToken,
   verifyRefreshToken,
 } from '../../utils/jwt.js';
 import User from '../users/user.model.js';
@@ -133,18 +134,37 @@ export const updatePreferences = asyncHandler(async (req, res) => {
 });
 
 export const verifyImpersonation = asyncHandler(async (req, res) => {
-  const token = req.body?.token;
-  if (!token) throw ApiError.badRequest('Token is required');
+  const { code } = req.body ?? {};
+  // Preferred path: a 60-second, single-use handoff code. This is what the
+  // dashboard puts in the URL, so the grant itself never reaches browser
+  // history, a Referer header, or an access log.
+  let token = code ? await consumeHandoff(code) : req.body?.token;
+
+  if (!token) {
+    throw ApiError.unauthorized(
+      code
+        ? 'This impersonation link has expired or was already used'
+        : 'Token is required',
+    );
+  }
 
   let decoded;
   try {
-    decoded = verifyAccessToken(token);
+    // Verified with the dedicated impersonation secret, so an ordinary access
+    // token can never be presented here.
+    decoded = jwt.verify(token, process.env.JWT_IMPERSONATION_SECRET || process.env.JWT_SECRET);
   } catch {
     throw ApiError.unauthorized('Invalid or expired impersonation token');
   }
 
   if (decoded.type !== 'impersonation') {
     throw ApiError.badRequest('Not an impersonation token');
+  }
+
+  // Single-use: consumed atomically, so a captured token cannot be replayed
+  // for the remainder of its 30-minute lifetime.
+  if (!(await consumeGrant(decoded.jti))) {
+    throw ApiError.unauthorized('This impersonation grant has already been used or revoked');
   }
 
   const user = await User.findById(decoded.sub)
@@ -164,7 +184,7 @@ export const verifyImpersonation = asyncHandler(async (req, res) => {
   // the access cookie. Downstream clinic calls then authenticate through `protect`,
   // which marks the request `_impersonating` so `phiRestrict` can mask patient PHI.
   const maxAge = Math.max(0, (decoded.exp ?? 0) * 1000 - Date.now());
-  res.cookie(ACCESS_COOKIE, token, { ...cookieOptions, maxAge });
+  res.cookie(ACCESS_COOKIE, token, { ...cookieOptions(), maxAge });
   setCsrfCookie(res);
 
   const safe = user.toSafeObject();

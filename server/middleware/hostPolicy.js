@@ -20,21 +20,28 @@ import ApiError from '../utils/ApiError.js';
  *    prefer matching on the connector's SNI / server_name.
  */
 
-const APP_DOMAIN = (process.env.APP_DOMAIN || 'dentalos.app').toLowerCase();
-const EXTRA_HOSTS = (process.env.ALLOWED_EXTRA_HOSTS || '')
-  .split(',')
-  .map((h) => h.trim().toLowerCase())
-  .filter(Boolean);
-const TRUSTED_PROXY_IPS = (process.env.TRUSTED_PROXY_IP || '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
+const appDomain = () => (process.env.APP_DOMAIN || 'dentalos.app').toLowerCase();
+const extraHosts = () =>
+  (process.env.ALLOWED_EXTRA_HOSTS || '')
+    .split(',')
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+const trustedProxyIps = () =>
+  (process.env.TRUSTED_PROXY_IP || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 
 function isTrustedProxy(remoteAddress) {
-  if (!TRUSTED_PROXY_IPS.length) return true;
+  // Fail CLOSED: with no allow-list configured we cannot prove a forwarded
+  // header came from our own edge, so the headers are dropped rather than
+  // trusted. Previously this returned `true`, which silently disabled the
+  // X-Forwarded-Host stripping below.
+  const allowList = trustedProxyIps();
+  if (!allowList.length) return false;
   if (!remoteAddress) return false;
   const normalized = remoteAddress.replace(/^\[|\]$/g, '').replace(/:\d+$/, '');
-  return TRUSTED_PROXY_IPS.includes(remoteAddress) || TRUSTED_PROXY_IPS.includes(normalized);
+  return allowList.includes(remoteAddress) || allowList.includes(normalized);
 }
 
 export function hostPolicy(req, _res, next) {
@@ -48,8 +55,9 @@ export function hostPolicy(req, _res, next) {
 
   const isBareIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname === '::1';
   if (isBareIp) return next();
-  if (hostname === APP_DOMAIN || hostname.endsWith(`.${APP_DOMAIN}`)) return next();
-  if (EXTRA_HOSTS.includes(hostname)) return next();
+  const domain = appDomain();
+  if (hostname === domain || hostname.endsWith(`.${domain}`)) return next();
+  if (extraHosts().includes(hostname)) return next();
 
   return next(ApiError.badRequest('Unrecognized Host header'));
 }

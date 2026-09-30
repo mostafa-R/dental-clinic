@@ -4,6 +4,7 @@ import { useSocket } from '../../hooks/useSocket';
 import { addMessage, fetchUnreadCounts, markMessagesAsRead } from './chatSlice';
 import { playNotificationSound } from '../../lib/notificationSound';
 import { usePermission } from '../../lib/roles';
+import { useT } from '../../lib/i18n';
 
 export default function ChatGlobalListener() {
   const dispatch = useDispatch();
@@ -15,6 +16,7 @@ export default function ChatGlobalListener() {
   // includes chat but whose role does not polled /unread every 3s and collected
   // a steady stream of 403s.
   const chatEnabled = usePermission('chat', 'read');
+  const { t } = useT();
 
   useEffect(() => {
     if (user && chatEnabled) {
@@ -39,10 +41,20 @@ export default function ChatGlobalListener() {
     if (document.hidden) {
       playNotificationSound();
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && msg.sender?.name) {
-        new Notification(msg.sender.name, { body: msg.content, icon: '/favicon.ico' });
+        // Never put message text in the OS notification. The OS notification
+        // layer is outside the app: it is shown on the lock screen, mirrored to
+        // paired devices and watches, and persisted by the OS notification
+        // centre. Chat bodies carry PHI (patient names, treatment details), so
+        // those would leave the audited system and land on unmanaged hardware
+        // that the clinic's access controls and audit log do not cover.
+        // A count-only prompt is enough to prompt the user to open the app.
+        new Notification(msg.sender.name, {
+          body: t('chat.newMessageNotification'),
+          icon: '/favicon.ico',
+        });
       }
     }
-  }, [dispatch, user, chatEnabled]);
+  }, [dispatch, user, chatEnabled, t]);
 
   const handleRead = useCallback((payload) => {
     if (!chatEnabled) return;

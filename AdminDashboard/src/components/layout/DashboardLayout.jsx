@@ -24,6 +24,7 @@ const navigation = [
   { nameKey: "plans", href: "/plans" },
   { nameKey: "billing", href: "/billing" },
   { nameKey: "analytics", href: "/analytics" },
+  { nameKey: "platformInsights", href: "/platform-insights" },
   { nameKey: "admins", href: "/admins" },
   { nameKey: "featureFlags", href: "/feature-flags" },
   { nameKey: "quarantine", href: "/quarantine" },

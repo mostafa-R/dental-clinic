@@ -9,4 +9,8 @@ export const patientApi = {
   duplicates: () => api.get('/patients/duplicates').then((r) => r.data.data),
   merge: (duplicateId, survivorId) =>
     api.post(`/patients/${duplicateId}/merge`, { duplicateOf: survivorId }).then((r) => r.data.data),
+  // Whole group in one request. The server applies every pair in a single
+  // transaction, so a failure part-way through cannot leave earlier records
+  // already merged - which is what per-record calls did.
+  mergeBatch: (merges) => api.post('/patients/merge-batch', { merges }).then((r) => r.data.data),
 };

@@ -3,9 +3,38 @@ import mongoose from 'mongoose';
 import Patient from '../modules/patients/patient.model.js';
 import ApiError from './ApiError.js';
 
+/**
+ * Coerce a value to an ObjectId.
+ *
+ * The previous version returned ANY unconvertible value unchanged, which let a
+ * Mongo operator object through: with Mongoose 9 (`strictQuery: false`) a
+ * request like `?branch[$ne]=null` produced `{ branch: { $ne: null } }`,
+ * silently disabling branch narrowing and widening a clinic-wide user's read to
+ * every branch in scope.
+ *
+ * Objects are now rejected outright rather than passed to the query. Plain
+ * non-ObjectId strings are still forwarded so existing callers that use opaque
+ * ids (and the test suite) behave as before; Mongoose treats those as a literal
+ * equality match, which cannot widen the filter.
+ */
 function toObjectId(value) {
-  if (value && typeof value === 'object' && value._id) value = value._id;
   if (mongoose.isValidObjectId(value)) return new mongoose.Types.ObjectId(String(value));
+
+  // Unwrap a populated document to its `_id`, then re-validate: the unwrapped
+  // value can itself be an operator (`{ _id: { $ne: null } }`), which must not
+  // survive a single pass.
+  if (value && typeof value === 'object' && !(value instanceof mongoose.Types.ObjectId)) {
+    const inner = value._id;
+    if (inner === undefined || inner === null) {
+      throw ApiError.badRequest('Invalid identifier');
+    }
+    if (mongoose.isValidObjectId(inner)) return new mongoose.Types.ObjectId(String(inner));
+    if (typeof inner === 'object') {
+      throw ApiError.badRequest('Invalid identifier');
+    }
+    return inner;
+  }
+
   return value;
 }
 
