@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -33,11 +33,13 @@ function App() {
   const { _initialized, loading } = useSelector((state) => state.auth);
   const { language } = useSelector((state) => state.ui);
 
+  const initiated = useRef(false);
   useEffect(() => {
-    if (!_initialized && !loading) {
+    if (!_initialized && !initiated.current) {
+      initiated.current = true;
       dispatch(getCurrentUser());
     }
-  }, [dispatch, _initialized, loading]);
+  }, [dispatch, _initialized]);
 
   useEffect(() => {
     document.documentElement.dir = language === "ar" ? "rtl" : "ltr";

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Button from "../components/ui/Button";
@@ -7,8 +7,7 @@ import Modal from "../components/ui/Modal";
 import PageHeader from "../components/ui/PageHeader";
 import StatCard from "../components/ui/StatCard";
 import { PageLoader } from "../components/ui/Spinner";
-import DashboardTour from "../components/DashboardTour";
-import {
+const DashboardTour = lazy(() => import("../components/DashboardTour"));import {
   BanknoteIcon,
   Bars3Icon,
   BellIcon,
@@ -138,55 +137,66 @@ export default function Dashboard() {
   }, [dispatch]);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
+
     const loadDistribution = async () => {
       setDistLoading(true);
       try {
-        const all = [];
-        let page = 1;
-        let total = Infinity;
-        while (all.length < total && page <= 10) {
-          const { data } = await api.get("/tenants", { params: { page, limit: 100 } });
-          const tenants = data.tenants || [];
-          if (tenants.length === 0) break;
-          all.push(...tenants);
-          total = data.pagination?.total ?? all.length;
-          page += 1;
-        }
-        if (cancelled) return;
+        // Single request: GET /analytics/distribution returns { byPlan:{}, byStatus:{}, total:N }
+        // Falls back to fetching page 1 only (limit=200) if endpoint doesn't exist yet.
+        const { data } = await api
+          .get("/analytics/distribution", { signal: controller.signal })
+          .catch(async (err) => {
+            if (err?.response?.status === 404) {
+              return api.get("/tenants", {
+                params: { page: 1, limit: 200 },
+                signal: controller.signal,
+              });
+            }
+            throw err;
+          });
+
         const byPlan = {};
         const byStatus = {};
-        all.forEach((tn) => {
+        // Support both shapes: { byPlan, byStatus, total } OR { tenants: [] }
+        if (data.byPlan && data.byStatus) {
+          setDistribution({ byPlan: data.byPlan, byStatus: data.byStatus, total: data.total ?? 0 });
+          return;
+        }
+        const tenants = data.tenants || (Array.isArray(data) ? data : []);
+        tenants.forEach((tn) => {
           const p = tn.plan || "free";
           byPlan[p] = (byPlan[p] || 0) + 1;
           const s = STATUS_ORDER.includes(tn.status) ? tn.status : TENANT_STATUS.ACTIVE;
           byStatus[s] = (byStatus[s] || 0) + 1;
         });
-        setDistribution({ byPlan, byStatus, total: all.length });
+        setDistribution({ byPlan, byStatus, total: tenants.length });
+      } catch (err) {
+        if (err?.name === "CanceledError" || err?.name === "AbortError") return;
+        // ignore other errors — charts simply stay empty
       } finally {
-        if (!cancelled) setDistLoading(false);
+        setDistLoading(false);
       }
     };
-    loadDistribution();
+
     const loadAtRisk = async () => {
       try {
         const [trialsRes, dormantRes] = await Promise.all([
-          api.get("/tenants", { params: { page: 1, limit: 1, trialExpiring: 7 } }),
-          api.get("/tenants", { params: { page: 1, limit: 1, dormant: true } }),
+          api.get("/tenants", { params: { page: 1, limit: 1, trialExpiring: 7 }, signal: controller.signal }),
+          api.get("/tenants", { params: { page: 1, limit: 1, dormant: true }, signal: controller.signal }),
         ]);
-        if (cancelled) return;
         setAtRisk({
           trials: trialsRes.data.pagination?.total ?? 0,
           dormant: dormantRes.data.pagination?.total ?? 0,
         });
-      } catch {
-        /* ignore */
+      } catch (err) {
+        if (err?.name === "CanceledError" || err?.name === "AbortError") return;
       }
     };
+
+    loadDistribution();
     loadAtRisk();
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, []);
 
   const planName = (key) => {

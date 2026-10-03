@@ -1,6 +1,26 @@
 import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
 
+/**
+ * Base URL the API is reachable on, for the generated "Try it out" target.
+ *
+ * Prefers an explicit `SWAGGER_SERVER_URL`, then the configured API host
+ * (`APP_DOMAIN`, prefixed with `API_BASE_PATH` because the app is served behind
+ * a proxy there), and only falls back to localhost when nothing is set.
+ */
+export function swaggerServerUrl() {
+  const explicit = process.env.SWAGGER_SERVER_URL?.trim();
+  if (explicit) return explicit.replace(/\/+$/, "");
+
+  const apiPath = process.env.API_BASE_PATH?.trim();
+  if (apiPath) return apiPath.replace(/\/+$/, "");
+
+  const host = process.env.APP_DOMAIN?.trim();
+  if (host) return `https://${host}`;
+
+  return `http://localhost:${process.env.PORT || 7000}`;
+}
+
 export const options = {
   definition: {
     openapi: "3.0.0",
@@ -22,8 +42,12 @@ export const options = {
     },
     servers: [
       {
-        url: "http://localhost:7000",
-        description: "Development server",
+        // Hardcoding localhost made the "Try it out" button issue requests
+        // against the developer's own machine from a deployed environment. Derive
+        // the server from the public API host instead, falling back to localhost
+        // only when nothing is configured (local development).
+        url: swaggerServerUrl(),
+        description: process.env.NODE_ENV === "production" ? "Production server" : "Development server",
       },
     ],
     tags: [

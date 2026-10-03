@@ -29,15 +29,22 @@ export const updatePlatformSettings = createAsyncThunk(
   },
 );
 
+// Mirrors server/modules/platform/platformSetting.model.js defaults.
 const initialState = {
   settings: {
+    siteName: "",
+    supportEmail: "",
     autoSuspendDays: 30,
     emailNotifications: true,
     maintenanceMode: false,
     allowedDomains: [],
+    allowedSiteIps: [],
     maxTenants: 1000,
     defaultPlan: "",
     trialDays: 14,
+    backupEnabled: false,
+    backupRetentionDays: 30,
+    backupTime: "02:00",
   },
   loading: false,
   error: null,
@@ -67,6 +74,7 @@ const platformSlice = createSlice({
       })
       .addCase(updatePlatformSettings.pending, (state) => {
         state.loading = true;
+        state.error = null;
       })
       .addCase(updatePlatformSettings.fulfilled, (state, action) => {
         state.loading = false;

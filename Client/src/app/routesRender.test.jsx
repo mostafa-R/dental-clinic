@@ -2,10 +2,11 @@ import React from 'react';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, act, waitFor } from '@testing-library/react';
 import { Provider } from 'react-redux';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { configureStore } from '@reduxjs/toolkit';
 
 import App from '../App';
+import AppLayout from '../components/layout/AppLayout';
 
 /**
  * Mounts every route in the app and asserts it renders.
@@ -116,6 +117,35 @@ vi.mock('../lib/notificationSound', () => ({
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = function scrollIntoView() {};
 }
+
+// Every route is behind a `lazy()` import and the whole `<Routes>` tree shares
+// one Suspense boundary, so each test would otherwise wait on a real module
+// fetch. That was the source of the flakiness: the first test in the file raced
+// module resolution against its assertion, and under full-suite CPU contention
+// `/dashboard` intermittently timed out even though the route renders fine.
+//
+// These imports are deliberately static (a variable specifier would defeat
+// Vite's analysis). Resolving them before the first render makes the boundary
+// settle immediately, so the tests assert on rendering rather than on how fast
+// the bundler feels today. They also double as a guard: if a page module fails
+// to resolve, the suite says so here instead of reporting 16 identical
+// "never mounted AppLayout" timeouts.
+import '../features/auth/Login';
+import '../pages/Accounting';
+import '../pages/Appointments';
+import '../pages/Billing';
+import '../pages/Branches';
+import '../pages/Chat';
+import '../pages/Dashboard';
+import '../pages/Inventory';
+import '../pages/NotFound';
+import '../pages/PatientEmr';
+import '../pages/Patients';
+import '../pages/Pricing';
+import '../pages/Recalls';
+import '../pages/Roles';
+import '../pages/Settings';
+import '../pages/Users';
 
 import accountingReducer from '../features/accounting/accountingSlice';
 import appointmentReducer from '../features/appointments/appointmentSlice';
@@ -364,6 +394,43 @@ describe('every route renders', () => {
       },
       WAIT,
     );
+  });
+
+  it('keeps the app shell mounted while a page suspends', async () => {
+    // Every page is lazy and AppLayout wraps its Outlet in a Suspense, so this
+    // mounts the layout with a child that suspends forever — exactly what an
+    // unarrived chunk does. The sidebar and topbar must stay in the DOM. Before
+    // that boundary existed the only Suspense was around the whole <Routes>
+    // tree, so a navigating page replaced the entire shell and the app blinked
+    // out while the sidebar lost its scroll position.
+    const SuspendsForever = () => {
+      throw new Promise(() => {});
+    };
+
+    const { container } = render(
+      <Provider store={makeStore()}>
+        <MemoryRouter initialEntries={['/dashboard']}>
+          <Routes>
+            <Route element={<AppLayout />}>
+              <Route path="dashboard" element={<SuspendsForever />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </Provider>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('aside'), 'sidebar unmounted while the page suspended').toBeTruthy();
+    expect(container.querySelector('main'), 'page outlet unmounted while the page suspended').toBeTruthy();
+    expect(
+      container.querySelector('main').innerHTML.length,
+      'no fallback rendered inside the outlet',
+    ).toBeGreaterThan(0);
+
+    cleanup();
   });
 
   it('does not bounce an authorised user off a permitted page', async () => {

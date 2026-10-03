@@ -418,6 +418,11 @@ export async function updateInvoice(id, branchFilter, data, userId) {
       );
     }
 
+    // Capture the total before mutation so the revenue movement can be
+    // measured against it. Financial fields are locked above once the invoice
+    // is paid, so this only ever runs on unpaid/partially-paid invoices.
+    const previousTotal = round2(invoice.total);
+
     const changelog = [];
 
     if (data.items !== undefined) {
@@ -459,11 +464,54 @@ export async function updateInvoice(id, branchFilter, data, userId) {
 
     await invoice.save({ session });
 
+    const newTotal = round2(invoice.total);
+
     // Money invariant: a partial/unpaid invoice must never end up overpaid
     // after a total reduction.
-    if (invoice.paidAmount > round2(invoice.total) + 0.01) {
+    if (invoice.paidAmount > newTotal + 0.01) {
       throw ApiError.badRequest(
-        `Total (${invoice.total.toFixed(2)}) cannot be less than the amount already paid (${invoice.paidAmount.toFixed(2)})`,
+        `Total (${newTotal.toFixed(2)}) cannot be less than the amount already paid (${invoice.paidAmount.toFixed(2)})`,
+      );
+    }
+
+    // BR-BL-05: revenue was recognized at issue time for the ORIGINAL total, so
+    // editing items/discount/tax moves revenue that has already been booked.
+    // Without this entry the ledger keeps the superseded total forever: the
+    // invoice document says one thing and the P&L another. Post only the delta
+    // so repeated edits converge instead of re-accruing the whole invoice.
+    //
+    // Only the uncollected part is adjusted. The already-collected portion has
+    // been settled by its own payment entries and must not move — which is why
+    // this is computed from the change in total and never from the new total.
+    const totalDelta = round2(newTotal - previousTotal);
+    if (Math.abs(totalDelta) > 0.01) {
+      await postJournalEntry(
+        {
+          tenant: invoice.tenant,
+          branch: invoice.branch,
+          date: new Date(),
+          sourceType: 'adjustment',
+          sourceId: invoice._id,
+          sourceModel: 'Invoice',
+          description: totalDelta > 0
+            ? `Invoice ${invoice.invoiceNo} amended — increase revenue`
+            : `Invoice ${invoice.invoiceNo} amended — reduce revenue`,
+          lines: totalDelta > 0
+            ? [
+                { account: 'accounts_receivable', debit: totalDelta, memo: invoice.invoiceNo },
+                { account: 'revenue', credit: totalDelta, memo: 'invoice amendment' },
+              ]
+            : [
+                { account: 'revenue', debit: Math.abs(totalDelta), memo: 'invoice amendment' },
+                {
+                  account: 'accounts_receivable',
+                  credit: Math.abs(totalDelta),
+                  memo: invoice.invoiceNo,
+                },
+              ],
+          userId,
+        },
+        session,
       );
     }
 
@@ -997,19 +1045,70 @@ export async function refundPayment(id, branchFilter, { amount, method, referenc
     // total (which ignores prior refunds) — ensures a refund that clears the
     // invoice entirely reaches a ~1.0 ratio and VOIDS the commission, instead
     // of leaving a residual 'pending' balance on a fully-refunded invoice.
+    //
+    // Only `pending` records are touched. A commission that was already marked
+    // `paid` has had its liability settled by the payout entry
+    // (Dr commissions_payable / Cr cash) and its cash has already left the
+    // business, so neither voiding it nor re-accruing it here is correct —
+    // clawing back an already-paid commission is a separate payout flow.
     const paidBeforeRefund = round2(invoice.paidAmount + refundAmount);
-    if (paidBeforeRefund > 0) {
-      const commissions = await Commission.find({ invoice: invoice._id }).session(session);
-      for (const commission of commissions) {
-        const refundRatio = refundAmount / paidBeforeRefund;
-        if (refundRatio >= 0.999) {
-          commission.status = 'void';
-          await commission.save({ session });
-        } else {
-          commission.baseAmount = round2(commission.baseAmount * (1 - refundRatio));
-          await commission.save({ session });
-        }
+    const commissions = await Commission.find({
+      invoice: invoice._id,
+      status: 'pending',
+    }).session(session);
+    for (const commission of commissions) {
+      const refundRatio = refundAmount / paidBeforeRefund;
+      if (refundRatio >= 0.999) {
+        commission.status = 'void';
+        await commission.save({ session });
+      } else {
+        commission.baseAmount = round2(commission.baseAmount * (1 - refundRatio));
+        await commission.save({ session });
       }
+    }
+
+    // BR-BL-05: a refund shrinks (or cancels) the commission still owed, so the
+    // accrual booked when the invoice was paid has to be adjusted by the same
+    // net change. Without this the `commissions_payable` liability keeps the
+    // pre-refund amount while the commission records have been reduced — the
+    // ledger stops reconciling with the commission sub-ledger.
+    //
+    // This posts only the delta against the accrual already booked for this
+    // invoice, exactly mirroring `accrueCommissionForInvoice`. That makes it
+    // safe for repeated partial refunds: the running liability tracks the
+    // running commission total instead of being reversed twice.
+    const pendingTotal = round2(
+      (await Commission.find({ invoice: invoice._id, status: 'pending' }).session(session))
+        .reduce((sum, c) => sum + (Number(c.amount) || 0), 0),
+    );
+    const priorCommissionEntry = await JournalEntry.findOne({
+      branch: invoice.branch,
+      sourceType: 'commission',
+      sourceId: invoice._id,
+    }).session(session);
+    const priorAmount = priorCommissionEntry ? round2(Math.abs(priorCommissionEntry.totalCredit || 0)) : 0;
+    const delta = round2(pendingTotal - priorAmount);
+    if (Math.abs(delta) > 0.01) {
+      const fullVoid = pendingTotal === 0;
+      await postJournalEntry(
+        {
+          tenant: invoice.tenant,
+          branch: invoice.branch,
+          date: new Date(),
+          sourceType: 'adjustment',
+          sourceId: invoice._id,
+          sourceModel: 'Commission',
+          description: fullVoid
+            ? `Refund invoice ${invoice.invoiceNo} — reverse commission accrual`
+            : `Refund invoice ${invoice.invoiceNo} — reduce commission accrual`,
+          lines: [
+            { account: 'commissions_payable', debit: Math.abs(delta), memo: invoice.invoiceNo },
+            { account: 'expenses', credit: Math.abs(delta), memo: 'commission reversal' },
+          ],
+          userId,
+        },
+        session,
+      );
     }
 
     return invoice;

@@ -1,32 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
+import { useSearchParams } from 'react-router-dom';
 
 import Card from '../components/ui/Card';
 import PageHeader from '../components/ui/PageHeader';
+import SegmentedControl from '../components/ui/SegmentedControl';
+import SettingRow from '../components/ui/SettingRow';
 import TabList from '../components/ui/TabList';
 import TabPanel from '../components/ui/TabPanel';
+import { BuildingIcon, MailIcon, MoonIcon, SunIcon, UserIcon } from '../components/ui/icons';
 import { useT } from '../lib/i18n';
-import { roleLabel, useCanManageSettings, usePermission } from '../lib/roles';
+import { useCanManageSettings, usePermission, userRoleLabel } from '../lib/roles';
 import { useTabIds } from '../lib/tabs';
 import { usePreferences } from '../features/preferences/usePreferences';
 import WhatsAppSettings from '../features/settings/WhatsAppSettings';
-
-function SunIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-    </svg>
-  );
-}
-
-function MoonIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z" />
-    </svg>
-  );
-}
 
 /**
  * Profile and Appearance are personal and readable by anyone who can open
@@ -41,21 +28,52 @@ const TABS = [
   { key: 'whatsapp', labelKey: 'settings.tab.whatsapp', canView: (canRead, canManage) => canRead && canManage },
 ];
 
+const DEFAULT_TAB = TABS[0].key;
+
+/** Initials for the avatar fallback — no image is loaded for the signed-in user. */
+function initialsOf(name = '') {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 export default function Settings() {
   const { t } = useT();
   const { lang, theme, changeLanguage, changeTheme } = usePreferences();
   const user = useSelector((s) => s.auth.user);
   const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState('profile');
   const tabIds = useTabIds();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const canReadSettings = usePermission('settings', 'read');
   const canManageSettings = useCanManageSettings();
 
   const visibleTabs = TABS.filter((tb) => tb.canView(canReadSettings, canManageSettings));
-  // A plan downgrade or role change can revoke a tab while it is open; fall back
-  // to Profile rather than rendering nothing under a dead tab button.
-  const activeTab = visibleTabs.some((tb) => tb.key === tab) ? tab : visibleTabs[0]?.key;
+
+  // The tab lives in the URL so a specific panel can be linked to and survives a
+  // reload; an unknown or no-longer-permitted `?tab=` falls back to the first
+  // tab this user can actually see rather than rendering an empty panel.
+  const requestedTab = searchParams.get('tab');
+  const activeTab = visibleTabs.some((tb) => tb.key === requestedTab)
+    ? requestedTab
+    : DEFAULT_TAB;
+
+  useEffect(() => {
+    if (visibleTabs.length === 0) return;
+    if (requestedTab && !visibleTabs.some((tb) => tb.key === requestedTab)) {
+      // Normalise a stale ?tab= so the next reload does not re-resolve it.
+      const next = new URLSearchParams(searchParams);
+      next.set('tab', visibleTabs[0].key);
+      setSearchParams(next, { replace: true });
+    }
+  }, [requestedTab, visibleTabs, searchParams, setSearchParams]);
+
+  const setTab = (key) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', key);
+    setSearchParams(next);
+  };
 
   // The timer used to be parked on the function object itself, so it survived
   // across mounts and could fire into an unmounted component. A ref is the
@@ -72,17 +90,29 @@ export default function Settings() {
   const onLang = (next) => { changeLanguage(next); flashSaved(); };
   const onTheme = (next) => { changeTheme(next); flashSaved(); };
 
-  const optionCls = (active) =>
-    [
-      'flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition',
-      active
-        ? 'border-brand bg-brand/10 text-brand dark:text-brand-light'
-        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700',
-    ].join(' ');
+  // `user.role` is always undefined - the document carries `roleId`, which
+  // `/auth/me` leaves unpopulated. Resolved in one place so the badge and the
+  // detail row can never disagree.
+  const roleText = userRoleLabel(user);
+
+  const profileFacts = user
+    ? [
+        { key: 'email', icon: <MailIcon width={16} height={16} />, label: t('login.email'), value: user.email },
+        ...(roleText
+          ? [{ key: 'role', icon: <UserIcon width={16} height={16} />, label: t('settings.role'), value: roleText }]
+          : []),
+        ...(user.branch?.name
+          ? [{ key: 'branch', icon: <BuildingIcon width={16} height={16} />, label: t('settings.branch'), value: user.branch.name }]
+          : []),
+      ]
+    : [];
 
   return (
-    <div className="space-y-6">
-      <PageHeader title={t('settings.title')} subtitle={t('settings.appearanceHint')} />
+    <div className="mx-auto max-w-4xl space-y-6">
+      <PageHeader
+        title={t('settings.title')}
+        subtitle={t('settings.subtitle')}
+      />
 
       <TabList
         tabs={visibleTabs.map((tb) => ({ key: tb.key, label: t(tb.labelKey) }))}
@@ -93,53 +123,115 @@ export default function Settings() {
       />
 
       <TabPanel tabIds={tabIds} tabKey={activeTab}>
-      {/* Profile */}
-      {activeTab === 'profile' && user && (
-        <Card title={user.name}>
-          <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-            <div className="text-slate-500 dark:text-slate-400">{t('login.email')}</div>
-            <div className="font-medium text-slate-800 dark:text-slate-100">{user.email}</div>
-            <div className="text-slate-500 dark:text-slate-400">{t('settings.role')}</div>
-            <div className="font-medium text-slate-800 dark:text-slate-100">
-              {roleLabel(user.role)}
-            </div>
-            {user.branch?.name && (
-              <>
-                <div className="text-slate-500 dark:text-slate-400">{t('settings.branch')}</div>
-                <div className="font-medium text-slate-800 dark:text-slate-100">{user.branch.name}</div>
-              </>
-            )}
-          </dl>
-        </Card>
-      )}
-
-      {/* Appearance */}
-      {activeTab === 'appearance' && (
-        <Card title={t('settings.appearance')}>
+        {/* Profile — read-only. Identity fields are owned by whoever administers
+            the account, so the card states that rather than showing controls
+            that would not work. */}
+        {activeTab === 'profile' && user && (
           <div className="space-y-6">
-            <div>
-              <p className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-200">{t('settings.language')}</p>
-              <div className="flex flex-wrap gap-3">
-                <button type="button" onClick={() => onLang('en')} className={optionCls(lang === 'en')}>English</button>
-                <button type="button" onClick={() => onLang('ar')} className={optionCls(lang === 'ar')}>العربية</button>
+            <Card padded={false}>
+              <div className="flex flex-wrap items-center gap-4 p-5">
+                <span
+                  aria-hidden="true"
+                  className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-brand/10 text-lg font-semibold text-brand-dark ring-1 ring-brand/15 dark:bg-brand/15 dark:text-brand-light dark:ring-brand/20"
+                >
+                  {initialsOf(user.name)}
+                </span>
+                <div className="min-w-0">
+                  <h2 className="truncate text-lg font-semibold text-slate-900 dark:text-white">
+                    {user.name}
+                  </h2>
+                  <p className="truncate text-sm text-slate-500 dark:text-slate-400">
+                    {user.email}
+                  </p>
+                </div>
+                {/* Omitted entirely when the role cannot be resolved, so the
+                    card never shows an empty chip. */}
+                {roleText && (
+                  <span className="ms-auto rounded-full bg-brand/5 px-2.5 py-1 text-xs font-medium text-brand-dark dark:bg-brand/20 dark:text-brand-light">
+                    {roleText}
+                  </span>
+                )}
               </div>
-            </div>
-            <div>
-              <p className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-200">{t('settings.theme')}</p>
-              <div className="flex flex-wrap gap-3">
-                <button type="button" onClick={() => onTheme('light')} className={optionCls(theme === 'light')}><SunIcon />{t('theme.light')}</button>
-                <button type="button" onClick={() => onTheme('dark')} className={optionCls(theme === 'dark')}><MoonIcon />{t('theme.dark')}</button>
-              </div>
-            </div>
-            {saved && <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">{t('settings.saved')}</p>}
+            </Card>
+
+            <Card title={t('settings.profile.details')}>
+              <dl className="divide-y divide-slate-100 dark:divide-slate-800">
+                {profileFacts.map((fact) => (
+                  <div key={fact.key} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                    <dt className="flex min-w-0 flex-1 items-center gap-2.5 text-sm text-slate-500 dark:text-slate-400">
+                      <span className="text-slate-400 dark:text-slate-500" aria-hidden="true">{fact.icon}</span>
+                      {fact.label}
+                    </dt>
+                    <dd className="min-w-0 break-words text-end text-sm font-medium text-slate-800 dark:text-slate-100">
+                      {fact.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="mt-5 border-t border-slate-100 pt-4 text-xs leading-relaxed text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                {t('settings.profile.managedHint')}
+              </p>
+            </Card>
           </div>
-        </Card>
-      )}
+        )}
 
-      {/* WhatsApp */}
-      {activeTab === 'whatsapp' && <WhatsAppSettings />}
+        {/* Appearance — every change applies instantly and is persisted by
+            `usePreferences`, so there is no Save button by design. */}
+        {activeTab === 'appearance' && (
+          <div className="space-y-6">
+            <Card title={t('settings.appearance')}>
+              <div className="space-y-6">
+                <SettingRow
+                  label={t('settings.language')}
+                  description={t('settings.languageHint')}
+                >
+                  <SegmentedControl
+                    label={t('settings.language')}
+                    value={lang}
+                    onChange={onLang}
+                    options={[
+                      { value: 'en', label: 'English' },
+                      { value: 'ar', label: 'العربية' },
+                    ]}
+                  />
+                </SettingRow>
+
+                <div className="border-t border-slate-100 pt-6 dark:border-slate-800">
+                  <SettingRow
+                    label={t('settings.theme')}
+                    description={t('settings.themeHint')}
+                  >
+                    <SegmentedControl
+                      label={t('settings.theme')}
+                      value={theme}
+                      onChange={onTheme}
+                      options={[
+                        { value: 'light', label: t('theme.light'), icon: <SunIcon width={16} height={16} /> },
+                        { value: 'dark', label: t('theme.dark'), icon: <MoonIcon width={16} height={16} /> },
+                      ]}
+                    />
+                  </SettingRow>
+                </div>
+              </div>
+            </Card>
+
+            {/* Announced as a live region: the change is applied instantly, so
+                without this the confirmation would be visual-only feedback for
+                an action that has no other visible effect. */}
+            <div role="status" aria-live="polite" className="min-h-5">
+              {saved && (
+                <p className="flex items-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                  <span aria-hidden="true">✓</span>
+                  {t('settings.saved')}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* WhatsApp */}
+        {activeTab === 'whatsapp' && <WhatsAppSettings />}
       </TabPanel>
-
     </div>
   );
 }

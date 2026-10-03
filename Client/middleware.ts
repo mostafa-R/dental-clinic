@@ -61,6 +61,21 @@ export default async function middleware(request) {
   headers.set('x-forwarded-host', url.host);
   headers.set('x-forwarded-proto', url.protocol.replace(':', ''));
 
+  // Do NOT pass the browser's own `x-forwarded-for` through. It is a plain
+  // request header, so any client can set it to anything, and once the backend
+  // trusts one proxy hop it reads that value as `req.ip` — which is what the
+  // login throttle, the site-admin IP allowlist and the recovery rate limiters
+  // key on. Forwarding it lets an attacker rotate a fake address per request
+  // and bypass all three. Rebuild the chain from the edge's own authoritative
+  // header instead: `x-vercel-forwarded-for` is set by Vercel and cannot be
+  // spoofed by the client (the platform overwrites it before we see it).
+  headers.delete('x-forwarded-for');
+  const clientIp =
+    request.headers.get('x-vercel-forwarded-for') ??
+    request.headers.get('x-real-ip') ??
+    request.headers.get('cf-connecting-ip');
+  if (clientIp) headers.set('x-forwarded-for', clientIp);
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 

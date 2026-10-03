@@ -10,7 +10,7 @@ import { showErrorDialog, pushToast } from '../features/ui/uiSlice';
 import { requestConfirm } from '../features/ui/confirmDialog';
 import { useSocketEvent } from '../lib/socket';
 import { useT } from '../lib/i18n';
-import { useCanManageUsers, roleLabel } from '../lib/roles';
+import { useCanManageUsers, userRoleLabel } from '../lib/roles';
 import UserFormModal from '../features/users/UserFormModal';
 
 export default function Users() {
@@ -156,7 +156,7 @@ export default function Users() {
               <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{u.email}</td>
               <td className="px-4 py-3">
                 <span className="inline-flex rounded-full bg-brand/5 px-2.5 py-0.5 text-xs font-medium text-brand-dark dark:bg-brand/20 dark:text-brand-light">
-                  {u.roleId?.name || roleLabel(u.role)}
+                  {userRoleLabel(u)}
                 </span>
               </td>
               <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{u.branch?.name || '—'}</td>

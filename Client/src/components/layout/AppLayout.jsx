@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import Sidebar from "./Sidebar";
@@ -8,6 +8,7 @@ import { applyServerPreferences } from "../../features/preferences/usePreference
 import { initNotifications } from "../../lib/notificationSound";
 import { setClinicTimeZone } from "../../lib/clinicTime";
 import { useT } from "../../lib/i18n";
+import Skeleton from "../ui/Skeleton";
 
 function ImpersonationBanner() {
   const user = useSelector((s) => s.auth.user);
@@ -27,6 +28,19 @@ function ImpersonationBanner() {
       <span className="text-xs bg-white/20 px-2 py-0.5 rounded">
         {t("impersonation.by")} {user._impersonator || t("impersonation.admin")}
       </span>
+    </div>
+  );
+}
+
+/** Placeholder for a page chunk that has not arrived yet. */
+function PageFallback() {
+  return (
+    <div className="mx-auto w-full max-w-5xl space-y-6">
+      <div className="space-y-3">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-4 w-80" />
+      </div>
+      <Skeleton className="h-64 w-full" />
     </div>
   );
 }
@@ -70,9 +84,18 @@ export default function AppLayout() {
         <ImpersonationBanner />
         <Topbar />
         <main className="flex-1 overflow-y-auto p-6">
-          <div key={location.pathname} className="animate-page-in">
-            <Outlet />
-          </div>
+          {/* Page-level Suspense lives here, not only around `<Routes>` in
+              App.jsx. Every page is a `lazy()` import, and with a single
+              boundary at the top the whole shell — sidebar, topbar, banner —
+              was replaced by the route skeleton on each navigation, so the app
+              visibly blinked out and back and the sidebar lost scroll position
+              and open state. Scoping the fallback to the outlet keeps the chrome
+              mounted and only the page area waits. */}
+          <Suspense fallback={<PageFallback />}>
+            <div key={location.pathname} className="animate-page-in">
+              <Outlet />
+            </div>
+          </Suspense>
         </main>
       </div>
     </div>

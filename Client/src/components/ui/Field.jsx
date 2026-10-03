@@ -1,22 +1,9 @@
-import { createContext, forwardRef, useContext, useId } from 'react';
+import { useId } from 'react';
+
+import { FieldContext, useFieldA11y } from './fieldContext';
 
 export const inputCls =
   'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-brand dark:focus:ring-brand/20';
-
-const FieldContext = createContext(null);
-
-function useFieldA11y(props) {
-  const ctx = useContext(FieldContext);
-  if (!ctx) return props;
-  const { fieldId, describedById, hasError, isRequired } = ctx;
-  return {
-    ...props,
-    id: props.id ?? fieldId,
-    'aria-invalid': hasError ? true : props['aria-invalid'],
-    'aria-describedby': props['aria-describedby'] ?? describedById,
-    'aria-required': isRequired || props['aria-required'],
-  };
-}
 
 export function Field({ label, htmlFor, hint, error, required, children, className }) {
   const autoId = useId();
@@ -43,21 +30,21 @@ export function Field({ label, htmlFor, hint, error, required, children, classNa
   );
 }
 
-export const TextInput = forwardRef(function TextInput({ className, ...props }, ref) {
+export const TextInput = ({ className, ...props }) => {
   const a11y = useFieldA11y(props);
-  return <input ref={ref} className={`${inputCls} ${className ?? ''}`} {...a11y} />;
-});
+  return <input className={`${inputCls} ${className ?? ''}`} {...a11y} />;
+};
 
-export const Textarea = forwardRef(function Textarea({ className, ...props }, ref) {
+export const Textarea = ({ className, ...props }) => {
   const a11y = useFieldA11y(props);
-  return <textarea ref={ref} className={`${inputCls} ${className ?? ''}`} {...a11y} />;
-});
+  return <textarea className={`${inputCls} ${className ?? ''}`} {...a11y} />;
+};
 
-export const Select = forwardRef(function Select({ className, children, ...props }, ref) {
+export const Select = ({ className, children, ...props }) => {
   const a11y = useFieldA11y(props);
   return (
-    <select ref={ref} className={`${inputCls} ${className ?? ''}`} {...a11y}>
+    <select className={`${inputCls} ${className ?? ''}`} {...a11y}>
       {children}
     </select>
   );
-});
+};

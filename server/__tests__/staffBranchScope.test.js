@@ -124,7 +124,7 @@ describe('staff single-record routes are branch-scoped', () => {
     for (const [name, handler, overrides] of HANDLERS) {
       vi.clearAllMocks();
       // A hit from another branch, as the unscoped query would have returned.
-      findOne.mockReturnValue(query({ _id: 'other', toSafeObject: () => ({}) }));
+      findOne.mockReturnValue(query({ _id: '507f191e810c19729de860ea', toSafeObject: () => ({}) }));
       await run(handler, makeReq(overrides));
       const filter = firstFilter();
       expect(Object.keys(filter), `${name} must constrain by branch`).toContain('branch');

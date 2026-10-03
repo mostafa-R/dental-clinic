@@ -8,21 +8,27 @@ export const formatCurrency = (amount, currency = "USD", language = "en") => {
 };
 
 export const formatDate = (date, language = "en") => {
+  if (!date) return "—";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return "—";
   return new Intl.DateTimeFormat(getLocale(language), {
     year: "numeric",
     month: "short",
     day: "numeric",
-  }).format(new Date(date));
+  }).format(d);
 };
 
 export const formatDateTime = (date, language = "en") => {
+  if (!date) return "—";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return "—";
   return new Intl.DateTimeFormat(getLocale(language), {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(date));
+  }).format(d);
 };
 
 export const formatNumber = (num, language = "en") => {
@@ -34,8 +40,10 @@ export const formatPercentage = (value) => {
 };
 
 export const getRelativeTime = (date, language = "en") => {
+  if (!date) return "—";
   const now = new Date();
   const past = new Date(date);
+  if (isNaN(past.getTime())) return "—";
   const diffInSeconds = Math.floor((now - past) / 1000);
 
   if (diffInSeconds < 60) return language === "ar" ? "الآن" : "just now";

@@ -9,7 +9,26 @@ import crypto from 'node:crypto';
  * This makes signed consents tamper-evident without a third-party provider.
  */
 export function signingKey() {
-  return process.env.CONSENT_SIGNING_KEY || process.env.JWT_SECRET || 'dev-only-consent-key';
+  const key = process.env.CONSENT_SIGNING_KEY || process.env.JWT_SECRET;
+
+  // A hardcoded fallback means anyone who has read the source can forge a
+  // signature on a signed consent, and recomputing one is enough to defeat the
+  // tamper check entirely. That is a correctness bug in development (records
+  // signed under one key stop verifying after the env changes) and a legal
+  // problem in production, so refuse to run rather than sign with a public key.
+  // Local development keeps the old literal so the existing test suite and seed
+  // data behave the same without extra setup.
+  if (!key) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'CONSENT_SIGNING_KEY (or JWT_SECRET) must be set to sign consents. ' +
+          'Refusing to fall back to a built-in key, because that key is public.',
+      );
+    }
+    return 'dev-only-consent-key';
+  }
+
+  return key;
 }
 
 /**

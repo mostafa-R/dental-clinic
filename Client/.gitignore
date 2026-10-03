@@ -13,6 +13,9 @@ dist-ssr
 *.local
 .env
 .env.*
+# The documented template is meant to be committed; every other .env.* variant
+# (per-branch, .env.production, .env.staging.local) stays ignored.
+!.env.example
 
 # Editor directories and files
 .vscode/*

@@ -3,6 +3,7 @@ import { clearMaintenanceCache } from '../../middleware/maintenance.js';
 import { clearIpAllowlistCache } from '../../middleware/ipAllowlist.js';
 
 const ALLOWED_KEYS = [
+  'siteName', 'supportEmail',
   'autoSuspendDays', 'emailNotifications', 'maintenanceMode',
   'allowedDomains', 'allowedSiteIps', 'maxTenants', 'defaultPlan', 'trialDays',
   'backupEnabled', 'backupRetentionDays', 'backupTime',

@@ -18,27 +18,58 @@ import {
 import { fetchPlans } from "../features/plans/plansSlice";
 import { setLanguage, setTheme } from "../features/ui/uiSlice";
 import { MoonIcon, SunIcon } from "../components/ui/icons";
+import PageHeader from "../components/ui/PageHeader";
 import { t } from "../lib/i18n";
 import { canUserAccess } from "../lib/permissions";
+
+const listToText = (value) => (Array.isArray(value) ? value.join("\n") : "");
+
+// The API takes arrays; the textarea uses one entry per line.
+const textToList = (value) =>
+  value
+    .split(/[\n,]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+const toNumber = (value, fallback) => {
+  if (value === "" || value === null || value === undefined) return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
 
 export default function Settings() {
   const dispatch = useDispatch();
   const { theme, language } = useSelector((state) => state.ui);
   const { user } = useSelector((state) => state.auth);
-  const { settings, loading } = useSelector((state) => state.platform);
+  const { settings, loading, error: platformError } = useSelector(
+    (state) => state.platform,
+  );
   const { items: plans } = useSelector((state) => state.plans);
   const isSuperAdmin = user?.role === "super_admin";
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saved, setSaved] = useState(false);
   const [showDisableModal, setShowDisableModal] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
   const twofa = useSelector((state) => state.twofa);
   const [platformFormData, setPlatformFormData] = useState({
+    siteName: "",
+    supportEmail: "",
     autoSuspendDays: 30,
     emailNotifications: true,
     maintenanceMode: false,
     trialDays: 14,
     defaultPlan: "",
+    allowedDomains: "",
+    allowedSiteIps: "",
+    maxTenants: 100,
+    backupEnabled: false,
+    backupRetentionDays: 30,
+    backupTime: "02:00",
   });
+
+  const setPlatformField = (key, value) =>
+    setPlatformFormData((prev) => ({ ...prev, [key]: value }));
 
   useEffect(() => {
     dispatch(fetchPlatformSettings());
@@ -54,12 +85,22 @@ export default function Settings() {
 
   useEffect(() => {
     if (settings) {
+      // `??` rather than `||`: autoSuspendDays of 0 means "never auto-suspend"
+      // and was being rewritten to 30.
       setPlatformFormData({
-        autoSuspendDays: settings.autoSuspendDays || 30,
+        siteName: settings.siteName || "",
+        supportEmail: settings.supportEmail || "",
+        autoSuspendDays: settings.autoSuspendDays ?? 30,
         emailNotifications: settings.emailNotifications ?? true,
         maintenanceMode: settings.maintenanceMode ?? false,
-        trialDays: settings.trialDays || 14,
+        trialDays: settings.trialDays ?? 14,
         defaultPlan: settings.defaultPlan || "",
+        allowedDomains: listToText(settings.allowedDomains),
+        allowedSiteIps: listToText(settings.allowedSiteIps),
+        maxTenants: settings.maxTenants ?? 100,
+        backupEnabled: settings.backupEnabled ?? false,
+        backupRetentionDays: settings.backupRetentionDays ?? 30,
+        backupTime: settings.backupTime || "02:00",
       });
     }
   }, [settings]);
@@ -94,8 +135,33 @@ export default function Settings() {
 
   const handlePlatformSave = async () => {
     setSaving(true);
+    setSaveError("");
+    setSaved(false);
     try {
-      await dispatch(updatePlatformSettings(platformFormData));
+      const result = await dispatch(
+        updatePlatformSettings({
+          siteName: platformFormData.siteName.trim(),
+          supportEmail: platformFormData.supportEmail.trim(),
+          autoSuspendDays: toNumber(platformFormData.autoSuspendDays, 30),
+          emailNotifications: platformFormData.emailNotifications,
+          maintenanceMode: platformFormData.maintenanceMode,
+          trialDays: toNumber(platformFormData.trialDays, 14),
+          defaultPlan: platformFormData.defaultPlan,
+          allowedDomains: textToList(platformFormData.allowedDomains),
+          allowedSiteIps: textToList(platformFormData.allowedSiteIps),
+          maxTenants: toNumber(platformFormData.maxTenants, 100),
+          backupEnabled: platformFormData.backupEnabled,
+          backupRetentionDays: toNumber(platformFormData.backupRetentionDays, 30),
+          backupTime: platformFormData.backupTime,
+        }),
+      );
+      // PUT /platform is gated behind a fresh 2FA check, so a rejected token
+      // is the most likely failure — surface it instead of saving silently.
+      if (updatePlatformSettings.rejected.match) {
+        setSaveError(result.error);
+      } else {
+        setSaved(true);
+      }
     } finally {
       setSaving(false);
     }
@@ -105,8 +171,38 @@ export default function Settings() {
     return <PageLoader />;
   }
 
+  const canEditPlatform = canUserAccess(user, "settings.update");
+  const numberInputClass =
+    "w-24 px-3 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-center";
+  const textInputClass =
+    "w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none";
+  const settingRowClass =
+    "flex items-center justify-between gap-4 p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg";
+  const settingLabelClass = "font-medium text-slate-900 dark:text-white";
+  const settingDescClass = "text-sm text-slate-500 dark:text-slate-400";
+
+  const toggleSwitch = (checked, onChange, tone = "indigo") => {
+    const focusRing = tone === "red" ? "peer-focus:ring-red-300 dark:peer-focus:ring-red-800" : "peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800";
+    const checkedBg = tone === "red" ? "peer-checked:bg-red-600" : "peer-checked:bg-indigo-600";
+    return (
+      <label className="relative inline-flex items-center cursor-pointer shrink-0">
+        <input
+          type="checkbox"
+          className="sr-only peer"
+          checked={checked}
+          onChange={onChange}
+        />
+        <div
+          className={`w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 ${focusRing} rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-500 ${checkedBg}`}
+        />
+      </label>
+    );
+  };
+
   return (
     <div className="p-6 max-w-4xl">
+      <PageHeader title={t("settings", language)} />
+
       <Card className="mb-6">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
           {t("profile", language)}
@@ -323,149 +419,247 @@ export default function Settings() {
         </div>
       </Card>
 
-      <Card className="mb-6">
-        <div className="flex items-center justify-between mb-4">
+<Card className="mb-6">
+        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
             {t("platformSettings", language)}
           </h3>
-          {canUserAccess(user, "settings.update") && (
+          {canEditPlatform && (
             <Button onClick={handlePlatformSave} loading={saving}>
               {t("save", language)}
             </Button>
           )}
         </div>
+
+        {!canEditPlatform && (
+          <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+            {t("superAdmin2faRequired", language)}
+          </p>
+        )}
+
+        {(saveError || platformError) && (
+          <p className="mb-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-sm text-red-700 dark:text-red-400">
+            {saveError || platformError}
+          </p>
+        )}
+        {saved && (
+          <p className="mb-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-3 text-sm text-green-700 dark:text-green-400">
+            {t("platformSaved", language)}
+          </p>
+        )}
+
         <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
-            <div>
-              <p className="font-medium text-slate-900 dark:text-white">
-                {t("autoSuspendTenants", language)}
-              </p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {t("autoSuspendDesc", language)}
-              </p>
-            </div>
+          <div>
+            <label className={settingLabelClass} htmlFor="platform-site-name">
+              {t("siteName", language)}
+            </label>
+            <p className={`${settingDescClass} mb-2`}>{t("siteNameDesc", language)}</p>
             <input
-              type="number"
-              value={platformFormData.autoSuspendDays}
-              onChange={(e) =>
-                setPlatformFormData({
-                  ...platformFormData,
-                  autoSuspendDays: parseInt(e.target.value) || 30,
-                })
-              }
-              className="w-20 px-3 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-center"
+              id="platform-site-name"
+              type="text"
+              value={platformFormData.siteName}
+              onChange={(e) => setPlatformField("siteName", e.target.value)}
+              className={textInputClass}
             />
-            <span className="text-sm text-slate-500 dark:text-slate-400">
-              {t("days", language)}
-            </span>
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
-            <div>
-              <p className="font-medium text-slate-900 dark:text-white">
-                {t("trialPeriod", language)}
-              </p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {t("trialPeriodDesc", language)}
-              </p>
-            </div>
+          <div>
+            <label className={settingLabelClass} htmlFor="platform-support-email">
+              {t("supportEmail", language)}
+            </label>
+            <p className={`${settingDescClass} mb-2`}>{t("supportEmailDesc", language)}</p>
             <input
-              type="number"
-              value={platformFormData.trialDays}
-              onChange={(e) =>
-                setPlatformFormData({
-                  ...platformFormData,
-                  trialDays: parseInt(e.target.value) || 14,
-                })
-              }
-              className="w-20 px-3 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-center"
+              id="platform-support-email"
+              type="email"
+              value={platformFormData.supportEmail}
+              onChange={(e) => setPlatformField("supportEmail", e.target.value)}
+              className={textInputClass}
             />
-            <span className="text-sm text-slate-500 dark:text-slate-400">
-              {t("days", language)}
-            </span>
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+          <div className={settingRowClass}>
             <div>
-              <p className="font-medium text-slate-900 dark:text-white">
-                {t("defaultPlan", language)}
-              </p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {t("defaultPlanDesc", language)}
-              </p>
+              <p className={settingLabelClass}>{t("autoSuspendTenants", language)}</p>
+              <p className={settingDescClass}>{t("autoSuspendDesc", language)}</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <input
+                type="number"
+                min="0"
+                value={platformFormData.autoSuspendDays}
+                onChange={(e) => setPlatformField("autoSuspendDays", e.target.value)}
+                className={numberInputClass}
+              />
+              <span className="text-sm text-slate-500 dark:text-slate-400">
+                {t("days", language)}
+              </span>
+            </div>
+          </div>
+
+          <div className={settingRowClass}>
+            <div>
+              <p className={settingLabelClass}>{t("trialPeriod", language)}</p>
+              <p className={settingDescClass}>{t("trialPeriodDesc", language)}</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <input
+                type="number"
+                min="0"
+                value={platformFormData.trialDays}
+                onChange={(e) => setPlatformField("trialDays", e.target.value)}
+                className={numberInputClass}
+              />
+              <span className="text-sm text-slate-500 dark:text-slate-400">
+                {t("days", language)}
+              </span>
+            </div>
+          </div>
+
+          <div className={settingRowClass}>
+            <div>
+              <p className={settingLabelClass}>{t("defaultPlan", language)}</p>
+              <p className={settingDescClass}>{t("defaultPlanDesc", language)}</p>
             </div>
             <select
               value={platformFormData.defaultPlan}
-              onChange={(e) =>
-                setPlatformFormData({
-                  ...platformFormData,
-                  defaultPlan: e.target.value,
-                })
-              }
-              className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+              onChange={(e) => setPlatformField("defaultPlan", e.target.value)}
+              className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white shrink-0"
             >
-              {plans.length > 0 ? (
-                plans.map((plan) => (
-                  <option key={plan._id} value={plan.key}>
-                    {plan.name}
-                  </option>
-                ))
-              ) : (
-                <option value={platformFormData.defaultPlan}>
-                  {platformFormData.defaultPlan}
+              {/* An empty option keeps the select valid when the stored plan
+                  key no longer exists in the plans list. */}
+              <option value="">{t("noDefaultPlan", language)}</option>
+              {plans.map((plan) => (
+                <option key={plan._id} value={plan.key}>
+                  {plan.name}
                 </option>
-              )}
+              ))}
+              {!plans.some((plan) => plan.key === platformFormData.defaultPlan) &&
+                platformFormData.defaultPlan && (
+                  <option value={platformFormData.defaultPlan}>
+                    {platformFormData.defaultPlan}
+                  </option>
+                )}
             </select>
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+          <div className={settingRowClass}>
             <div>
-              <p className="font-medium text-slate-900 dark:text-white">
-                {t("emailNotifications", language)}
-              </p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {t("emailNotificationsDesc", language)}
-              </p>
+              <p className={settingLabelClass}>{t("maxTenants", language)}</p>
+              <p className={settingDescClass}>{t("maxTenantsDesc", language)}</p>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={platformFormData.emailNotifications}
-                onChange={(e) =>
-                  setPlatformFormData({
-                    ...platformFormData,
-                    emailNotifications: e.target.checked,
-                  })
-                }
-              />
-              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-500 peer-checked:bg-indigo-600"></div>
-            </label>
+            <input
+              type="number"
+              min="1"
+              value={platformFormData.maxTenants}
+              onChange={(e) => setPlatformField("maxTenants", e.target.value)}
+              className={numberInputClass}
+            />
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
-            <div>
-                <p className="font-medium text-red-900 dark:text-red-200">
-                  {t("maintenanceMode", language)}
-                </p>
-                <p className="text-sm text-red-700 dark:text-red-300">
-                  {t("maintenanceModeDesc", language)}
-                </p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={platformFormData.maintenanceMode}
-                onChange={(e) =>
-                  setPlatformFormData({
-                    ...platformFormData,
-                    maintenanceMode: e.target.checked,
-                  })
-                }
-              />
-              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-300 dark:peer-focus:ring-red-800 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-500 peer-checked:bg-red-600"></div>
+          <div>
+            <label className={settingLabelClass} htmlFor="platform-allowed-domains">
+              {t("allowedDomains", language)}
             </label>
+            <p className={`${settingDescClass} mb-2`}>{t("allowedDomainsDesc", language)}</p>
+            <textarea
+              id="platform-allowed-domains"
+              rows={3}
+              value={platformFormData.allowedDomains}
+              onChange={(e) => setPlatformField("allowedDomains", e.target.value)}
+              placeholder={t("allowedDomainsPlaceholder", language)}
+              className={textInputClass}
+            />
+          </div>
+
+          <div>
+            <label className={settingLabelClass} htmlFor="platform-allowed-ips">
+              {t("allowedSiteIps", language)}
+            </label>
+            <p className={`${settingDescClass} mb-2`}>{t("allowedSiteIpsDesc", language)}</p>
+            <textarea
+              id="platform-allowed-ips"
+              rows={3}
+              value={platformFormData.allowedSiteIps}
+              onChange={(e) => setPlatformField("allowedSiteIps", e.target.value)}
+              placeholder={t("allowedSiteIpsPlaceholder", language)}
+              className={textInputClass}
+            />
+          </div>
+
+          <div className={settingRowClass}>
+            <div>
+              <p className={settingLabelClass}>{t("backupEnabled", language)}</p>
+              <p className={settingDescClass}>{t("backupEnabledDesc", language)}</p>
+            </div>
+            {toggleSwitch(
+              platformFormData.backupEnabled,
+              (e) => setPlatformField("backupEnabled", e.target.checked),
+            )}
+          </div>
+
+          {platformFormData.backupEnabled && (
+            <>
+              <div className={settingRowClass}>
+                <div>
+                  <p className={settingLabelClass}>{t("backupRetentionDays", language)}</p>
+                  <p className={settingDescClass}>
+                    {t("backupRetentionDaysDesc", language)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <input
+                    type="number"
+                    min="1"
+                    value={platformFormData.backupRetentionDays}
+                    onChange={(e) => setPlatformField("backupRetentionDays", e.target.value)}
+                    className={numberInputClass}
+                  />
+                  <span className="text-sm text-slate-500 dark:text-slate-400">
+                    {t("days", language)}
+                  </span>
+                </div>
+              </div>
+
+              <div className={settingRowClass}>
+                <div>
+                  <p className={settingLabelClass}>{t("backupTime", language)}</p>
+                  <p className={settingDescClass}>{t("backupTimeDesc", language)}</p>
+                </div>
+                <input
+                  type="time"
+                  value={platformFormData.backupTime}
+                  onChange={(e) => setPlatformField("backupTime", e.target.value)}
+                  className="px-3 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white shrink-0"
+                />
+              </div>
+            </>
+          )}
+
+          <div className={settingRowClass}>
+            <div>
+              <p className={settingLabelClass}>{t("emailNotifications", language)}</p>
+              <p className={settingDescClass}>{t("emailNotificationsDesc", language)}</p>
+            </div>
+            {toggleSwitch(
+              platformFormData.emailNotifications,
+              (e) => setPlatformField("emailNotifications", e.target.checked),
+            )}
+          </div>
+
+          <div className="flex items-center justify-between gap-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+            <div>
+              <p className="font-medium text-red-900 dark:text-red-200">
+                {t("maintenanceMode", language)}
+              </p>
+              <p className="text-sm text-red-700 dark:text-red-300">
+                {t("maintenanceModeDesc", language)}
+              </p>
+            </div>
+            {toggleSwitch(
+              platformFormData.maintenanceMode,
+              (e) => setPlatformField("maintenanceMode", e.target.checked),
+              "red",
+            )}
           </div>
         </div>
       </Card>

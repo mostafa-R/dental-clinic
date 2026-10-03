@@ -10,9 +10,36 @@ const ROLE_LABELS = {
 };
 
 export function roleLabel(role) {
-  if (!role) return role;
-  const translated = t(`role.${role}`);
-  return translated !== `role.${role}` ? translated : ROLE_LABELS[role] || role;
+  if (!role) return '';
+  // Sometimes the API returns role as an object (populated) or as a key.
+  const key = typeof role === 'string' ? role : role.key || role.name || '';
+  if (!key) return '';
+  const translated = t(`role.${key}`);
+  return translated !== `role.${key}` ? translated : ROLE_LABELS[key] || key;
+}
+
+/**
+ * Display name for a user's role.
+ *
+ * The `User` document has no `role` field — only `roleId`, a ref to a `Role`.
+ * `middleware/auth.js` deliberately does not populate it (RBAC resolves lazily
+ * through `resolveRole()`), so `/auth/me` hands the client a bare ObjectId while
+ * `GET /users` populates `roleId` with `{ name, key }`. Reading `user.role`
+ * therefore always yields `undefined` and rendered an empty label, so this
+ * helper covers every shape the API can return.
+ *
+ * Prefers the populated role's own `name` (clinics name their own roles, so it
+ * is the only truthful label for a custom role) and falls back to the translated
+ * built-in key. An unpopulated `roleId` is an ObjectId, not a role key, so it is
+ * deliberately not passed through.
+ */
+export function userRoleLabel(user) {
+  if (!user) return '';
+  const populated = user.roleId;
+  if (populated && typeof populated === 'object') {
+    return roleLabel({ key: populated.key, name: populated.name });
+  }
+  return roleLabel(user.role);
 }
 
 /**

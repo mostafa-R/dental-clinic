@@ -26,12 +26,12 @@ const router = Router();
  * /api/v1/search:
  *   get:
  *     tags: [Search]
- *     summary: Global search
- *       description: >
- *         Requires `read` on at least one searchable module (patients, appointments,
- *         billing, accounting, branches, users, roles, inventory, emr, prescriptions).
- *         Results are filtered per module, so a user only ever sees sections they
- *         are entitled to. PHI is masked during impersonation.
+  *     summary: Global search
+  *     description: >
+  *       Requires `read` on at least one searchable module (patients, appointments,
+  *       billing, accounting, branches, users, roles, inventory, emr, prescriptions).
+  *       Results are filtered per module, so a user only ever sees sections they
+  *       are entitled to. PHI is masked during impersonation.
  *     security:
  *       - cookieAuth: []
  *     parameters:

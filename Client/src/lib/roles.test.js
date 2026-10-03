@@ -7,7 +7,14 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { checkModuleAccess, isClinicWide, landingPathFor, moduleAccessStatus, roleLabel } from './roles';
+import {
+  checkModuleAccess,
+  isClinicWide,
+  landingPathFor,
+  moduleAccessStatus,
+  roleLabel,
+  userRoleLabel,
+} from './roles';
 import { NAV_ITEMS, NAV_ROUTES, moduleForPath } from './routes';
 
 /** Build a `myPermissions` payload the way `state.users.myPermissions` looks. */
@@ -245,6 +252,40 @@ describe('landing path', () => {
     expect(roleLabel('dentist')).toBe('dentist');
     expect(roleLabel('')).toBe('');
     expect(roleLabel(null)).toBeFalsy();
+  });
+
+  it('resolves a label from a populated roleId', () => {
+    // `GET /users` populates roleId with `{ name, key }`.
+    expect(userRoleLabel({ roleId: { name: 'Front Desk', key: 'receptionist' } })).toBe(
+      'Receptionist',
+    );
+  });
+
+  it('prefers the clinic-authored role name over the built-in key', () => {
+    // Roles are user-definable, so `name` is the only truthful label.
+    expect(userRoleLabel({ roleId: { name: 'Head of Clinical', key: '' } })).toBe(
+      'Head of Clinical',
+    );
+  });
+
+  it('falls back to user.role when roleId is not populated', () => {
+    expect(userRoleLabel({ role: 'doctor' })).toBe('Doctor');
+  });
+
+  it('returns an empty label rather than an ObjectId', () => {
+    // `/auth/me` sends a bare ObjectId. Rendering that would put a 24-character
+    // hex string where a role name belongs.
+    expect(userRoleLabel({ roleId: '65f1c2a4e8b9d0123456789ab' })).toBe('');
+    expect(userRoleLabel({})).toBe('');
+    expect(userRoleLabel(null)).toBe('');
+  });
+
+  it('ignores a bare ObjectId in roleLabel itself', () => {
+    // Defensive: roleLabel is called from several pages with whatever the API
+    // returned.
+    expect(roleLabel('65f1c2a4e8b9d0123456789ab')).toBe('65f1c2a4e8b9d0123456789ab');
+    expect(roleLabel({ key: 'clinic_admin' })).toBe('Clinic Admin');
+    expect(roleLabel({ name: 'Night Shift' })).toBe('Night Shift');
   });
 });
 
