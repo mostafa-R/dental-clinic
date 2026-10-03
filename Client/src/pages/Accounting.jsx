@@ -37,6 +37,7 @@ import {
 import { formatDate, formatMoney } from '../lib/format';
 import { useT } from '../lib/i18n';
 import { useSocketEvent } from '../lib/socket';
+import { SOCKET_EVENTS } from '../lib/socketEvents';
 
 const TABS = [
   { key: 'summary', labelKey: 'accounting.tab.summary' },
@@ -91,11 +92,11 @@ export default function Accounting() {
     if (tab === 'drawings') dispatch(fetchDrawings({ limit: 50 }));
     if (tab === 'commissions') dispatch(fetchCommissions({ limit: 50 }));
   }, [dispatch, tab]);
-  useSocketEvent('expense:created', refetchAll);
-  useSocketEvent('expense:deleted', refetchAll);
-  useSocketEvent('drawing:created', refetchAll);
-  useSocketEvent('drawing:deleted', refetchAll);
-  useSocketEvent('commission:updated', refetchAll);
+  useSocketEvent(SOCKET_EVENTS.EXPENSE_CREATED, refetchAll);
+  useSocketEvent(SOCKET_EVENTS.EXPENSE_DELETED, refetchAll);
+  useSocketEvent(SOCKET_EVENTS.DRAWING_CREATED, refetchAll);
+  useSocketEvent(SOCKET_EVENTS.DRAWING_DELETED, refetchAll);
+  useSocketEvent(SOCKET_EVENTS.COMMISSION_UPDATED, refetchAll);
 
   const onDeleteExpense = async (id) => {
     const ok = await requestConfirm({

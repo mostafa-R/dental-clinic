@@ -1,5 +1,19 @@
 import api from '../../lib/axios';
 
+// Cookies this app actually sets, mirroring `SENSITIVE_COOKIES` in
+// `server/utils/jwt.js`. Only these are expired on logout.
+//
+// The previous version looped over every cookie in `document.cookie` and
+// expired all of them. That reaches outside this app: any cookie a third-party
+// embed or another app set on the same origin was destroyed on logout, which is
+// a destructive side effect on state this module does not own - and it silently
+// logged the user out of sibling apps sharing the host.
+//
+// The session cookies are HttpOnly and cannot be read or expired from JS; they
+// are listed for defensiveness (a cookie set without HttpOnly by a future
+// change would otherwise survive) and are expired by the server regardless.
+const OWNED_COOKIES = ['access_token', 'refresh_token', 'site_access', 'site_refresh', '_csrf'];
+
 // Remove JS-readable session traces on logout. HttpOnly session cookies
 // (`access_token`/`refresh_token`) can only be expired by the server, but the
 // readable `_csrf` cookie plus any sessionStorage snapshot must be purged
@@ -7,11 +21,10 @@ import api from '../../lib/axios';
 // logout call fails.
 export function clearClientSessionTraces() {
   try {
-    const cookies = typeof document !== 'undefined' && document.cookie ? document.cookie.split(';') : [];
-    for (const c of cookies) {
-      const name = c.split('=')[0]?.trim();
-      if (!name) continue;
-      document.cookie = `${name}=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; SameSite=Lax`;
+    if (typeof document !== 'undefined') {
+      for (const name of OWNED_COOKIES) {
+        document.cookie = `${name}=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; SameSite=Lax`;
+      }
     }
   } catch {
     /* non-browser or CSP-blocked — server already expired HttpOnly cookies */

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
@@ -25,6 +25,11 @@ const EMPTY_FORM = {
   notes: '',
 };
 
+const PATIENT_PAGE = 20;
+const PATIENT_SEARCH_DEBOUNCE_MS = 300;
+// Must match `maxLength: 100` on `search` in server listPatientsQuerySchema.
+const PATIENT_SEARCH_MAX = 100;
+
 function round2(n) {
   const x = Number(n) || 0;
   return Math.round((x + Number.EPSILON) * 100) / 100;
@@ -46,49 +51,80 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
   // so the current record is re-read before the form is seeded.
   const [source, setSource] = useState(invoice);
   const [loadingRecord, setLoadingRecord] = useState(false);
-  const [patients, setPatients] = useState([]);
+  // Patient selection used to be a <select> fed by `limit: 100`, which made the
+  // 101st active patient unselectable with no way to reach them. It is now a
+  // server-side search backed by a datalist, same as the appointment form.
+  const [patientSearch, setPatientSearch] = useState('');
+  const [patientOptions, setPatientOptions] = useState([]);
   const [patientsLoading, setPatientsLoading] = useState(false);
-  // These two lists are the only way to pick a patient and a branch, so a
-  // silent failure left an empty dropdown that looked identical to "no data"
-  // and blocked saving with no explanation.
-  const [optionsError, setOptionsError] = useState('');
+  // Held separately from `patientSearch` because the field renders a label, not
+  // an id, and the search results are only the current page of matches.
+  const [selectedPatientName, setSelectedPatientName] = useState('');
+  // The branch list is the only remaining dropdown that can fail silently, and
+  // an empty one looked identical to "no data" and blocked saving with no
+  // explanation.
+  const [branchError, setBranchError] = useState('');
   const [branches, setBranches] = useState([]);
 
   const inputCls =
     'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500';
 
+  const patientSearchTimer = useRef(null);
+  const patientRequestId = useRef(0);
+
   useEffect(() => {
-    if (!open) return undefined;
-    let cancelled = false;
-    setPatientsLoading(true);
-    setOptionsError('');
-    patientApi
-      .list({ limit: 100, isActive: 'true' })
-      .then((d) => {
-        if (!cancelled) setPatients(d.patients || []);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setPatients([]);
-        setOptionsError(t('patients.loadFailed'));
-        dispatch(showErrorDialog({ message: t('patients.loadFailed') }));
-      })
-      .finally(() => {
-        if (!cancelled) setPatientsLoading(false);
-      });
+    // The patient cannot be reassigned while editing, so there is nothing to
+    // look up in that case.
+    if (!open || isEdit) return undefined;
+    clearTimeout(patientSearchTimer.current);
+    // Trim + clamp to the server's `maxLength: 100` on `search`; a longer
+    // pasted value would be rejected with a 400 rather than searched.
+    const term = patientSearch.trim().slice(0, PATIENT_SEARCH_MAX);
+
+    patientSearchTimer.current = setTimeout(() => {
+      const requestId = patientRequestId.current + 1;
+      patientRequestId.current = requestId;
+      setPatientsLoading(true);
+      patientApi
+        .list({ search: term || undefined, page: 1, limit: PATIENT_PAGE, isActive: 'true' })
+        .then((d) => {
+          if (patientRequestId.current !== requestId) return;
+          setPatientOptions(Array.isArray(d?.patients) ? d.patients : []);
+        })
+        .catch(() => {
+          if (patientRequestId.current !== requestId) return;
+          // Leave the field usable; a failed lookup is not worth blocking the
+          // form over on its own.
+          setPatientOptions([]);
+        })
+        .finally(() => {
+          if (patientRequestId.current === requestId) setPatientsLoading(false);
+        });
+    }, PATIENT_SEARCH_DEBOUNCE_MS);
+
     return () => {
-      cancelled = true;
+      clearTimeout(patientSearchTimer.current);
+      // Invalidate anything still in flight so it cannot repopulate the list
+      // after the modal closes.
+      patientRequestId.current += 1;
     };
-  }, [dispatch, open, t]);
+  }, [open, isEdit, patientSearch]);
 
   useEffect(() => {
     if (!open || !canPickBranch) return;
     api
       .get('/branches')
-      .then((r) => setBranches(r.data.data?.branches || []))
+      .then((r) => {
+        setBranches(r.data.data?.branches || []);
+        setBranchError('');
+      })
       .catch(() => {
         setBranches([]);
-        setOptionsError(t('branches.loadFailed'));
+        // Belongs to the branch field, not the patient field. These two were
+        // sharing one `optionsError`, so a branch-list failure also marked the
+        // patient input `aria-invalid` while the message itself rendered under
+        // the branch select — screen readers were pointed at the wrong control.
+        setBranchError(t('branches.loadFailed'));
         dispatch(showErrorDialog({ message: t('branches.loadFailed') }));
       });
   }, [dispatch, open, canPickBranch, t]);
@@ -101,6 +137,12 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
     if (!invoice?._id) {
       setSource(null);
       setForm({ ...EMPTY_FORM });
+      setPatientSearch('');
+      setPatientOptions([]);
+      setSelectedPatientName('');
+      // Cleared here as well as on load failure, so a previous failed open does
+      // not leave a stale error under a freshly loaded branch list.
+      setBranchError('');
       return undefined;
     }
 
@@ -165,6 +207,13 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
 
   const submitting = formStatus === 'loading';
 
+  // A datalist is a free-text input, so the user can type a name that matches
+  // no patient and leave `form.patient` empty. That is the case worth flagging:
+  // an untouched box is merely unfilled, whereas a non-matching name is wrong
+  // and `onSubmit` will reject it. Previously this input's `aria-invalid` was
+  // wired to the *branch* list's load error instead.
+  const patientNameUnmatched = !isEdit && !!patientSearch.trim() && !form.patient;
+
   const onSubmit = async (e) => {
     e.preventDefault();
     if (!form.patient) {
@@ -228,36 +277,66 @@ export default function InvoiceFormModal({ open, invoice, onClose, onSaved }) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="block">
             <span className={labelCls}>{t('billing.col.patient')} <span className="text-red-500">*</span></span>
-            <select
-              value={form.patient}
-              onChange={set('patient')}
+            <input
+              list={isEdit ? undefined : 'invoice-patient-options'}
+              value={isEdit ? (source?.patient?.fullName || '') : selectedPatientName || patientSearch}
+              onChange={(e) => {
+                if (isEdit) return;
+                const val = e.target.value;
+                // A datalist selection gives back the `value` attribute exactly,
+                // so matching on fullName is reliable for a picked option and
+                // yields no match while the user is still typing.
+                const match = patientOptions.find((p) => p.fullName === val);
+                setForm((f) => ({ ...f, patient: match ? match._id : '' }));
+                setSelectedPatientName(match ? match.fullName : '');
+                setPatientSearch(val);
+              }}
+              placeholder={isEdit ? '' : t('appointments.form.patientPlaceholder')}
               required
-              disabled={isEdit || patientsLoading}
-              aria-label={t('billing.form.selectPatient')}
-              aria-invalid={optionsError ? 'true' : undefined}
+              disabled={isEdit}
+              aria-invalid={patientNameUnmatched ? 'true' : undefined}
+              aria-describedby="invoice-patient-options-status"
               className={inputCls}
-            >
-              <option value="">{patientsLoading ? t('common.loading') : t('billing.form.selectPatient')}</option>
-              {patients.map((p) => (
-                <option key={p._id} value={p._id}>
-                  {p.fullName} — {p.patientId}
-                </option>
-              ))}
-            </select>
-            {optionsError && (
-              <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{optionsError}</span>
+            />
+            {!isEdit && (
+              <datalist id="invoice-patient-options">
+                {patientOptions.map((p) => (
+                  <option key={p._id} value={p.fullName}>
+                    {p.patientId} · {p.phone}
+                  </option>
+                ))}
+              </datalist>
+            )}
+            {!isEdit && (
+              <span id="invoice-patient-options-status" className="sr-only" role="status">
+                {patientsLoading ? t('common.loading') : ''}
+              </span>
+            )}
+            {patientNameUnmatched && (
+              <span className="mt-1 block text-xs text-red-600 dark:text-red-400">
+                {t('billing.form.selectPatient')}
+              </span>
             )}
           </label>
             {canPickBranch && (
 
             <label className="block">
               <span className={labelCls}>{t('appointments.form.branch')} <span className="text-red-500">*</span></span>
-              <select value={form.branch} onChange={set('branch')} required className={inputCls}>
+              <select
+                value={form.branch}
+                onChange={set('branch')}
+                required
+                aria-invalid={branchError ? 'true' : undefined}
+                className={inputCls}
+              >
                 <option value="" disabled>{t('appointments.form.selectBranch')}</option>
                 {branches.map((b) => (
                   <option key={b._id} value={b._id}>{b.name}</option>
                 ))}
               </select>
+              {branchError && (
+                <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{branchError}</span>
+              )}
             </label>
           )}
           <label className="block">

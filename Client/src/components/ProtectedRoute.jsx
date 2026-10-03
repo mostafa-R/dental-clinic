@@ -12,7 +12,7 @@ export default function ProtectedRoute() {
   const dispatch = useDispatch();
   const { user, status } = useSelector((s) => s.auth);
   const permissionsStatus = useSelector((s) => s.users.permissionsStatus);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Redeem an impersonation handoff code that landed on a protected route
   // directly. The code is single-use and 60s-lived, and is stripped from the
@@ -21,11 +21,14 @@ export default function ProtectedRoute() {
     const code = searchParams.get('impersonation_code');
     if (!code) return;
     dispatch(verifyImpersonation({ code }));
-    const clean = new URLSearchParams(window.location.search);
+    // Build the cleaned query from the router's own params instead of
+    // `window.location`: the router is the source of truth for the current
+    // location, so reading window directly could rewrite the URL to a
+    // different route than the one mounted (and would break under a basename).
+    const clean = new URLSearchParams(searchParams);
     clean.delete('impersonation_code');
-    const qs = clean.toString();
-    window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    setSearchParams(clean, { replace: true });
+  }, [dispatch, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!user && status === 'idle') {

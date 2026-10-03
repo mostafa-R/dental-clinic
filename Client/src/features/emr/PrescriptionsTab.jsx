@@ -9,6 +9,7 @@ import { deletePrescription, fetchPrescriptions } from './emrSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { requestConfirm } from '../ui/confirmDialog';
 import { useSocketEvent } from '../../lib/socket';
+import { SOCKET_EVENTS } from '../../lib/socketEvents';
 import { useCanManagePrescriptions } from '../../lib/roles';
 import { formatDate } from '../../lib/format';
 import { useT } from '../../lib/i18n';
@@ -30,9 +31,9 @@ export default function PrescriptionsTab({ patientId, patient }) {
     refetch();
   }, [refetch]);
 
-  useSocketEvent('prescription:created', refetch);
-  useSocketEvent('prescription:updated', refetch);
-  useSocketEvent('prescription:deleted', refetch);
+  useSocketEvent(SOCKET_EVENTS.PRESCRIPTION_CREATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.PRESCRIPTION_UPDATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.PRESCRIPTION_DELETED, refetch);
 
   const onDelete = async (rxId) => {
     const ok = await requestConfirm({

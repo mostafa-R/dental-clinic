@@ -1,11 +1,55 @@
 import User from '../users/user.model.js';
+import Role from '../users/role.model.js';
 import Tenant from '../site/tenant/tenant.model.js';
 import ApiError from '../../utils/ApiError.js';
+import { getCachedRole } from '../../utils/cache.js';
 import {
   assertNotLocked,
   recordFailedLogin,
   resetFailedLogins,
 } from '../../utils/loginThrottle.js';
+
+const ROLE_FIELDS = '_id key name isSystemAdmin isBuiltIn';
+
+/**
+ * Attach the role of a user payload so the client can name it.
+ *
+ * `User` stores only `roleId`, and `middleware/auth.js` deliberately leaves that
+ * ref unpopulated (RBAC is resolved lazily and Redis-cached by `resolveRole`),
+ * so `/auth/me` used to hand the browser a bare ObjectId. Every client read of
+ * the signed-in user's role then came up empty: `Settings` dropped the role row
+ * altogether and the topbar badge rendered nothing.
+ *
+ * Reads the same Redis-cached role `resolveRole` uses, so a warm cache makes
+ * this free; a miss costs one indexed lookup, and this endpoint is called once
+ * per session rather than per request.
+ *
+ * Emits BOTH shapes, because the client reads both:
+ *   - `role`   the role key — what `roleLabel` translates and what the
+ *              `user.role === 'doctor'`-style comparisons check.
+ *   - `roleId` the populated subset — what `userRoleLabel` reads so a clinic's
+ *              own role name ("مدير المركز") wins over the built-in key.
+ */
+export async function attachRole(userObj) {
+  if (!userObj) return userObj;
+  const roleId = userObj.roleId;
+  // Already populated, or no role assigned (deny-all on the server too).
+  if (!roleId || typeof roleId === 'object') return userObj;
+
+  const roleDoc =
+    (await getCachedRole(roleId)) || (await Role.findById(roleId).select(ROLE_FIELDS).lean());
+  if (!roleDoc) return userObj;
+
+  userObj.role = roleDoc.key;
+  userObj.roleId = {
+    _id: roleDoc._id,
+    key: roleDoc.key,
+    name: roleDoc.name,
+    isSystemAdmin: !!roleDoc.isSystemAdmin,
+    isBuiltIn: !!roleDoc.isBuiltIn,
+  };
+  return userObj;
+}
 
 export async function assertTenantActive(tenantId) {
   if (!tenantId) return;
@@ -82,5 +126,6 @@ export async function getUserWithTenantInfo(userObj) {
       };
     }
   }
+  await attachRole(userObj);
   return userObj;
 }

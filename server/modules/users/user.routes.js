@@ -10,6 +10,9 @@ const listUsersQuerySchema = z.object({
   roleId: z.string().length(24).optional(),
   isDoctor: z.enum(['true', 'false']).optional(),
   branch: z.string().length(24).optional(),
+  // Without this, searching the staff list only ever matched the 20 rows on the
+  // current page, so anyone beyond page 1 was unsearchable.
+  search: z.string().trim().max(100).optional(),
 });
 
 const router = Router();
@@ -37,6 +40,10 @@ const router = Router();
  *         name: branch
  *         schema: { $ref: '#/components/schemas/ObjectId' }
  *         description: Filter by branch
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: Case-insensitive match against name, email, username or phone. Applied before pagination.
  *     responses:
  *       '200':
  *         description: Paginated list of users

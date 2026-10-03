@@ -138,6 +138,56 @@ export async function getRevenueByPlan() {
   }));
 }
 
+/**
+ * Tenant counts grouped by plan and by status, computed in the database.
+ *
+ * This exists because the admin dashboard used to build these charts by paging
+ * through `GET /tenants` and aggregating the results client-side. That was
+ * O(tenants/limit) sequential requests just to draw two bar charts, and the
+ * client had to cap the loop — so on any platform with more tenants than the
+ * cap the charts silently showed only the first page. An aggregation returns
+ * the whole picture in one round trip regardless of tenant count.
+ *
+ * Plan and status are pulled in two independent `$group`s over the same
+ * `$facet` stage, so this stays a single query. Tenants with a missing/null
+ * plan are reported under the "unassigned" bucket rather than dropped, so
+ * `total` always reconciles with the sum of the buckets.
+ */
+export async function getTenantDistribution() {
+  const [facet] = await Tenant.aggregate([
+    {
+      $facet: {
+        byPlan: [
+          { $group: { _id: { $ifNull: ['$plan', 'unassigned'] }, count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+        ],
+        byStatus: [
+          { $group: { _id: { $ifNull: ['$status', 'unknown'] }, count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+        ],
+        total: [{ $count: 'value' }],
+      },
+    },
+  ]);
+
+  const toMap = (rows) =>
+    rows.reduce((acc, r) => {
+      acc[r._id] = r.count;
+      return acc;
+    }, {});
+
+  const byPlan = toMap(facet?.byPlan ?? []);
+  const byStatus = toMap(facet?.byStatus ?? []);
+
+  return {
+    byPlan,
+    byStatus,
+    // From the facet rather than by summing the maps, so a tenant that somehow
+    // matched neither group still shows up in the total.
+    total: facet?.total?.[0]?.value ?? 0,
+  };
+}
+
 export async function getTenantUsage(tenantId) {
   const tenant = await Tenant.findById(tenantId);
   if (!tenant) return null;

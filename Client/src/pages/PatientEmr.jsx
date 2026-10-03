@@ -10,12 +10,14 @@ import ChartTab from '../features/emr/ChartTab';
 import TreatmentPlansTab from '../features/emr/TreatmentPlansTab';
 import PrescriptionsTab from '../features/emr/PrescriptionsTab';
 import ClinicalTimelineTab from '../features/emr/ClinicalTimelineTab';
+import ConsentTab from '../features/emr/ConsentTab';
 import WalletTab from '../features/wallet/WalletTab';
 import ClinicalContextBar from '../features/emr/ClinicalContextBar';
 import { resetWallet } from '../features/wallet/walletSlice';
 import { setEmrPatient, resetEmr } from '../features/emr/emrSlice';
 import { patientApi } from '../features/patients/patientApi';
 import { useCanViewEmr } from '../lib/roles';
+import { errPayload } from '../lib/errors';
 import { useT } from '../lib/i18n';
 import { useTabIds } from '../lib/tabs';
 
@@ -23,6 +25,7 @@ const TABS = [
   { key: 'chart', labelKey: 'emr.tab.chart' },
   { key: 'plans', labelKey: 'emr.tab.plans' },
   { key: 'prescriptions', labelKey: 'emr.tab.prescriptions' },
+  { key: 'consents', labelKey: 'emr.tab.consents' },
   { key: 'timeline', labelKey: 'emr.tab.timeline' },
   { key: 'wallet', labelKey: 'emr.tab.wallet' },
 ];
@@ -62,7 +65,7 @@ export default function PatientEmr() {
       })
       .catch((err) => {
         if (active) {
-          setError(err.response?.data?.message || 'Failed to load patient');
+          setError(errPayload(err, 'Failed to load patient').message);
           setStatus('failed');
         }
       });
@@ -119,8 +122,9 @@ export default function PatientEmr() {
         <TabPanel tabIds={tabIds} tabKey={tab}>
           {tab === 'chart' && <ChartTab patientId={patientId} />}
           {tab === 'plans' && <TreatmentPlansTab patientId={patientId} />}
-          {tab === 'prescriptions' && <PrescriptionsTab patientId={patientId} patient={patient} />}
-          {tab === 'timeline' && <ClinicalTimelineTab patientId={patientId} patient={patient} />}
+    {tab === 'prescriptions' && <PrescriptionsTab patientId={patientId} patient={patient} />}
+    {tab === 'consents' && <ConsentTab patientId={patientId} />}
+    {tab === 'timeline' && <ClinicalTimelineTab patientId={patientId} patient={patient} />}
           {tab === 'wallet' && <WalletTab patientId={patientId} />}
         </TabPanel>
       )}

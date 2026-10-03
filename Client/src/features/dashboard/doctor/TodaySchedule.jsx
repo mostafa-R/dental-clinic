@@ -7,6 +7,7 @@ import { formatTime } from "../../../lib/format";
 import { useT } from "../../../lib/i18n";
 import { usePermission } from "../../../lib/roles";
 import { useSocketEvent } from "../../../lib/socket";
+import { SOCKET_EVENTS } from "../../../lib/socketEvents";
 import { doctorDashboardApi } from "../doctorDashboardApi";
 
 const STATUS_COLORS = {
@@ -59,9 +60,9 @@ export default function TodaySchedule() {
     fetchAppointments();
   }, [fetchAppointments]);
 
-  useSocketEvent("appointment:created", fetchAppointments);
-  useSocketEvent("appointment:updated", fetchAppointments);
-  useSocketEvent("appointment:statusChanged", fetchAppointments);
+  useSocketEvent(SOCKET_EVENTS.APPOINTMENT_CREATED, fetchAppointments);
+  useSocketEvent(SOCKET_EVENTS.APPOINTMENT_UPDATED, fetchAppointments);
+  useSocketEvent(SOCKET_EVENTS.APPOINTMENT_STATUS_CHANGED, fetchAppointments);
 
   if (!hasAccess) return null;
 

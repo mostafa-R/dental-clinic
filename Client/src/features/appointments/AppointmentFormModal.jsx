@@ -1,12 +1,13 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
 import { showErrorDialog } from '../ui/uiSlice';
 import { fetchBranches } from '../branches/branchSlice';
-import { fetchPatients } from '../patients/patientSlice';
+import { patientApi } from '../patients/patientApi';
 import { createAppointment, resetFormState, updateAppointment } from './appointmentSlice';
 import api from '../../lib/axios';
+import { errPayload } from '../../lib/errors';
 import { useT } from '../../lib/i18n';
 import { formatMoney } from '../../lib/format';
 import { toDateTimeInputValue, fromDateTimeInputValue } from '../../lib/clinicTime';
@@ -23,11 +24,15 @@ const EMPTY = {
   notes: '',
 };
 
+const PATIENT_PAGE = 20;
+const PATIENT_SEARCH_DEBOUNCE_MS = 300;
+// Must match `maxLength: 100` on `search` in server listPatientsQuerySchema.
+const PATIENT_SEARCH_MAX = 100;
+
 export default function AppointmentFormModal({ open, appointment, defaultStart, onClose, onSaved }) {
   const dispatch = useDispatch();
   const { t } = useT();
   const { formStatus } = useSelector((s) => s.appointments);
-  const { items: patients, status: patientsStatus } = useSelector((s) => s.patients);
   const { items: branches, status: branchesStatus } = useSelector((s) => s.branches);
   // The branch picker is shown to any clinic-wide role, not just system admins:
   // the server's `resolveBranchForCreate` requires an explicit branch from them,
@@ -39,6 +44,13 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
   const [doctors, setDoctors] = useState([]);
   const [doctorsError, setDoctorsError] = useState('');
   const [patientSearch, setPatientSearch] = useState('');
+  const [patientOptions, setPatientOptions] = useState([]);
+  const [patientsLoading, setPatientsLoading] = useState(false);
+  // The input is a free-text field backed by a datalist, so it has to render a
+  // label rather than an id. Held separately from `patientSearch` because the
+  // server search only returns the current page of matches and will not contain
+  // the patient already attached to the appointment being edited.
+  const [selectedPatientName, setSelectedPatientName] = useState('');
   const [invItems, setInvItems] = useState([{ description: '', quantity: 1, unitPrice: 0 }]);
   const [showInvoiceSection, setShowInvoiceSection] = useState(false);
 
@@ -59,10 +71,59 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
           setDoctorsError(t('common.loadFailedList'));
           dispatch(showErrorDialog({ message: t('common.loadFailedList') }));
         });
-      if (patientsStatus === 'idle') dispatch(fetchPatients({ page: 1, limit: 100 }));
       if (canPickBranch && branchesStatus === 'idle') dispatch(fetchBranches({ isActive: 'true' }));
     }
-  }, [dispatch, open, canPickBranch, branchesStatus, patientsStatus, t]);
+  }, [dispatch, open, canPickBranch, branchesStatus, t]);
+
+  // Patient lookup used to be `fetchPatients({ page: 1, limit: 100 })` into the
+  // shared patients slice, then filtered in the browser. Two failures: the cap
+  // made patient 101 unreachable for anyone booking, and the slice was shared
+  // with the Patients page, so once that page had loaded its own page 1 the
+  // status was no longer 'idle' and this modal silently reused it. Search is
+  // server-side now.
+  //
+  // `patientRequestId` is a stale-response guard, not a cancellation: an
+  // in-flight request still completes, but its result is discarded if a newer
+  // search started meanwhile or the modal closed. That is deliberate — aborting
+  // would also cancel the shared axios request, and there is only ever one page
+  // of cheap reads in flight.
+  const patientSearchTimer = useRef(null);
+  const patientRequestId = useRef(0);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    clearTimeout(patientSearchTimer.current);
+    // Trim + clamp to the server's `maxLength: 100` on `search`; a longer
+    // pasted value would be rejected with a 400 rather than searched.
+    const term = patientSearch.trim().slice(0, PATIENT_SEARCH_MAX);
+
+    patientSearchTimer.current = setTimeout(() => {
+      const requestId = patientRequestId.current + 1;
+      patientRequestId.current = requestId;
+      setPatientsLoading(true);
+      patientApi
+        .list({ search: term || undefined, page: 1, limit: PATIENT_PAGE, isActive: 'true' })
+        .then((data) => {
+          if (patientRequestId.current !== requestId) return;
+          setPatientOptions(Array.isArray(data?.patients) ? data.patients : []);
+        })
+        .catch(() => {
+          if (patientRequestId.current !== requestId) return;
+          // Leave the field usable; a failed lookup is not worth blocking the form over.
+          setPatientOptions([]);
+        })
+        .finally(() => {
+          if (patientRequestId.current === requestId) setPatientsLoading(false);
+        });
+    }, PATIENT_SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      clearTimeout(patientSearchTimer.current);
+      // Invalidate anything still in flight so it cannot repopulate the list
+      // after the modal closes.
+      patientRequestId.current += 1;
+    };
+  }, [open, patientSearch]);
 
   useEffect(() => {
     if (!open) return;
@@ -78,12 +139,16 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
         notes: appointment.notes || '',
       });
       setPatientSearch('');
+      setSelectedPatientName(
+        typeof appointment.patient === 'object' ? appointment.patient?.fullName || '' : '',
+      );
     } else {
       // Clean slate: never carry the previously edited appointment's branch
       // into a new one. The default is applied by the effect below, once the
       // branch list has loaded.
       setForm({ ...EMPTY, start: defaultStart ? toDateTimeInputValue(defaultStart) : '' });
       setPatientSearch('');
+      setSelectedPatientName('');
     }
     dispatch(resetFormState());
   }, [open, appointment, defaultStart, dispatch]);
@@ -99,15 +164,6 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
   const submitting = formStatus === 'loading';
-
-  const filteredPatients = patientSearch
-    ? patients.filter(
-        (p) =>
-          p.fullName?.toLowerCase().includes(patientSearch.toLowerCase()) ||
-          p.phone?.includes(patientSearch) ||
-          p.patientId?.toLowerCase().includes(patientSearch.toLowerCase()),
-      )
-    : patients.slice(0, 20);
 
   const invSubtotal = useMemo(
     () => invItems.reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0),
@@ -140,34 +196,43 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
           const patientId = newAppt.patient?._id || newAppt.patient;
           const doctorId = newAppt.doctor?._id || newAppt.doctor;
           const branchId = newAppt.branch?._id || newAppt.branch;
+          // These two are conveniences layered on top of a booking that has
+          // already succeeded, so a failure here must not reject the booking or
+          // close the modal — but it must not be silent either. A swallowed
+          // error left the appointment on the schedule with no clinical note and
+          // no invoice, and nothing in the UI to say so.
           if (patientId && doctorId) {
-              api
-                .post(`/patients/${patientId}/clinical-notes`, {
-                  doctor: doctorId,
-                  appointment: newAppt._id,
-                  chiefComplaint: (form.reason || '').trim() || undefined,
-                })
-                .catch((err) => { if (import.meta.env.DEV) console.error('Auto-create clinical note failed', err?.response?.data || err); });
+            try {
+              await api.post(`/patients/${patientId}/clinical-notes`, {
+                doctor: doctorId,
+                appointment: newAppt._id,
+                chiefComplaint: (form.reason || '').trim() || undefined,
+              });
+            } catch (err) {
+              dispatch(showErrorDialog(errPayload(err, t('appointments.form.clinicalNoteFailed'))));
             }
-            if (patientId && branchId) {
-              const items = invItems
-                .filter((it) => it.description.trim())
-                .map((it) => ({
-                  description: it.description.trim(),
-                  quantity: Number(it.quantity) || 1,
-                  unitPrice: Number(it.unitPrice) || 0,
-                }));
-              if (items.length > 0) {
-                api
-                  .post('/billing', {
-                    patient: patientId,
-                    branch: branchId,
-                    appointment: newAppt._id,
-                    items,
-                  })
-                  .catch((err) => { if (import.meta.env.DEV) console.error('Auto-create invoice failed', err?.response?.data || err); });
+          }
+          if (patientId && branchId) {
+            const items = invItems
+              .filter((it) => it.description.trim())
+              .map((it) => ({
+                description: it.description.trim(),
+                quantity: Number(it.quantity) || 1,
+                unitPrice: Number(it.unitPrice) || 0,
+              }));
+            if (items.length > 0) {
+              try {
+                await api.post('/billing', {
+                  patient: patientId,
+                  branch: branchId,
+                  appointment: newAppt._id,
+                  items,
+                });
+              } catch (err) {
+                dispatch(showErrorDialog(errPayload(err, t('appointments.form.invoiceFailed'))));
               }
             }
+          }
         }
       }
       onSaved?.();
@@ -215,24 +280,32 @@ export default function AppointmentFormModal({ open, appointment, defaultStart, 
             <span className={labelCls}>{t('appointments.form.patient')} <span className="text-red-500">*</span></span>
             <input
               list="patient-options"
-              value={form.patient ? (patients.find((p) => p._id === form.patient)?.fullName || patientSearch) : patientSearch}
+              value={selectedPatientName || patientSearch}
               onChange={(e) => {
                 const val = e.target.value;
-                const match = patients.find((p) => p.fullName === val);
+                // A datalist selection gives back the `value` attribute exactly,
+                // so matching on fullName is reliable for a picked option and
+                // yields no match while the user is still typing.
+                const match = patientOptions.find((p) => p.fullName === val);
                 setForm((f) => ({ ...f, patient: match ? match._id : '' }));
+                setSelectedPatientName(match ? match.fullName : '');
                 setPatientSearch(val);
               }}
               placeholder={t('appointments.form.patientPlaceholder')}
               required
+              aria-describedby="patient-options-status"
               className={inputCls}
             />
             <datalist id="patient-options">
-              {filteredPatients.map((p) => (
+              {patientOptions.map((p) => (
                 <option key={p._id} value={p.fullName}>
                   {p.patientId} · {p.phone}
                 </option>
               ))}
             </datalist>
+            <span id="patient-options-status" className="sr-only" role="status">
+              {patientsLoading ? t('common.loading') : ''}
+            </span>
           </label>
 
           <label className="block">

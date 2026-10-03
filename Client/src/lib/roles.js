@@ -23,10 +23,10 @@ export function roleLabel(role) {
  *
  * The `User` document has no `role` field — only `roleId`, a ref to a `Role`.
  * `middleware/auth.js` deliberately does not populate it (RBAC resolves lazily
- * through `resolveRole()`), so `/auth/me` hands the client a bare ObjectId while
- * `GET /users` populates `roleId` with `{ name, key }`. Reading `user.role`
- * therefore always yields `undefined` and rendered an empty label, so this
- * helper covers every shape the API can return.
+ * through `resolveRole()`), so `/auth/me` attaches the role itself and hands
+ * the client both `role` (the key) and a populated `roleId`; `GET /users`
+ * populates `roleId` with `{ name, key }`. This helper therefore covers every
+ * shape the API can return.
  *
  * Prefers the populated role's own `name` (clinics name their own roles, so it
  * is the only truthful label for a custom role) and falls back to the translated

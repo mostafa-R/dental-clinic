@@ -1,14 +1,15 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { userApi } from './userApi';
+import { errPayload } from '../../lib/errors';
 import { clearClinicTimeZone } from '../../lib/clinicTime';
 
 export const fetchUsers = createAsyncThunk(
   'users/fetchUsers',
-  async (_, { rejectWithValue }) => {
+  async ({ page = 1, limit = 20, search } = {}, { rejectWithValue }) => {
     try {
-      return await userApi.list();
+      return await userApi.list({ page, limit, search: search || undefined });
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to load users' });
+      return rejectWithValue(errPayload(err, 'Failed to load users'));
     }
   },
 );
@@ -20,7 +21,7 @@ export const createUser = createAsyncThunk(
       const result = await userApi.create(payload);
       return result;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to create user' });
+      return rejectWithValue(errPayload(err, 'Failed to create user'));
     }
   },
 );
@@ -32,7 +33,7 @@ export const updateUser = createAsyncThunk(
       const { user } = await userApi.update(id, payload);
       return user;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to update user' });
+      return rejectWithValue(errPayload(err, 'Failed to update user'));
     }
   },
 );
@@ -44,7 +45,7 @@ export const deleteUser = createAsyncThunk(
       await userApi.delete(id);
       return id;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to delete user' });
+      return rejectWithValue(errPayload(err, 'Failed to delete user'));
     }
   },
 );
@@ -56,7 +57,7 @@ export const toggleUserActive = createAsyncThunk(
       const { user } = await userApi.toggleActive(id);
       return user;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to toggle user status' });
+      return rejectWithValue(errPayload(err, 'Failed to toggle user status'));
     }
   },
 );
@@ -67,16 +68,21 @@ export const fetchMyPermissions = createAsyncThunk(
     try {
       return await userApi.myPermissions();
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to load permissions' });
+      return rejectWithValue(errPayload(err, 'Failed to load permissions'));
     }
   },
 );
 
 const initialState = {
   items: [],
+  // Server-owned. The page controls `page`/`limit` and reads `total`/`pages`
+  // back for the pager; it must not derive them from `items.length`, which is
+  // only ever the current page.
+  pagination: { page: 1, limit: 20, total: 0, pages: 1 },
   status: 'idle',
   error: null,
   formStatus: 'idle',
+  formError: null,
   myPermissions: null,
   permissionsStatus: 'idle',
 };
@@ -88,6 +94,12 @@ const userSlice = createSlice({
     resetFormState(state) {
       state.formStatus = 'idle';
       state.error = null;
+    },
+    // Logout / account switch. The staff list is tenant-scoped, so leaving the
+    // previous clinic's rows in state would render another tenant's staff to
+    // the next user before their fetch resolves.
+    resetUsers() {
+      return initialState;
     },
     // Plan reassignment / account switch must never reuse stale entitlements.
     // Dispatched on logout + login, and on 403 plan-denied (see lib/axios).
@@ -108,6 +120,7 @@ const userSlice = createSlice({
       })
       .addCase(fetchUsers.fulfilled, (state, action) => {
         state.items = action.payload.users;
+        state.pagination = action.payload.pagination || state.pagination;
         state.status = 'succeeded';
       })
       .addCase(fetchUsers.rejected, (state, action) => {
@@ -126,7 +139,13 @@ const userSlice = createSlice({
         const u = action.payload.user;
         const idx = state.items.findIndex((x) => x._id === u._id);
         if (idx >= 0) state.items[idx] = u;
-        else state.items.unshift(u);
+        // The server sorts by -createdAt, so a new user belongs on page 1. On
+        // any later page inserting it would show a row that does not exist in
+        // that slice of the result set; the socket-driven refetch fills it in.
+        else if (state.pagination.page === 1) {
+          state.items.unshift(u);
+          state.pagination.total += 1;
+        }
         state.formStatus = 'succeeded';
       })
       .addCase(createUser.rejected, (state, action) => {
@@ -147,7 +166,11 @@ const userSlice = createSlice({
         state.formError = action.payload;
       })
       .addCase(deleteUser.fulfilled, (state, action) => {
+        const before = state.items.length;
         state.items = state.items.filter((u) => u._id !== action.payload);
+        // Only counts as a removal if it was on this page; otherwise the row
+        // was never here and decrementing would drift the pager.
+        if (state.items.length < before) state.pagination.total = Math.max(0, state.pagination.total - 1);
       })
       .addCase(toggleUserActive.fulfilled, (state, action) => {
         const idx = state.items.findIndex((u) => u._id === action.payload._id);
@@ -166,5 +189,5 @@ const userSlice = createSlice({
   },
 });
 
-export const { resetFormState, resetPermissions } = userSlice.actions;
+export const { resetFormState, resetPermissions, resetUsers } = userSlice.actions;
 export default userSlice.reducer;

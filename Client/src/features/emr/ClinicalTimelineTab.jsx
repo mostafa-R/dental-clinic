@@ -9,6 +9,7 @@ import { deleteNote, fetchNotes } from './emrSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { requestConfirm } from '../ui/confirmDialog';
 import { useSocketEvent } from '../../lib/socket';
+import { SOCKET_EVENTS } from '../../lib/socketEvents';
 import { useCanManageEmr } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
 import { formatDate } from '../../lib/format';
@@ -41,9 +42,9 @@ export default function ClinicalTimelineTab({ patientId, patient }) {
     refetch();
   }, [refetch]);
 
-  useSocketEvent('clinical-note:created', refetch);
-  useSocketEvent('clinical-note:updated', refetch);
-  useSocketEvent('clinical-note:deleted', refetch);
+  useSocketEvent(SOCKET_EVENTS.CLINICAL_NOTE_CREATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.CLINICAL_NOTE_UPDATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.CLINICAL_NOTE_DELETED, refetch);
 
   const onDelete = async (noteId) => {
     const ok = await requestConfirm({

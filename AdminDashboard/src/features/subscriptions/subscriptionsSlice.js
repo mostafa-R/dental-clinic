@@ -103,6 +103,15 @@ const subscriptionsSlice = createSlice({
       })
       .addCase(fetchSubscriptions.fulfilled, (state, action) => {
         state.loading = false;
+        // Contract verified against the backend: `listSubscriptions()` returns a
+        // bare array (`Subscription.find()...lean()`) wrapped in sendSuccess, and
+        // the axios response interceptor unwraps `{ success, data }` down to that
+        // array. So `payload` IS the array here.
+        //
+        // Do NOT "fix" this to `action.payload?.subscriptions || ...` - the
+        // backend never sends a `subscriptions` key, so that would silently make
+        // this page permanently empty. An audit note claimed the shape was a
+        // mismatch; it is not.
         state.items = Array.isArray(action.payload) ? action.payload : [];
       })
       .addCase(fetchSubscriptions.rejected, (state, action) => {

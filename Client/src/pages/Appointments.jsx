@@ -19,6 +19,7 @@ import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import api from '../lib/axios';
 import { useSocketEvent } from '../lib/socket';
+import { SOCKET_EVENTS } from '../lib/socketEvents';
 import { useCanCreateAppointments } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { toDateInputValue, todayAsDateInputValue, fromDateTimeInputValue } from '../lib/clinicTime';
@@ -131,9 +132,9 @@ export default function Appointments() {
     dispatch(fetchAppointments(buildParams()));
   }, [dispatch, buildParams, tab]);
 
-  useSocketEvent('appointment:created', refetch);
-  useSocketEvent('appointment:updated', refetch);
-  useSocketEvent('appointment:statusChanged', refetch);
+  useSocketEvent(SOCKET_EVENTS.APPOINTMENT_CREATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.APPOINTMENT_UPDATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.APPOINTMENT_STATUS_CHANGED, refetch);
 
   useEffect(() => () => dispatch(resetAppointments()), [dispatch]);
 

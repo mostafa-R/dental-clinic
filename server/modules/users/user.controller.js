@@ -8,6 +8,7 @@ import User from './user.model.js';
 import Counter from '../../core/counters.js';
 import { withTransaction } from '../../core/transaction.js';
 import { currentTenant, filterByBranch, toObjectId } from '../../utils/branchScope.js';
+import { escapeRegex } from '../../utils/escapeRegex.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
@@ -177,7 +178,7 @@ export const listUsers = asyncHandler(async (req, res) => {
     filter.tenant = tenant;
   }
 
-  const { roleId, isDoctor, branch } = req.validatedQuery || {};
+  const { roleId, isDoctor, branch, search } = req.validatedQuery || {};
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
   const skip = (page - 1) * limit;
@@ -187,6 +188,14 @@ export const listUsers = asyncHandler(async (req, res) => {
     filter.isDoctor = true;
   }
   if (branch) filter.branch = toObjectId(branch);
+
+  // Searched in the query, not after the page slice, so a match on page 7 is
+  // still reachable. Escaped because the term is user input and would
+  // otherwise be interpreted as a pattern.
+  if (search?.trim()) {
+    const regex = new RegExp(escapeRegex(search.trim()), 'i');
+    filter.$or = [{ name: regex }, { email: regex }, { username: regex }, { phone: regex }];
+  }
 
   const [users, total] = await Promise.all([
     User.find(filter)

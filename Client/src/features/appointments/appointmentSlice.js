@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { appointmentApi } from './appointmentApi';
 import { localDateString } from '../../lib/clinicTime';
+import { errPayload } from '../../lib/errors';
 
 export const fetchAppointments = createAsyncThunk(
   'appointments/fetchList',
@@ -8,7 +9,7 @@ export const fetchAppointments = createAsyncThunk(
     try {
       return await appointmentApi.list(params);
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to load appointments' });
+      return rejectWithValue(errPayload(err, 'Failed to load appointments'));
     }
   },
 );
@@ -20,7 +21,7 @@ export const createAppointment = createAsyncThunk(
       const { appointment } = await appointmentApi.create(payload);
       return appointment;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to create appointment' });
+      return rejectWithValue(errPayload(err, 'Failed to create appointment'));
     }
   },
 );
@@ -32,7 +33,7 @@ export const updateAppointment = createAsyncThunk(
       const { appointment } = await appointmentApi.update(id, payload);
       return appointment;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to update appointment' });
+      return rejectWithValue(errPayload(err, 'Failed to update appointment'));
     }
   },
 );
@@ -44,7 +45,7 @@ export const transitionAppointment = createAsyncThunk(
       const { appointment } = await appointmentApi.transition(id, status);
       return appointment;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to update status' });
+      return rejectWithValue(errPayload(err, 'Failed to update status'));
     }
   },
 );
@@ -56,7 +57,7 @@ export const cancelAppointment = createAsyncThunk(
       const { appointment } = await appointmentApi.cancel(id);
       return appointment;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to cancel appointment' });
+      return rejectWithValue(errPayload(err, 'Failed to cancel appointment'));
     }
   },
 );
@@ -67,7 +68,7 @@ export const fetchQueue = createAsyncThunk(
     try {
       return await appointmentApi.queue();
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to load queue' });
+      return rejectWithValue(errPayload(err, 'Failed to load queue'));
     }
   },
 );
@@ -79,7 +80,7 @@ export const callNextPatient = createAsyncThunk(
       const { appointment } = await appointmentApi.callNext(body);
       return appointment;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to call next patient' });
+      return rejectWithValue(errPayload(err, 'Failed to call next patient'));
     }
   },
 );
@@ -108,7 +109,7 @@ const appointmentsSlice = createSlice({
     currentRequestId: null,
     formStatus: 'idle',
     formError: null,
-    queue: { waiting: [], inChair: [], completedToday: 0, updatedAt: null },
+    queue: { waiting: [], inChair: [], completedToday: 0, completedIds: [], updatedAt: null },
     queueStatus: 'idle',
     queueError: null,
     callStatus: 'idle',
@@ -186,13 +187,19 @@ const appointmentsSlice = createSlice({
       } else if (incoming.status === 'completed') {
         state.queue.waiting = emptied(state.queue.waiting);
         state.queue.inChair = emptied(state.queue.inChair);
-        if (state.queue.completedToday === 0) {
-          // Compare calendar days in the clinic's zone, not the browser's:
-          // a late-evening completion in a clinic ahead of the receptionist
-          // (or behind them) otherwise counted for the wrong day and
-          // `completedToday` drifted.
-          const start = new Date(incoming.start || Date.now());
-          if (localDateString(start.getTime()) === localDateString(Date.now())) {
+        // Compare calendar days in the clinic's zone, not the browser's:
+        // a late-evening completion in a clinic ahead of the receptionist
+        // (or behind them) otherwise counted for the wrong day.
+        const start = new Date(incoming.start || Date.now());
+        if (localDateString(start.getTime()) === localDateString(Date.now())) {
+          // The guard used to be `completedToday === 0`, which conflated "have we
+          // counted this patient" with "how many have we counted". The first
+          // completion of the day set it to 1 and every later one was skipped, so
+          // the queue permanently reported 1 regardless of the real total. Track
+          // the ids instead: it still absorbs a duplicate socket event for the
+          // same appointment, but each distinct patient now adds one.
+          if (!state.queue.completedIds?.includes(incoming._id)) {
+            state.queue.completedIds = [...(state.queue.completedIds || []), incoming._id];
             state.queue.completedToday += 1;
           }
         }
@@ -264,10 +271,18 @@ const appointmentsSlice = createSlice({
       })
       .addCase(fetchQueue.fulfilled, (state, action) => {
         const q = action.payload ?? {};
+        const serverCount = typeof q.completedToday === 'number' ? q.completedToday : 0;
+        // The queue is polled, so rebuilding `queue` wholesale here used to drop
+        // the dedup set that keeps a repeated `queue.status.changed` from
+        // counting one appointment twice. Keep it while the count is moving
+        // forward; a count that went backwards means the queue moved to another
+        // day, so the set has to start over.
+        const sameDay = serverCount >= state.queue.completedToday;
         state.queue = {
           waiting: Array.isArray(q.waiting) ? q.waiting : [],
           inChair: Array.isArray(q.inChair) ? q.inChair : [],
-          completedToday: typeof q.completedToday === 'number' ? q.completedToday : 0,
+          completedToday: serverCount,
+          completedIds: sameDay ? state.queue.completedIds : [],
           updatedAt: q.updatedAt ?? null,
         };
         state.queueStatus = 'succeeded';

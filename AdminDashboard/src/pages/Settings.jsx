@@ -37,6 +37,39 @@ const toNumber = (value, fallback) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+// Mirrors the zod bounds in `server/modules/platform/platformSetting.routes.js`.
+// The server already rejects out-of-range values, but it does so as a generic
+// validation error after the 2FA prompt; checking here tells the admin which
+// field is wrong before they authenticate. Keep these in sync with that schema —
+// note autoSuspendDays is legitimately 0 ("never auto-suspend").
+const PLATFORM_LIMITS = {
+  autoSuspendDays: { min: 0, max: 365, labelKey: "autoSuspendTenants" },
+  trialDays: { min: 1, max: 365, labelKey: "trialDaysLabel" },
+  maxTenants: { min: 1, max: 100000, labelKey: "maxTenants" },
+  backupRetentionDays: { min: 1, max: 365, labelKey: "backupRetentionDays" },
+};
+
+const validatePlatformForm = (form, language) => {
+  for (const [field, { min, max, labelKey }] of Object.entries(PLATFORM_LIMITS)) {
+    // Reuse the field's own translated label so an Arabic admin sees Arabic.
+    const label = t(labelKey, language);
+    const value = Number(form[field]);
+    if (form[field] === "" || !Number.isFinite(value) || !Number.isInteger(value)) {
+      return t("validationWholeNumber", { field: label }, language);
+    }
+    if (value < min || value > max) {
+      return t("validationRange", { field: label, min, max }, language);
+    }
+  }
+  if (form.backupTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(form.backupTime)) {
+    return t("validationBackupTime", language);
+  }
+  if (form.supportEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.supportEmail.trim())) {
+    return t("validationEmail", language);
+  }
+  return "";
+};
+
 export default function Settings() {
   const dispatch = useDispatch();
   const { theme, language } = useSelector((state) => state.ui);
@@ -51,6 +84,7 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [showDisableModal, setShowDisableModal] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
+  const [showSecret, setShowSecret] = useState(false);
   const twofa = useSelector((state) => state.twofa);
   const [platformFormData, setPlatformFormData] = useState({
     siteName: "",
@@ -116,7 +150,18 @@ export default function Settings() {
   const handleSetup2fa = async () => {
     await dispatch(setup2fa());
     setTokenInput("");
+    setShowSecret(false);
   };
+
+  // Re-hide the TOTP secret on a timer. Without this, "reveal" is permanent for
+  // the life of the modal, which is the same exposure the reveal was meant to
+  // avoid - the user walks away from an unattended screen and the seed is still
+  // there.
+  useEffect(() => {
+    if (!showSecret) return undefined;
+    const timer = setTimeout(() => setShowSecret(false), 30000);
+    return () => clearTimeout(timer);
+  }, [showSecret]);
 
   const handleVerify2fa = async () => {
     const result = await dispatch(verify2fa(tokenInput));
@@ -134,6 +179,17 @@ export default function Settings() {
   };
 
   const handlePlatformSave = async () => {
+    // Validate before dispatching: `PUT /platform` is gated behind a fresh 2FA
+    // check, so an out-of-range value would otherwise cost the admin an
+    // authenticator round-trip before the server complained.
+    const invalid = validatePlatformForm(platformFormData, language);
+    if (invalid) {
+      setSaving(false);
+      setSaved(false);
+      setSaveError(invalid);
+      return;
+    }
+
     setSaving(true);
     setSaveError("");
     setSaved(false);
@@ -267,7 +323,7 @@ export default function Settings() {
       </Card>
 
       {twofa.setupData && (
-        <Modal isOpen={true} onClose={() => dispatch(clearSetupData())}>
+        <Modal isOpen={true} onClose={() => { setShowSecret(false); dispatch(clearSetupData()); }}>
           <div className="p-6 space-y-4">
             <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
               {t("enable2fa", language)}
@@ -292,9 +348,42 @@ export default function Settings() {
                 </p>
               ) : null}
             </div>
-            <p className="text-xs text-slate-400 text-center font-mono break-all">
-              {twofa.setupData.secret}
-            </p>
+            {/*
+              The TOTP secret is the authenticator seed: whoever holds it can
+              generate valid codes for this super-admin account. It used to be
+              rendered unconditionally, so it sat in the DOM for the life of the
+              modal — captured by DevTools, screen recording, or a malicious
+              extension, and readable by anything that can inspect the tree.
+
+              It is now opt-in and self-expiring: hidden by default, revealed
+              only on an explicit click, and re-hidden after 30s. The QR code
+              above remains the primary path; this is only the fallback for an
+              authenticator that cannot scan.
+            */}
+            {twofa.setupData.secret && (
+              <div className="space-y-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => setShowSecret((v) => !v)}
+                  aria-expanded={showSecret}
+                  className="text-xs font-medium text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-400"
+                >
+                  {showSecret
+                    ? t("hideSecret", language)
+                    : t("manualEntry", language)}
+                </button>
+                {showSecret ? (
+                  <>
+                    <p className="text-xs break-all rounded-lg bg-slate-100 p-3 font-mono text-slate-700 dark:bg-slate-800 dark:text-slate-200 select-all">
+                      {twofa.setupData.secret}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {t("secretAutoHidden", language)}
+                    </p>
+                  </>
+                ) : null}
+              </div>
+            )}
             {twofa.setupData.backupCodes?.length > 0 && (
               <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
                 <p className="font-medium text-amber-900 dark:text-amber-200 mb-2">
@@ -486,6 +575,7 @@ export default function Settings() {
               <input
                 type="number"
                 min="0"
+                max="365"
                 value={platformFormData.autoSuspendDays}
                 onChange={(e) => setPlatformField("autoSuspendDays", e.target.value)}
                 className={numberInputClass}
@@ -504,7 +594,8 @@ export default function Settings() {
             <div className="flex items-center gap-2 shrink-0">
               <input
                 type="number"
-                min="0"
+                min="1"
+                max="365"
                 value={platformFormData.trialDays}
                 onChange={(e) => setPlatformField("trialDays", e.target.value)}
                 className={numberInputClass}
@@ -550,7 +641,8 @@ export default function Settings() {
             <input
               type="number"
               min="1"
-              value={platformFormData.maxTenants}
+                max="100000"
+                value={platformFormData.maxTenants}
               onChange={(e) => setPlatformField("maxTenants", e.target.value)}
               className={numberInputClass}
             />
@@ -610,6 +702,7 @@ export default function Settings() {
                   <input
                     type="number"
                     min="1"
+                    max="365"
                     value={platformFormData.backupRetentionDays}
                     onChange={(e) => setPlatformField("backupRetentionDays", e.target.value)}
                     className={numberInputClass}

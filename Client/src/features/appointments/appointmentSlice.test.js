@@ -1,6 +1,12 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 
-import reducer, { callNextPatient, fetchAppointments, setDate } from './appointmentSlice.js';
+import reducer, {
+  callNextPatient,
+  fetchAppointments,
+  fetchQueue,
+  setDate,
+  upsertQueueFromSocket,
+} from './appointmentSlice.js';
 
 /**
  * Regression coverage for the live-queue request sequencing.
@@ -168,5 +174,80 @@ describe('appointmentSlice callNextPatient', () => {
 
     expect(state.callStatus).toBe('succeeded');
     expect(state.queue.inChair.map((a) => a._id)).toEqual(['c1']);
+  });
+});
+
+/**
+ * Regression coverage for `queue.completedToday`.
+ *
+ * The bug: the increment was guarded by `if (completedToday === 0)`, which used
+ * the counter as its own "already counted" flag. The first completion of the
+ * day moved it 0 -> 1 and every later completion was skipped, so the queue
+ * reported "1 completed" for the rest of the day no matter how many patients
+ * were actually seen. The fix tracks the ids it has counted instead, so each
+ * distinct appointment adds one while a repeated socket event for the same
+ * appointment still does not.
+ */
+describe('appointmentSlice queue.completedToday', () => {
+  const today = new Date().toISOString();
+
+  const completed = (id) => ({ type: upsertQueueFromSocket.type, payload: { _id: id, status: 'completed', start: today } });
+
+  const queued = (completedToday = 0, completedIds = []) => ({
+    ...reducer(undefined, { type: '@@INIT' }),
+    queue: { waiting: [], inChair: [], completedToday, completedIds, updatedAt: null },
+  });
+
+  it('counts every distinct completion, not just the first', () => {
+    let state = queued();
+    state = reducer(state, completed('a1'));
+    expect(state.queue.completedToday).toBe(1);
+
+    state = reducer(state, completed('a2'));
+    expect(state.queue.completedToday).toBe(2);
+
+    state = reducer(state, completed('a3'));
+    expect(state.queue.completedToday).toBe(3);
+  });
+
+  it('does not count the same appointment twice when the socket repeats itself', () => {
+    let state = reducer(queued(), completed('a1'));
+    state = reducer(state, completed('a1'));
+
+    expect(state.queue.completedToday).toBe(1);
+  });
+
+  it('ignores a completion that started on a previous day', () => {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const state = reducer(queued(), {
+      type: upsertQueueFromSocket.type,
+      payload: { _id: 'a1', status: 'completed', start: yesterday },
+    });
+
+    expect(state.queue.completedToday).toBe(0);
+  });
+
+  it('keeps the dedup set across a queue refetch that moved forward', () => {
+    // The queue is polled, so `fetchQueue.fulfilled` rebuilds `queue`. If it
+    // dropped the id set, the next duplicate event would count the appointment
+    // a second time.
+    let state = reducer(queued(), completed('a1'));
+    state = reducer(state, {
+      type: fetchQueue.fulfilled.type,
+      payload: { waiting: [], inChair: [], completedToday: 1 },
+    });
+    state = reducer(state, completed('a1'));
+
+    expect(state.queue.completedToday).toBe(1);
+  });
+
+  it('resets the dedup set when the queue moves to another day', () => {
+    let state = reducer(queued(3, ['a1', 'a2', 'a3']), {
+      type: fetchQueue.fulfilled.type,
+      payload: { waiting: [], inChair: [], completedToday: 0 },
+    });
+
+    expect(state.queue.completedToday).toBe(0);
+    expect(state.queue.completedIds).toEqual([]);
   });
 });

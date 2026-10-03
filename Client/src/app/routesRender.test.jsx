@@ -42,6 +42,9 @@ vi.mock('../lib/socket', () => ({
   unsubscribeQueue: vi.fn(),
   disconnectSocket: vi.fn(),
   useSocketEvent: () => {},
+  // Topbar reads this to show the realtime connection badge. Report "connected"
+  // so the happy-path route renders stay free of the offline badge.
+  useSocketConnectionStatus: () => 'connected',
   SOCKET_URL: 'ws://localhost:7000',
   attachListener: vi.fn(),
   detachListener: vi.fn(),

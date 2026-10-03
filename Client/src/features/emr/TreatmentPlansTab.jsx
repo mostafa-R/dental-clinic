@@ -18,6 +18,7 @@ import { generateInvoiceFromPlan } from '../wallet/walletSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { requestConfirm } from '../ui/confirmDialog';
 import { useSocketEvent } from '../../lib/socket';
+import { SOCKET_EVENTS } from '../../lib/socketEvents';
 import { useCanManageEmr } from '../../lib/roles';
 import { formatMoney } from '../../lib/format';
 import {
@@ -55,8 +56,8 @@ export default function TreatmentPlansTab({ patientId }) {
     refetch();
   }, [refetch]);
 
-  useSocketEvent('treatment-plan:created', refetch);
-  useSocketEvent('treatment-plan:updated', refetch);
+  useSocketEvent(SOCKET_EVENTS.TREATMENT_PLAN_CREATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.TREATMENT_PLAN_UPDATED, refetch);
 
   const toggle = (planId) => {
     setExpanded((prev) => {

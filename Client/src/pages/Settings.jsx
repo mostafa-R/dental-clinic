@@ -90,9 +90,11 @@ export default function Settings() {
   const onLang = (next) => { changeLanguage(next); flashSaved(); };
   const onTheme = (next) => { changeTheme(next); flashSaved(); };
 
-  // `user.role` is always undefined - the document carries `roleId`, which
-  // `/auth/me` leaves unpopulated. Resolved in one place so the badge and the
-  // detail row can never disagree.
+  // `/auth/me` and `login` both ship the role populated (`role` key plus a
+  // populated `roleId`), so this resolves through every shape the API can
+  // return — a session restored from an older token still yields '' rather than
+  // an ObjectId. Resolved in one place so the badge and the detail row can
+  // never disagree.
   const roleText = userRoleLabel(user);
 
   const profileFacts = user

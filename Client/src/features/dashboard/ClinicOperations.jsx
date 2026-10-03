@@ -7,6 +7,7 @@ import { appointmentApi } from '../appointments/appointmentApi';
 import { inventoryApi } from '../inventory/inventoryApi';
 import { billingApi } from '../billing/billingApi';
 import { useSocketEvent } from '../../lib/socket';
+import { SOCKET_EVENTS } from '../../lib/socketEvents';
 import { useT } from '../../lib/i18n';
 import { usePermission } from '../../lib/roles';
 import { formatMoney } from '../../lib/format';
@@ -69,12 +70,12 @@ export default function ClinicOperations() {
   useEffect(() => { refreshAppointments(); }, [refreshAppointments]);
   useEffect(() => { refreshInventory(); }, [refreshInventory]);
   useEffect(() => { refreshBilling(); }, [refreshBilling]);
-  useSocketEvent('appointment:created', refreshAppointments);
-  useSocketEvent('appointment:updated', refreshAppointments);
-  useSocketEvent('appointment:statusChanged', refreshAppointments);
-  useSocketEvent('queue.status.changed', refreshAppointments);
-  useSocketEvent('invoice:updated', refreshBilling);
-  useSocketEvent('inventory:updated', refreshInventory);
+  useSocketEvent(SOCKET_EVENTS.APPOINTMENT_CREATED, refreshAppointments);
+  useSocketEvent(SOCKET_EVENTS.APPOINTMENT_UPDATED, refreshAppointments);
+  useSocketEvent(SOCKET_EVENTS.APPOINTMENT_STATUS_CHANGED, refreshAppointments);
+  useSocketEvent(SOCKET_EVENTS.QUEUE_STATUS_CHANGED, refreshAppointments);
+  useSocketEvent(SOCKET_EVENTS.INVOICE_UPDATED, refreshBilling);
+  useSocketEvent(SOCKET_EVENTS.INVENTORY_UPDATED, refreshInventory);
 
   const arrivals = useMemo(() => (appointments || []).filter((a) => ['scheduled', 'confirmed'].includes(a.status)).sort((a, b) => new Date(a.start) - new Date(b.start)), [appointments]);
   const alerts = useMemo(() => (appointments || []).filter((a) => a.lateArrival?.flagged || a.status === 'no_show').sort((a, b) => new Date(a.start) - new Date(b.start)), [appointments]);

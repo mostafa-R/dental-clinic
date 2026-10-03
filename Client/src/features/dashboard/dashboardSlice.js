@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { dashboardApi } from './dashboardApi';
+import { errPayload } from '../../lib/errors';
 
 export const fetchDashboardStats = createAsyncThunk(
   'dashboard/fetchStats',
@@ -7,7 +8,7 @@ export const fetchDashboardStats = createAsyncThunk(
     try {
       return await dashboardApi.getStats();
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to load dashboard');
+      return rejectWithValue(errPayload(err, 'Failed to load dashboard'));
     }
   },
 );

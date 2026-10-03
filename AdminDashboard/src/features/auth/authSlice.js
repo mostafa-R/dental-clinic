@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import api from "../../lib/axios";
+import { sessionExpired } from "./sessionEvents";
 
 export const login = createAsyncThunk(
   "auth/login",
@@ -152,6 +153,20 @@ const authSlice = createSlice({
         state.loading = false;
         state.user = null;
         state.isAuthenticated = false;
+        state._initialized = true;
+      })
+      // Dispatched by the axios interceptor when a token refresh fails. Resets
+      // the session in-place so ProtectedRoute re-renders and redirects through
+      // React Router, instead of the interceptor hard-navigating the document.
+      // `_initialized` is set so the app does not immediately re-issue
+      // `/auth/me` against the session we just declared dead.
+      .addCase(sessionExpired, (state) => {
+        state.user = null;
+        state.isAuthenticated = false;
+        state.loading = false;
+        state.requires2fa = false;
+        state.challengeToken = null;
+        state.challengeAdminId = null;
         state._initialized = true;
       });
   },

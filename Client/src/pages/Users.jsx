@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
@@ -9,34 +9,69 @@ import { fetchUsers, toggleUserActive } from '../features/users/userSlice';
 import { showErrorDialog, pushToast } from '../features/ui/uiSlice';
 import { requestConfirm } from '../features/ui/confirmDialog';
 import { useSocketEvent } from '../lib/socket';
+import { SOCKET_EVENTS } from '../lib/socketEvents';
 import { useT } from '../lib/i18n';
 import { useCanManageUsers, userRoleLabel } from '../lib/roles';
 import UserFormModal from '../features/users/UserFormModal';
 
+const PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 300;
+
 export default function Users() {
   const dispatch = useDispatch();
   const { t } = useT();
-  const { items, status, error } = useSelector((s) => s.users);
+  const { items, status, error, pagination } = useSelector((s) => s.users);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [page, setPage] = useState(1);
   const canManage = useCanManageUsers();
 
+  // Server-side search: filtering the current page in the browser could only
+  // ever match the 20 rows already fetched, so anyone past page 1 was
+  // unsearchable. The server applies the term before pagination.
   useEffect(() => {
-    dispatch(fetchUsers());
-  }, [dispatch]);
+    const timer = setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const load = useCallback(
+    (nextPage, term) => {
+      dispatch(fetchUsers({ page: nextPage, limit: PAGE_SIZE, search: term }));
+    },
+    [dispatch],
+  );
+
+  // A new search term invalidates the current page number; without the reset the
+  // pager could land on page 4 of a one-page result.
+  const prevDebounced = useRef(debouncedQuery);
+  useEffect(() => {
+    if (prevDebounced.current !== debouncedQuery) {
+      prevDebounced.current = debouncedQuery;
+      setPage(1);
+    }
+  }, [debouncedQuery]);
+
+  useEffect(() => {
+    load(page, debouncedQuery);
+  }, [load, page, debouncedQuery]);
 
   const openCreate = () => { setEditing(null); setFormOpen(true); };
   const openEdit = (user) => { setEditing(user); setFormOpen(true); };
   const closeForm = () => { setFormOpen(false); setEditing(null); };
 
-  const refetch = useCallback(() => { dispatch(fetchUsers()); }, [dispatch]);
-  useSocketEvent('user:created', refetch);
-  useSocketEvent('user:updated', refetch);
-  useSocketEvent('user:deleted', refetch);
-  useSocketEvent('user:toggled', refetch);
+  // Re-fetch the page currently on screen. The local reducers already patch
+  // single rows for the actions taken on this page; this covers changes made
+  // elsewhere (another session, a role edit) and deletions that shift rows up.
+  const refetch = useCallback(() => {
+    load(page, debouncedQuery);
+  }, [load, page, debouncedQuery]);
+  useSocketEvent(SOCKET_EVENTS.USER_CREATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.USER_UPDATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.USER_DELETED, refetch);
+  useSocketEvent(SOCKET_EVENTS.USER_TOGGLED, refetch);
 
   const onToggleActive = async (user) => {
     const action = user.isActive ? 'deactivate' : 'activate';
@@ -54,23 +89,9 @@ export default function Users() {
   };
 
   const isLoading = status === 'loading' || status === 'idle';
-
-  const PAGE_SIZE = 20;
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (u) => u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q),
-    );
-  }, [items, query]);
-
-  const visible = useMemo(() => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filtered, page]);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-
-  const onQueryChange = (value) => {
-    setQuery(value);
-    setPage(1);
-  };
+  const total = pagination?.total ?? 0;
+  const totalPages = Math.max(1, pagination?.pages ?? 1);
+  const isFiltered = debouncedQuery.length > 0;
 
   return (
     <div className="space-y-6">
@@ -89,10 +110,10 @@ export default function Users() {
       {error && !isLoading && <EmptyState title={t('users.loadFailed')} message={error?.message} />}
       {!error && !isLoading && status === 'succeeded' && items.length === 0 && (
         <EmptyState
-          title={t('users.empty')}
-          message={t('users.emptyHint')}
+          title={isFiltered ? t('users.noResults') : t('users.empty')}
+          message={isFiltered ? undefined : t('users.emptyHint')}
           action={
-            canManage && !isLoading ? (
+            canManage && !isLoading && !isFiltered ? (
               <Button size="sm" onClick={openCreate}>
                 {t('users.new')}
               </Button>
@@ -112,17 +133,14 @@ export default function Users() {
               <input
                 type="search"
                 value={query}
-                onChange={(e) => onQueryChange(e.target.value)}
+                onChange={(e) => setQuery(e.target.value)}
                 placeholder={t('users.searchPlaceholder')}
                 className="w-full rounded-xl border border-slate-200 bg-white py-2 ps-9 pe-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500"
               />
             </label>
-            <span className="hidden text-xs text-slate-400 dark:text-slate-500 sm:inline">
-              {visible.length} / {items.length}
-            </span>
           </div>
 
-          {filtered.length === 0 && !isLoading ? (
+          {items.length === 0 && !isLoading ? (
             <EmptyState title={t('users.noResults')} />
           ) : (
             <DataTable
@@ -135,13 +153,13 @@ export default function Users() {
                 { label: t('users.col.status') },
                 { label: t('users.col.actions'), className: 'text-end' },
               ]}
-              count={visible.length}
+              count={items.length}
               footer={
                 totalPages > 1 ? (
                   <Pagination
                     page={page}
                     pages={totalPages}
-                    total={filtered.length}
+                    total={total}
                     pageSize={PAGE_SIZE}
                     onChange={setPage}
                     prevLabel={t('common.prev')}
@@ -150,7 +168,7 @@ export default function Users() {
                 ) : undefined
               }
             >
-              {visible.map((u) => (
+              {items.map((u) => (
             <tr key={u._id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/30">
               <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{u.name}</td>
               <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{u.email}</td>

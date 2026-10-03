@@ -313,7 +313,7 @@ export async function createTenant({ name, email, phone, plan, planId, status, a
   };
 }
 
-export async function updateTenant(id, { name, email, phone, plan, planId, status, address, city, country }) {
+export async function updateTenant(id, { name, email, phone, plan, planId, status, address, city, country, extendTrial }) {
   const tenant = await Tenant.findById(id);
   if (!tenant) throw ApiError.notFound('Tenant not found');
 
@@ -375,6 +375,29 @@ export async function updateTenant(id, { name, email, phone, plan, planId, statu
     } else if (status === 'suspended' || status === 'cancelled') {
       tenant.isActive = false;
     }
+  }
+
+  if (extendTrial) {
+    // Deliberately outside the `status !== tenant.status` guard above: that
+    // guard exists so a no-op edit does not silently rewrite billing dates, but
+    // it also meant "extend trial" did nothing at all for a tenant that was
+    // already on trial — precisely the case an admin extends a trial from.
+    // This branch is an explicit request, so it always applies.
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const platformSettings = await PlatformSetting.findOne().lean();
+    const trialDays = platformSettings?.trialDays ?? 14;
+    // Extend from the later of "now" and the current end date. Using `now`
+    // alone would *shorten* a trial that already has more time left, which is
+    // the opposite of what an extend button promises.
+    const currentEnd = tenant.trialEndsAt ? new Date(tenant.trialEndsAt).getTime() : 0;
+    const from = Math.max(Date.now(), Number.isNaN(currentEnd) ? 0 : currentEnd);
+    tenant.status = 'trial';
+    tenant.isActive = true;
+    // A trial and a paid subscription period are mutually exclusive; leaving a
+    // stale subscriptionEndsAt would let billing treat this as an active paid
+    // tenant while the dashboard shows a trial.
+    tenant.subscriptionEndsAt = null;
+    tenant.trialEndsAt = new Date(from + trialDays * DAY_MS);
   }
   if (address !== undefined) tenant.address = address;
   if (city !== undefined) tenant.city = city;

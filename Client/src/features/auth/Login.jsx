@@ -63,15 +63,6 @@ export default function Login() {
     }
   };
 
-  // If impersonating, show brief loading then redirect
-  if (searchParams.get('impersonation_code') && user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 dark:bg-slate-950">
-        <div className="text-sm text-slate-500">{t('common.loading')}</div>
-      </div>
-    );
-  }
-
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas px-4 dark:bg-slate-950">
       <div className="pointer-events-none absolute -top-24 -start-24 h-72 w-72 rounded-full bg-brand/10 blur-3xl" />

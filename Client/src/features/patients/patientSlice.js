@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { patientApi } from './patientApi';
+import { errPayload } from '../../lib/errors';
 
 const initialQuery = { search: '', page: 1, limit: 20, isActive: undefined };
 
@@ -9,7 +10,7 @@ export const fetchPatients = createAsyncThunk(
     try {
       return await patientApi.list(params);
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to load patients');
+      return rejectWithValue(errPayload(err, 'Failed to load patients'));
     }
   },
 );
@@ -21,7 +22,7 @@ export const createPatient = createAsyncThunk(
       const { patient } = await patientApi.create(payload);
       return patient;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to create patient' });
+      return rejectWithValue(errPayload(err, 'Failed to create patient'));
     }
   },
 );
@@ -33,7 +34,7 @@ export const updatePatient = createAsyncThunk(
       const { patient } = await patientApi.update(id, payload);
       return patient;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to update patient' });
+      return rejectWithValue(errPayload(err, 'Failed to update patient'));
     }
   },
 );
@@ -45,7 +46,7 @@ export const archivePatient = createAsyncThunk(
       await patientApi.archive(id);
       return id;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to archive patient' });
+      return rejectWithValue(errPayload(err, 'Failed to archive patient'));
     }
   },
 );
@@ -56,7 +57,7 @@ export const fetchDuplicates = createAsyncThunk(
     try {
       return await patientApi.duplicates();
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to check duplicates' });
+      return rejectWithValue(errPayload(err, 'Failed to check duplicates'));
     }
   },
 );
@@ -77,7 +78,7 @@ export const mergePatientsBatch = createAsyncThunk(
       const result = await patientApi.mergeBatch(merges);
       return result;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to merge patients' });
+      return rejectWithValue(errPayload(err, 'Failed to merge patients'));
     }
   },
 );

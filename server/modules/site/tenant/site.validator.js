@@ -43,6 +43,15 @@ export const tenantSchema = z
 
 export const tenantUpdateSchema = z.object({
   ...baseFields,
+  // Explicit "give this tenant more trial" request, kept separate from `status`
+  // because re-sending `status: "trial"` only recomputes `trialEndsAt` when the
+  // status actually *changes* — so for the tenants that most need extending
+  // (the ones already on trial) it was a silent no-op.
+  //
+  // Boolean rather than a day count so the platform's own `trialDays` setting
+  // stays authoritative: the button previously hardcoded "14 days" in its
+  // label, which silently lied to the admin whenever that setting was changed.
+  extendTrial: z.boolean().optional(),
 }).strict();
 
 export const subscriptionSchema = z.object({

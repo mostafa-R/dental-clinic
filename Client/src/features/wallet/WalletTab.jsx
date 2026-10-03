@@ -11,6 +11,7 @@ import { showErrorDialog } from '../ui/uiSlice';
 import { useCanManageBilling, useCanViewBilling } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
 import { useSocketEvent } from '../../lib/socket';
+import { SOCKET_EVENTS } from '../../lib/socketEvents';
 import { formatMoney, formatDate } from '../../lib/format';
 
 const INSTALLMENT_STATUS_STYLES = {
@@ -58,10 +59,10 @@ export default function WalletTab({ patientId }) {
       dispatch(fetchInstallmentPlans({ patientId, params: { limit: 100 } }));
     }
   }, [dispatch, patientId]);
-  useSocketEvent('wallet:updated', refetchWallet);
-  useSocketEvent('installment:created', refetchWallet);
-  useSocketEvent('installment:updated', refetchWallet);
-  useSocketEvent('installment:paid', refetchWallet);
+  useSocketEvent(SOCKET_EVENTS.WALLET_UPDATED, refetchWallet);
+  useSocketEvent(SOCKET_EVENTS.INSTALLMENT_CREATED, refetchWallet);
+  useSocketEvent(SOCKET_EVENTS.INSTALLMENT_UPDATED, refetchWallet);
+  useSocketEvent(SOCKET_EVENTS.INSTALLMENT_PAID, refetchWallet);
 
   const handleAddFunds = useCallback(async (e) => {
     e.preventDefault();

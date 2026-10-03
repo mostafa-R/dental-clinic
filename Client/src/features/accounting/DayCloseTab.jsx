@@ -10,6 +10,7 @@ import { useCanManageAccounting } from '../../lib/roles';
 import { formatDate, formatMoney } from '../../lib/format';
 import { useT } from '../../lib/i18n';
 import { useSocketEvent } from '../../lib/socket';
+import { SOCKET_EVENTS } from '../../lib/socketEvents';
 import { toDateInputValue } from '../../lib/clinicTime';
 
 // The day being closed is a *clinic* calendar day. Deriving it from the
@@ -42,7 +43,7 @@ export default function DayCloseTab() {
   }, [load]);
 
   const onDayClosed = useCallback(() => load(), [load]);
-  useSocketEvent('dayclose:closed', onDayClosed);
+  useSocketEvent(SOCKET_EVENTS.DAY_CLOSE_CLOSED, onDayClosed);
 
   const expectedTotal = useMemo(() => {
     if (!preview || !preview.expected) return 0;

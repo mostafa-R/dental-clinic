@@ -27,6 +27,7 @@ import EmptyState from '../components/ui/EmptyState';
 import Pagination from '../components/ui/Pagination';
 import Spinner from '../components/ui/Spinner';
 import { useSocketEvent } from '../lib/socket';
+import { SOCKET_EVENTS } from '../lib/socketEvents';
 import { useCanViewBilling, useCanCreateInvoices } from '../lib/roles';
 import { useT } from '../lib/i18n';
 
@@ -92,8 +93,8 @@ export default function Billing() {
     if (canViewSummary) dispatch(fetchBillingSummary());
   }, [dispatch, query, canViewSummary]);
 
-  useSocketEvent('invoice:created', refreshAll);
-  useSocketEvent('invoice:updated', refreshAll);
+  useSocketEvent(SOCKET_EVENTS.INVOICE_CREATED, refreshAll);
+  useSocketEvent(SOCKET_EVENTS.INVOICE_UPDATED, refreshAll);
 
   useEffect(() => () => dispatch(resetBilling()), [dispatch]);
 

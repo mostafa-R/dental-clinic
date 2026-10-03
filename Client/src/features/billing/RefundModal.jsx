@@ -4,10 +4,11 @@ import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import { Select, TextInput } from '../../components/ui/Field';
 import Spinner from '../../components/ui/Spinner';
-import { refundPayment, resetPaymentState } from './billingSlice';
+import { refundPayment, resetRefundState } from './billingSlice';
 import { PAYMENT_METHODS, paymentMethodTKey } from './statuses';
 import { showErrorDialog } from '../ui/uiSlice';
 import { formatMoney } from '../../lib/format';
+import { errPayload } from '../../lib/errors';
 import { useT } from '../../lib/i18n';
 
 function round2(n) {
@@ -18,7 +19,7 @@ function round2(n) {
 export default function RefundModal({ open, invoice, onClose, onSaved }) {
   const dispatch = useDispatch();
   const { t } = useT();
-  const { paymentStatus } = useSelector((s) => s.billing);
+  const { refundStatus } = useSelector((s) => s.billing);
 
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('cash');
@@ -33,10 +34,10 @@ export default function RefundModal({ open, invoice, onClose, onSaved }) {
     setMethod('cash');
     setReference('');
     setNotes('');
-    dispatch(resetPaymentState());
+    dispatch(resetRefundState());
   }, [open, maxRefund, dispatch]);
 
-  const submitting = paymentStatus === 'loading';
+  const submitting = refundStatus === 'loading';
 
   const labelCls = 'mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200';
 
@@ -65,7 +66,7 @@ export default function RefundModal({ open, invoice, onClose, onSaved }) {
       ).unwrap();
       onSaved?.();
     } catch (err) {
-      dispatch(showErrorDialog(err));
+      dispatch(showErrorDialog(errPayload(err, 'Failed to refund payment')));
     }
   };
 

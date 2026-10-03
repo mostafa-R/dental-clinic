@@ -18,6 +18,7 @@ import {
 import { showErrorDialog, pushToast } from '../features/ui/uiSlice';
 import { requestConfirm } from '../features/ui/confirmDialog';
 import { useSocketEvent } from '../lib/socket';
+import { SOCKET_EVENTS } from '../lib/socketEvents';
 import { CRUD_ACTIONS, CRUD_SHORT, MODULES as LOCAL_MODULES } from '../features/roles/permissions';
 import { useT } from '../lib/i18n';
 import { useCanManageRoles } from '../lib/roles';
@@ -39,9 +40,9 @@ export default function Roles() {
   }, [dispatch]);
 
   const refetch = useCallback(() => { dispatch(fetchRoles()); }, [dispatch]);
-  useSocketEvent('role:created', refetch);
-  useSocketEvent('role:updated', refetch);
-  useSocketEvent('role:deleted', refetch);
+  useSocketEvent(SOCKET_EVENTS.ROLE_CREATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.ROLE_UPDATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.ROLE_DELETED, refetch);
 
   const openCreate = () => { setEditing(null); setFormOpen(true); };
   const openEdit = (role) => { setEditing(role); setFormOpen(true); };

@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { authApi } from './authApi';
+import { errPayload } from '../../lib/errors';
 
 export const loginUser = createAsyncThunk(
   'auth/loginUser',
@@ -8,7 +9,7 @@ export const loginUser = createAsyncThunk(
       const { user } = await authApi.login(payload);
       return user;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Login failed' });
+      return rejectWithValue(errPayload(err, 'Login failed'));
     }
   },
 );
@@ -20,7 +21,7 @@ export const loadCurrentUser = createAsyncThunk(
       const { user } = await authApi.getMe();
       return user;
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Session expired');
+      return rejectWithValue(errPayload(err, 'Session expired'));
     }
   },
 );
@@ -33,7 +34,7 @@ export const refreshSession = createAsyncThunk(
       const { user } = await authApi.getMe();
       return user;
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Refresh failed');
+      return rejectWithValue(errPayload(err, 'Refresh failed'));
     }
   },
 );
@@ -45,7 +46,7 @@ export const verifyImpersonation = createAsyncThunk(
       const { user } = await authApi.verifyImpersonation(code);
       return user;
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Invalid or expired impersonation link');
+      return rejectWithValue(errPayload(err, 'Invalid or expired impersonation link'));
     }
   },
 );

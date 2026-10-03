@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { branchApi } from './branchApi';
+import { errPayload } from '../../lib/errors';
 
 export const fetchBranches = createAsyncThunk(
   'branches/fetchList',
@@ -7,7 +8,7 @@ export const fetchBranches = createAsyncThunk(
     try {
       return await branchApi.list(params);
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to load branches');
+      return rejectWithValue(errPayload(err, 'Failed to load branches'));
     }
   },
 );
@@ -19,7 +20,7 @@ export const createBranch = createAsyncThunk(
       const { branch } = await branchApi.create(payload);
       return branch;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to create branch' });
+      return rejectWithValue(errPayload(err, 'Failed to create branch'));
     }
   },
 );
@@ -31,7 +32,7 @@ export const updateBranch = createAsyncThunk(
       const { branch } = await branchApi.update(id, payload);
       return branch;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to update branch' });
+      return rejectWithValue(errPayload(err, 'Failed to update branch'));
     }
   },
 );
@@ -43,7 +44,7 @@ export const deleteBranch = createAsyncThunk(
       await branchApi.delete(id);
       return id;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to delete branch' });
+      return rejectWithValue(errPayload(err, 'Failed to delete branch'));
     }
   },
 );

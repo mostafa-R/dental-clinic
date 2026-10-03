@@ -1,4 +1,6 @@
 import axios from "axios";
+import { store } from "../app/store";
+import { sessionExpired } from "../features/auth/sessionEvents";
 
 const api = axios.create({
   baseURL:
@@ -12,9 +14,36 @@ const api = axios.create({
 let isRefreshing = false;
 let queue = [];
 
-function redirectToLogin() {
-  if (window.location.pathname !== "/login") {
-    window.location.href = "/login";
+/**
+ * End the session in the store rather than reloading the document.
+ *
+ * This used to be `window.location.href = "/login"`. A hard navigation tears
+ * down every mounted component at once, so an admin who was halfway through an
+ * edit — a tenant form, a 2FA enrolment, an impersonation teardown — lost the
+ * input with no warning, and other tabs stayed apparently signed in against a
+ * session the server had already revoked. ProtectedRoute watches
+ * `isAuthenticated`, so clearing it here produces the same destination with a
+ * normal client-side navigation.
+ *
+ * Guarded against re-entry: the teardown issues its own `/auth/logout` request,
+ * which would 401 straight back into this handler.
+ */
+let sessionTeardownInFlight = false;
+function endSession() {
+  if (sessionTeardownInFlight) return;
+  sessionTeardownInFlight = true;
+  try {
+    store.dispatch(sessionExpired());
+    // Client-readable traces still need clearing; the HttpOnly cookies are gone
+    // with the session the server just rejected. Imported lazily to keep this
+    // module free of a static cycle through `realtime.js` -> store.
+    import("./realtime")
+      .then(({ clearClientSessionTraces }) => clearClientSessionTraces())
+      .finally(() => {
+        sessionTeardownInFlight = false;
+      });
+  } catch {
+    sessionTeardownInFlight = false;
   }
 }
 
@@ -57,7 +86,7 @@ api.interceptors.response.use(
       } catch (refreshError) {
         queue.forEach((p) => p.reject(refreshError));
         queue = [];
-        redirectToLogin();
+        endSession();
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
@@ -65,7 +94,7 @@ api.interceptors.response.use(
     }
 
     if (status === 401 && url.includes("/auth/refresh")) {
-      redirectToLogin();
+      endSession();
     }
 
     return Promise.reject(error);

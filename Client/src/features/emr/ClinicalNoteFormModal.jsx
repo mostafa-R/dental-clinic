@@ -93,6 +93,24 @@ export default function ClinicalNoteFormModal({ open, patientId, patient, note, 
       dispatch(showErrorDialog({ message: t('emr.note.needDoctor') }));
       return;
     }
+    // PRD §6.5: the SOAP fields are mandatory on creation. They used to be sent
+    // as `undefined` when blank, which JSON.stringify drops, so the request
+    // reached the server with no key at all and came back as a generic
+    // "Validation failed". Catch the gap before the round-trip instead.
+    if (!note) {
+      const missing = [
+        [t('emr.note.chiefComplaint'), chiefComplaint],
+        [t('emr.note.examination'), examination],
+        [t('emr.note.diagnosis'), diagnosis],
+        [t('emr.note.plan'), plan],
+      ]
+        .filter(([, value]) => !value.trim())
+        .map(([label]) => label);
+      if (missing.length > 0) {
+        dispatch(showErrorDialog({ message: `${t('emr.note.requiredFields')} ${missing.join('، ')}` }));
+        return;
+      }
+    }
     const cleanAttachments = attachments
       .filter((a) => a.url.trim())
       .map((a) => ({ type: a.type, url: a.url.trim(), caption: a.caption?.trim() || undefined }));

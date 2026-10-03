@@ -10,6 +10,7 @@ import { fetchBranches, deleteBranch } from '../features/branches/branchSlice';
 import { showErrorDialog, pushToast } from '../features/ui/uiSlice';
 import { requestConfirm } from '../features/ui/confirmDialog';
 import { useSocketEvent } from '../lib/socket';
+import { SOCKET_EVENTS } from '../lib/socketEvents';
 import { useT } from '../lib/i18n';
 import { useCanManageBranches } from '../lib/roles';
 
@@ -27,9 +28,9 @@ export default function Branches() {
   }, [dispatch]);
 
   const refetch = useCallback(() => { dispatch(fetchBranches()); }, [dispatch]);
-  useSocketEvent('branch:created', refetch);
-  useSocketEvent('branch:updated', refetch);
-  useSocketEvent('branch:deleted', refetch);
+  useSocketEvent(SOCKET_EVENTS.BRANCH_CREATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.BRANCH_UPDATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.BRANCH_DELETED, refetch);
 
   const openCreate = () => { setEditing(null); setFormOpen(true); };
   const openEdit = (branch) => { setEditing(branch); setFormOpen(true); };

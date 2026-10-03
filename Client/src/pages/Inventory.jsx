@@ -25,6 +25,7 @@ import { INVENTORY_CATEGORIES } from '../features/inventory/inventory';
 import { formatDate, formatMoney } from '../lib/format';
 import { useT } from '../lib/i18n';
 import { useSocketEvent } from '../lib/socket';
+import { SOCKET_EVENTS } from '../lib/socketEvents';
 import { useCanManageInventory } from '../lib/roles';
 
 export default function Inventory() {
@@ -44,9 +45,9 @@ export default function Inventory() {
   useEffect(() => () => dispatch(resetInventory()), [dispatch]);
 
   const refetch = useCallback(() => { dispatch(fetchItems(query)); }, [dispatch, query]);
-  useSocketEvent('inventory:created', refetch);
-  useSocketEvent('inventory:updated', refetch);
-  useSocketEvent('inventory:deleted', refetch);
+  useSocketEvent(SOCKET_EVENTS.INVENTORY_CREATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.INVENTORY_UPDATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.INVENTORY_DELETED, refetch);
 
   const openCreate = () => { setEditing(null); setFormOpen(true); };
   const openEdit = (item) => { setEditing(item); setFormOpen(true); };

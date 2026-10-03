@@ -14,7 +14,7 @@ import {
   useCanCreateAppointments,
   useCanCreateInvoices,
 } from "../../lib/roles";
-import { disconnectSocket } from "../../lib/socket";
+import { disconnectSocket, useSocketConnectionStatus } from "../../lib/socket";
 
 function MenuIcon() {
   return (
@@ -199,6 +199,59 @@ function useClickOutside(ref, handler) {
   }, [ref, handler]);
 }
 
+/**
+ * Realtime connection indicator.
+ *
+ * A dropped socket is invisible from the UI: no error, no empty state, just
+ * data that quietly stops updating. Staff would keep booking against a queue
+ * board and patient list that no longer reflects reality, so the loss of
+ * realtime has to be stated outright. Distinct copy for "reconnecting" versus
+ * "offline" because the first is self-healing and the second may need the user
+ * to check their network.
+ *
+ * Renders nothing while connected so the header stays unchanged in the common
+ * case.
+ */
+function RealtimeStatusBadge() {
+  const status = useSocketConnectionStatus();
+  const { t } = useT();
+
+  if (status === "connected") return null;
+
+  const reconnecting = status === "connecting";
+  const label = reconnecting ? t("socket.reconnecting") : t("socket.offline");
+
+  return (
+    <span
+      role="status"
+      aria-live="polite"
+      title={label}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+        reconnecting
+          ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"
+          : "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
+      }`}
+    >
+      {/* The pulse marks this as a live status rather than static text. */}
+      <span className="relative flex h-1.5 w-1.5">
+        {reconnecting && (
+          <span
+            className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${
+              reconnecting ? "bg-amber-500" : "bg-red-500"
+            }`}
+          />
+        )}
+        <span
+          className={`relative inline-flex h-1.5 w-1.5 rounded-full ${
+            reconnecting ? "bg-amber-500" : "bg-red-500"
+          }`}
+        />
+      </span>
+      <span className="hidden sm:inline">{label}</span>
+    </span>
+  );
+}
+
 export default function Topbar() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -210,8 +263,11 @@ export default function Topbar() {
   const menuRef = useRef(null);
   const notifRef = useRef(null);
   // Defensive for the same reason as the Sidebar: the topbar renders on every
-  // authenticated route, so a bad `unread` payload must not throw here.
-  const chatUnread = useSelector((s) => s.chat?.unread);
+  // authenticated route, so a bad `unread` payload must not throw here. `?? {}`
+  // has to be on the selector, not at the use site — a logout RESET_ALL can land
+  // `unread` as undefined, and `Object.values(undefined)` throws inside the memo,
+  // which takes down the whole app shell via the error boundary.
+  const chatUnread = useSelector((s) => s.chat?.unread ?? {});
   const mobileOpen = useSelector((s) => s.ui.mobileSidebarOpen);
   // Quick-action entitlements, resolved once per render.
   const canNewPatient = useCanCreatePatients();
@@ -219,7 +275,7 @@ export default function Topbar() {
   const canViewAppointments = usePermission("appointments", "read");
   const canNewInvoice = useCanCreateInvoices();
   const totalNotif = useMemo(
-    () => Object.values(chatUnread).reduce((sum, n) => sum + n, 0),
+    () => Object.values(chatUnread).reduce((sum, n) => sum + (Number(n) || 0), 0),
     [chatUnread],
   );
 
@@ -343,6 +399,7 @@ export default function Topbar() {
 
       {/* Right section */}
       <div className="ms-auto flex items-center gap-2 sm:gap-3">
+        <RealtimeStatusBadge />
         <PreferencesControls />
 
         {/* Notification bell */}

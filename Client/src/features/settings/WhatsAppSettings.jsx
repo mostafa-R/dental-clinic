@@ -11,9 +11,13 @@ import { settingsApi } from './settingsApi';
 import { pushToast } from '../ui/uiSlice';
 import { requestConfirm } from '../ui/confirmDialog';
 import { useT } from '../../lib/i18n';
+import { errPayload } from '../../lib/errors';
 
 const PROVIDERS = ['whatsapp_web', 'cloud_api'];
 const QR_POLL_MS = 3000;
+// A pairing code is short-lived server-side; past this the code is dead and the
+// user has to start over, so stop waiting rather than poll indefinitely.
+const QR_POLL_TIMEOUT_MS = 60000;
 
 // accessToken is write-only server-side (the controller strips it before
 // returning the settings), so it is tracked separately and only sent when the
@@ -48,6 +52,17 @@ const clamp = (value, min, max, fallback) => {
   return Math.min(max, Math.max(min, n));
 };
 
+/**
+ * `qrCode` is interpolated into an <img src>, so a non-data value (a bare token,
+ * an http URL from a misconfigured gateway) would either render broken or make
+ * the browser fetch an arbitrary origin. Accept only the data URI the pairing
+ * flow is supposed to return.
+ */
+const qrDataUri = (value) => {
+  const raw = value == null ? null : String(value);
+  return raw && raw.startsWith('data:image/') ? raw : null;
+};
+
 export default function WhatsAppSettings() {
   const { t } = useT();
   const dispatch = useDispatch();
@@ -66,7 +81,7 @@ export default function WhatsAppSettings() {
 
   const toastError = useCallback(
     (err, fallbackKey) => {
-      const message = err?.response?.data?.message || t(fallbackKey);
+      const message = errPayload(err, t(fallbackKey)).message;
       setError(message);
       dispatch(pushToast({ type: 'error', message }));
     },
@@ -106,21 +121,42 @@ export default function WhatsAppSettings() {
 
   // Poll while pairing. `error` is terminal as well — the previous guard only
   // stopped on "connected", so a failed handshake polled forever.
+  //
+  // The poll is also bounded: `status` can sit at "connecting" indefinitely when
+  // the pairing never completes (expired QR, user walks away), which left the
+  // panel spinning forever with a dead QR code and no way back except a manual
+  // reload.
   useEffect(() => {
     if (!isConnecting) return undefined;
+    const stop = () => {
+      clearInterval(interval);
+      clearTimeout(timeoutId);
+    };
+
+    const applyQr = (value) => setQrCode(qrDataUri(value));
+
     const interval = setInterval(async () => {
       try {
         const qrRes = await settingsApi.getWhatsAppQr();
-        setQrCode(qrRes?.qrCode || null);
+        applyQr(qrRes?.qrCode);
         const statusRes = await settingsApi.getWhatsAppStatus();
-        setSettings((prev) => ({ ...prev, status: statusRes?.status || prev.status }));
-        if (statusRes?.status === 'connected') {
-          clearInterval(interval);
-        }
+        const next = statusRes?.status;
+        setSettings((prev) => ({ ...prev, status: next || prev.status }));
+        if (next === 'connected') stop();
       } catch {}
     }, QR_POLL_MS);
-    return () => clearInterval(interval);
-  }, [isConnecting]);
+
+    const timeoutId = setTimeout(() => {
+      stop();
+      setSettings((prev) => ({ ...prev, status: 'disconnected' }));
+      setQrCode(null);
+      const message = t('whatsapp.qrTimeout');
+      setError(message);
+      dispatch(pushToast({ type: 'error', message }));
+    }, QR_POLL_TIMEOUT_MS);
+
+    return stop;
+  }, [isConnecting, dispatch, t]);
 
   const patch = (updates) => setSettings((prev) => ({ ...prev, ...updates }));
 
@@ -202,8 +238,8 @@ export default function WhatsAppSettings() {
     setQrCode(null);
     try {
       await settingsApi.connectWhatsApp();
-      const qrRes = await settingsApi.getWhatsAppQr();
-      if (qrRes?.qrCode) setQrCode(qrRes.qrCode);
+        const qrRes = await settingsApi.getWhatsAppQr();
+        setQrCode(qrDataUri(qrRes?.qrCode));
       const statusRes = await settingsApi.getWhatsAppStatus();
       setSettings((prev) => ({ ...prev, status: statusRes?.status || 'connecting' }));
       setError('');

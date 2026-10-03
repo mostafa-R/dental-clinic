@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, lazy, useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Button from "../components/ui/Button";
@@ -142,35 +142,24 @@ export default function Dashboard() {
     const loadDistribution = async () => {
       setDistLoading(true);
       try {
-        // Single request: GET /analytics/distribution returns { byPlan:{}, byStatus:{}, total:N }
-        // Falls back to fetching page 1 only (limit=200) if endpoint doesn't exist yet.
-        const { data } = await api
-          .get("/analytics/distribution", { signal: controller.signal })
-          .catch(async (err) => {
-            if (err?.response?.status === 404) {
-              return api.get("/tenants", {
-                params: { page: 1, limit: 200 },
-                signal: controller.signal,
-              });
-            }
-            throw err;
-          });
-
-        const byPlan = {};
-        const byStatus = {};
-        // Support both shapes: { byPlan, byStatus, total } OR { tenants: [] }
-        if (data.byPlan && data.byStatus) {
-          setDistribution({ byPlan: data.byPlan, byStatus: data.byStatus, total: data.total ?? 0 });
-          return;
-        }
-        const tenants = data.tenants || (Array.isArray(data) ? data : []);
-        tenants.forEach((tn) => {
-          const p = tn.plan || "free";
-          byPlan[p] = (byPlan[p] || 0) + 1;
-          const s = STATUS_ORDER.includes(tn.status) ? tn.status : TENANT_STATUS.ACTIVE;
-          byStatus[s] = (byStatus[s] || 0) + 1;
+        // Single aggregated request. The server counts tenants by plan and by
+        // status in one `$facet`, so the charts are correct for any number of
+        // tenants.
+        //
+        // The old 404 fallback here (page through `GET /tenants` client-side)
+        // was deleted on purpose: it capped at 200 tenants, so on a larger
+        // platform it rendered *partial* charts that looked complete. If this
+        // call fails the charts stay empty, which is visibly wrong rather than
+        // quietly wrong.
+        const { data } = await api.get("/analytics/distribution", {
+          signal: controller.signal,
         });
-        setDistribution({ byPlan, byStatus, total: tenants.length });
+
+        setDistribution({
+          byPlan: data.byPlan ?? {},
+          byStatus: data.byStatus ?? {},
+          total: data.total ?? 0,
+        });
       } catch (err) {
         if (err?.name === "CanceledError" || err?.name === "AbortError") return;
         // ignore other errors — charts simply stay empty

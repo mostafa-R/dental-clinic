@@ -14,6 +14,7 @@ import {
 import { pushToast, showErrorDialog } from '../ui/uiSlice';
 import { useSocket } from '../../hooks/useSocket';
 import { subscribeQueue, unsubscribeQueue } from '../../lib/socket';
+import { SOCKET_EVENTS } from '../../lib/socketEvents';
 import QueueCard from './QueueCard';
 import VisitPanel from './VisitPanel';
 import Button from '../../components/ui/Button';
@@ -124,11 +125,11 @@ export default function LiveQueue() {
 
   const socketEvents = useMemo(
     () => [
-      ['appointment:statusChanged', (payload) => dispatch(upsertFromSocket(payload.appointment))],
-      ['appointment:updated', (payload) => dispatch(upsertFromSocket(payload.appointment))],
-      ['appointment:created', (payload) => dispatch(upsertFromSocket(payload.appointment))],
-      ['queue.status.changed', (payload) => dispatch(upsertQueueFromSocket(payload.appointment))],
-      ['queue.patient.called', (payload) => dispatch(upsertQueueFromSocket(payload.appointment))],
+      [SOCKET_EVENTS.APPOINTMENT_STATUS_CHANGED, (payload) => dispatch(upsertFromSocket(payload.appointment))],
+      [SOCKET_EVENTS.APPOINTMENT_UPDATED, (payload) => dispatch(upsertFromSocket(payload.appointment))],
+      [SOCKET_EVENTS.APPOINTMENT_CREATED, (payload) => dispatch(upsertFromSocket(payload.appointment))],
+      [SOCKET_EVENTS.QUEUE_STATUS_CHANGED, (payload) => dispatch(upsertQueueFromSocket(payload.appointment))],
+      [SOCKET_EVENTS.QUEUE_PATIENT_CALLED, (payload) => dispatch(upsertQueueFromSocket(payload.appointment))],
     ],
     [dispatch],
   );

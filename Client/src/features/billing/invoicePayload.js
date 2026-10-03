@@ -6,16 +6,17 @@
  * with real edge cases - can be tested without mounting the modal.
  */
 
+import { toDateInputValue } from '../../lib/clinicTime';
+
 export const EMPTY_ITEM = { description: '', quantity: 1, unitPrice: 0 };
 
-function parseDate(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  // Kept UTC-based, matching the previous implementation: a local-time
-  // conversion shifts the seeded due date by a day either side of UTC.
-  return date.toISOString().slice(0, 10);
-}
+// A due date is a calendar day, not an instant. Reading it back with
+// `toISOString().slice(0, 10)` formatted it in UTC, so a clinic east of Greenwich
+// saw an invoice due "today" display as tomorrow (and vice versa) - and the
+// displayed day was not the day the server stored. `toDateInputValue` resolves
+// the clinic's own zone instead, and passes a date-only string through
+// untouched so an already-correct value is never shifted.
+const parseDate = (value) => toDateInputValue(value);
 
 /** Seeds the edit form from an invoice record. */
 export function toForm(invoice) {

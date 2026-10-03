@@ -42,7 +42,7 @@ import platformAnalyticsReducer, {
   fetchSiteRoles,
   resetPlatformAnalytics,
 } from "../platformAnalytics/platformAnalyticsSlice";
-import impersonationReducer, { endImpersonation } from "../impersonation/impersonationSlice";
+import impersonationReducer, { endImpersonation, __resetImpersonationToken } from "../impersonation/impersonationSlice";
 
 const storeFor = (reducer) => configureStore({ reducer });
 const pending = (thunk) => ({ type: thunk.pending.type });
@@ -370,10 +370,14 @@ describe("platformAnalyticsSlice", () => {
 /* -------------------------------------------------- impersonation teardown */
 
 describe("impersonationSlice / endImpersonation", () => {
-  // The thunk reads the token out of `state.impersonation.token`, so the store
-  // has to be mounted under the same key it has in the real app.
   const storeForImpersonation = () =>
     configureStore({ reducer: { impersonation: impersonationReducer } });
+
+  // The token now lives in module scope (never on the state tree, so it cannot
+  // leak via Redux DevTools), so it has to be reset between cases.
+  beforeEach(() => {
+    __resetImpersonationToken();
+  });
 
   it("POSTs the active token to /impersonation/end", async () => {
     api.post.mockResolvedValue({ data: { success: true } });
@@ -390,6 +394,23 @@ describe("impersonationSlice / endImpersonation", () => {
     });
   });
 
+  it("never places the credential on the Redux state tree", async () => {
+    api.post.mockResolvedValue({ data: { success: true } });
+    const store = storeForImpersonation();
+    store.dispatch({
+      type: "impersonation/start/fulfilled",
+      payload: { impersonationToken: "tok-secret", handoffCode: "c1" },
+    });
+
+    // The whole point of the change: a DevTools dump of the store must not
+    // contain a credential that authorises acting as another user.
+    const serialized = JSON.stringify(store.getState());
+    expect(serialized).not.toContain("tok-secret");
+    expect(store.getState().impersonation.token).toBeUndefined();
+    // Non-secret context the banner still needs stays in the store.
+    expect(store.getState().impersonation.handoffCode).toBe("c1");
+  });
+
   it("clears the session from the store once the server acknowledges", async () => {
     api.post.mockResolvedValue({ data: { success: true } });
     const store = storeForImpersonation();
@@ -400,9 +421,43 @@ describe("impersonationSlice / endImpersonation", () => {
 
     await store.dispatch(endImpersonation());
 
-    const { active, token } = store.getState().impersonation;
+    const { active, handoffCode } = store.getState().impersonation;
     expect(active).toBe(false);
-    expect(token).toBeNull();
+    expect(handoffCode).toBeNull();
+  });
+
+  it("drops the token even when the teardown request fails", async () => {
+    api.post.mockRejectedValue({ response: { data: { message: "boom" } } });
+    const store = storeForImpersonation();
+    store.dispatch({
+      type: "impersonation/start/fulfilled",
+      payload: { impersonationToken: "tok-123" },
+    });
+
+    await store.dispatch(endImpersonation());
+
+    // The grant is single-use from the server's point of view; retrying with a
+    // stale copy could never succeed anyway.
+    expect(JSON.stringify(store.getState())).not.toContain("tok-123");
+  });
+
+  it("still clears the banner when teardown fails, so the operator is not stuck", async () => {
+    api.post.mockRejectedValue({ response: { data: { message: "boom" } } });
+    const store = storeForImpersonation();
+    store.dispatch({
+      type: "impersonation/start/fulfilled",
+      payload: { impersonationToken: "tok-123", targetUser: { name: "Dr Who" } },
+    });
+
+    await store.dispatch(endImpersonation());
+
+    const { active, targetUser, error } = store.getState().impersonation;
+    // Regression: `active` stayed true, so the banner kept rendering the
+    // impersonated identity behind a Stop button that could never work.
+    expect(active).toBe(false);
+    expect(targetUser).toBeNull();
+    // The failure is still reported rather than swallowed.
+    expect(error).toBe("boom");
   });
 
   it("rejects without calling the API when no session is active", async () => {

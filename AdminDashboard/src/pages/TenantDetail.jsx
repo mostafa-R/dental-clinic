@@ -186,7 +186,16 @@ export default function TenantDetail() {
     setBillingError(null);
     setBillingMsg(null);
     try {
-      const result = await dispatch(updateTenant({ id: tenant._id, data: { status: TENANT_STATUS.TRIAL } }));
+      // `extendTrial`, not `status: "trial"`: re-sending the status only
+      // recomputed trialEndsAt when the status actually changed, so for a
+      // tenant already on trial — the only kind anyone extends a trial from —
+      // this button did nothing at all. The server resolves the day count from
+      // the platform's own trialDays setting rather than the hardcoded 14 the
+      // button used to claim, and extends from the later of now and the
+      // current end date so it can never shorten a trial.
+      const result = await dispatch(
+        updateTenant({ id: tenant._id, data: { extendTrial: true } }),
+      );
       if (result.error) {
         setBillingError(result.payload || t("failedUpdateTenant", language));
       } else {

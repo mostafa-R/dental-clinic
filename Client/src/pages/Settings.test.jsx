@@ -197,7 +197,8 @@ describe('Settings tabs', () => {
   });
 
   it('omits the role rather than printing a raw ObjectId', async () => {
-    // This is the exact `/auth/me` shape: roleId is an unpopulated ObjectId.
+    // `/auth/me` populates the role now, but a session restored from a token
+    // minted before that still carries a bare ObjectId - it must never render.
     const { container } = await renderSettings('/settings', {
       user: { ...USER, role: undefined, roleId: '65f1c2a4e8b9d0123456789ab' },
     });

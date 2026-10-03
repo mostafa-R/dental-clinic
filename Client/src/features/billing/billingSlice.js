@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { billingApi } from './billingApi';
+import { errPayload } from '../../lib/errors';
 
 const initialQuery = { search: '', status: undefined, patient: undefined, page: 1, limit: 20 };
 
@@ -9,7 +10,7 @@ export const fetchInvoices = createAsyncThunk(
     try {
       return await billingApi.list(params);
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to load invoices');
+      return rejectWithValue(errPayload(err, 'Failed to load invoices'));
     }
   },
 );
@@ -20,7 +21,7 @@ export const fetchBillingSummary = createAsyncThunk(
     try {
       return await billingApi.summary();
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to load billing summary');
+      return rejectWithValue(errPayload(err, 'Failed to load billing summary'));
     }
   },
 );
@@ -32,7 +33,7 @@ export const createInvoice = createAsyncThunk(
       const { invoice } = await billingApi.create(payload);
       return invoice;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to create invoice' });
+      return rejectWithValue(errPayload(err, 'Failed to save invoice'));
     }
   },
 );
@@ -44,7 +45,7 @@ export const updateInvoice = createAsyncThunk(
       const { invoice } = await billingApi.update(id, payload);
       return invoice;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to update invoice' });
+      return rejectWithValue(errPayload(err, 'Failed to save invoice'));
     }
   },
 );
@@ -56,7 +57,7 @@ export const recordPayment = createAsyncThunk(
       const { invoice } = await billingApi.addPayment(id, payload);
       return invoice;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to record payment' });
+      return rejectWithValue(errPayload(err, 'Failed to record payment'));
     }
   },
 );
@@ -68,7 +69,7 @@ export const voidInvoice = createAsyncThunk(
       const { invoice } = await billingApi.void(id, { reason });
       return invoice;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to void invoice' });
+      return rejectWithValue(errPayload(err, 'Failed to void invoice'));
     }
   },
 );
@@ -80,7 +81,7 @@ export const refundPayment = createAsyncThunk(
       const { invoice } = await billingApi.refund(id, payload);
       return invoice;
     } catch (err) {
-      return rejectWithValue(err.response?.data || { message: 'Failed to refund payment' });
+      return rejectWithValue(errPayload(err, 'Failed to refund payment'));
     }
   },
 );
@@ -91,7 +92,7 @@ export const fetchAgingReport = createAsyncThunk(
     try {
       return await billingApi.aging();
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to load aging report');
+      return rejectWithValue(errPayload(err, 'Failed to load aging report'));
     }
   },
 );
@@ -113,6 +114,13 @@ const billingSlice = createSlice({
     formError: null,
     paymentStatus: 'idle',
     paymentError: null,
+    // A refund has its own lifecycle rather than sharing `paymentStatus` with
+    // recordPayment. Sharing it meant a refund left `paymentError` set on the
+    // payment flow (and vice versa), so opening one modal after using the other
+    // showed the previous action's outcome and disabled its own submit button
+    // while `paymentStatus` was still 'loading'.
+    refundStatus: 'idle',
+    refundError: null,
     voidStatus: 'idle',
     voidError: null,
     aging: null,
@@ -147,6 +155,10 @@ const billingSlice = createSlice({
     resetPaymentState(state) {
       state.paymentStatus = 'idle';
       state.paymentError = null;
+    },
+    resetRefundState(state) {
+      state.refundStatus = 'idle';
+      state.refundError = null;
     },
     resetVoidState(state) {
       state.voidStatus = 'idle';
@@ -239,18 +251,18 @@ const billingSlice = createSlice({
         state.voidError = action.payload;
       })
       .addCase(refundPayment.pending, (state) => {
-        state.paymentStatus = 'loading';
-        state.paymentError = null;
+        state.refundStatus = 'loading';
+        state.refundError = null;
       })
       .addCase(refundPayment.fulfilled, (state, action) => {
         const idx = state.items.findIndex((i) => i._id === action.payload._id);
         if (idx >= 0) state.items[idx] = action.payload;
-        state.paymentStatus = 'succeeded';
-        state.paymentError = null;
+        state.refundStatus = 'succeeded';
+        state.refundError = null;
       })
       .addCase(refundPayment.rejected, (state, action) => {
-        state.paymentStatus = 'failed';
-        state.paymentError = action.payload;
+        state.refundStatus = 'failed';
+        state.refundError = action.payload;
       })
       .addCase(fetchAgingReport.pending, (state) => {
         state.agingStatus = 'loading';
@@ -272,6 +284,7 @@ export const {
   resetBilling,
   resetFormState,
   resetPaymentState,
+  resetRefundState,
   resetVoidState,
 } = billingSlice.actions;
 

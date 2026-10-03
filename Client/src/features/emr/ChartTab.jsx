@@ -9,6 +9,7 @@ import Spinner from '../../components/ui/Spinner';
 import TreatmentPlanFormModal from './TreatmentPlanFormModal';
 import { fetchChart, fetchPlans, resetFormState, saveTooth } from './emrSlice';
 import { useSocketEvent } from '../../lib/socket';
+import { SOCKET_EVENTS } from '../../lib/socketEvents';
 import { useCanManageEmr } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
 import { formatMoney } from '../../lib/format';
@@ -37,9 +38,9 @@ export default function ChartTab({ patientId }) {
     refetch();
   }, [refetch]);
 
-  useSocketEvent('chart:updated', refetch);
-  useSocketEvent('treatment-plan:created', refetch);
-  useSocketEvent('treatment-plan:updated', refetch);
+  useSocketEvent(SOCKET_EVENTS.CHART_UPDATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.TREATMENT_PLAN_CREATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.TREATMENT_PLAN_UPDATED, refetch);
 
   const teeth = chart?.teeth || [];
   const selectedTooth = selectedFdi ? teeth.find((t) => toothFdi(t) === selectedFdi) : null;

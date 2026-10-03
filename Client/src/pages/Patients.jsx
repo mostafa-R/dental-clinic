@@ -15,6 +15,7 @@ import Pagination from '../components/ui/Pagination';
 import { useCanCreatePatients } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useSocketEvent } from '../lib/socket';
+import { SOCKET_EVENTS } from '../lib/socketEvents';
 
 export default function Patients() {
   const dispatch = useDispatch();
@@ -46,9 +47,9 @@ export default function Patients() {
   useEffect(() => () => dispatch(resetPatients()), [dispatch]);
 
   const refetch = useCallback(() => { dispatch(fetchPatients(query)); }, [dispatch, query]);
-  useSocketEvent('patient:created', refetch);
-  useSocketEvent('patient:updated', refetch);
-  useSocketEvent('patient:archived', refetch);
+  useSocketEvent(SOCKET_EVENTS.PATIENT_CREATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.PATIENT_UPDATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.PATIENT_ARCHIVED, refetch);
 
   const openCreate = () => {
     setEditing(null);

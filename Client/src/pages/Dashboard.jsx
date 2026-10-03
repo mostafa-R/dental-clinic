@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
@@ -24,6 +24,7 @@ import ClinicOperations from "../features/dashboard/ClinicOperations";
 import { formatDate, greetingFor } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { useSocketEvent } from "../lib/socket";
+import { SOCKET_EVENTS } from "../lib/socketEvents";
 
 function DoctorDashboard({ header }) {
   return (
@@ -44,6 +45,62 @@ function DoctorDashboard({ header }) {
   );
 }
 
+const REFETCH_DEBOUNCE_MS = 400;
+const REFETCH_MAX_WAIT_MS = 2000;
+
+/**
+ * Collapse a burst of socket events into one trailing stats fetch.
+ *
+ * These events arrive in bursts: booking a single appointment emits
+ * APPOINTMENT_CREATED and then a stream of APPOINTMENT_UPDATED as the
+ * appointment is scheduled and rescheduled, and a checkout can emit
+ * INVOICE_CREATED/UPDATED back to back. Every event used to dispatch its own
+ * fetchDashboardStats(), so one user action fired several identical aggregate
+ * queries - and because each response is a full stats snapshot, a slower
+ * earlier response could land last and repaint stale numbers over fresh ones.
+ *
+ * The delay is bounded by REFETCH_MAX_WAIT_MS so a genuinely busy queue (a
+ * continuous stream of events) still refreshes periodically instead of being
+ * postponed indefinitely.
+ */
+function useDebouncedStatsRefetch(dispatch) {
+  const timer = useRef(null);
+  const burstStartedAt = useRef(0);
+
+  const flush = useCallback(() => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+    burstStartedAt.current = 0;
+    dispatch(fetchDashboardStats());
+  }, [dispatch]);
+
+  const schedule = useCallback(() => {
+    const now = Date.now();
+    if (!burstStartedAt.current) burstStartedAt.current = now;
+    const elapsed = now - burstStartedAt.current;
+    const wait = Math.max(
+      0,
+      Math.min(REFETCH_DEBOUNCE_MS, REFETCH_MAX_WAIT_MS - elapsed),
+    );
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(flush, wait);
+  }, [flush]);
+
+  // Drop a pending refetch on unmount so it cannot dispatch into a torn-down
+  // store. Events that arrived before unmount are irrelevant: the next mount
+  // fetches stats anyway.
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  return schedule;
+}
+
 function OwnerDashboard({ header }) {
   const dispatch = useDispatch();
   const { stats, status, error } = useSelector((s) => s.dashboard);
@@ -57,14 +114,12 @@ function OwnerDashboard({ header }) {
     }
   }, [dispatch, status]);
 
-  const refetch = useCallback(() => {
-    dispatch(fetchDashboardStats());
-  }, [dispatch]);
-  useSocketEvent("appointment:created", refetch);
-  useSocketEvent("appointment:updated", refetch);
-  useSocketEvent("patient:created", refetch);
-  useSocketEvent("invoice:created", refetch);
-  useSocketEvent("invoice:updated", refetch);
+  const refetch = useDebouncedStatsRefetch(dispatch);
+  useSocketEvent(SOCKET_EVENTS.APPOINTMENT_CREATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.APPOINTMENT_UPDATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.PATIENT_CREATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.INVOICE_CREATED, refetch);
+  useSocketEvent(SOCKET_EVENTS.INVOICE_UPDATED, refetch);
 
   return (
     <div className="space-y-6">

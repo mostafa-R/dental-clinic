@@ -9,6 +9,31 @@ function getContext() {
 }
 
 /**
+ * Close the context this module instance created.
+ *
+ * `AudioContext` is a hardware-backed resource: one left open keeps the audio
+ * output device alive and Chrome logs a warning for it. It was never closed at
+ * all, and under Vite HMR each edit re-evaluated this module and allocated a
+ * *new* context while the previous one stayed open and unreachable, so a
+ * development session leaked one context per save. Disposing on HMR keeps that
+ * bounded.
+ */
+function disposeContext() {
+  if (!audioCtx) return;
+  try {
+    if (audioCtx.state !== 'closed') audioCtx.close();
+  } catch {
+    /* already closed, or unavailable */
+  }
+  audioCtx = null;
+  permitted = false;
+}
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(disposeContext);
+}
+
+/**
  * Must be called from a user-gesture handler (click/keydown) on first
  * interaction.  Unlocks the AudioContext and requests notification permission
  * in one go.

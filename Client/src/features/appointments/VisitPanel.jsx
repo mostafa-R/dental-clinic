@@ -43,6 +43,7 @@ export default function VisitPanel({ open, appointment, onClose, readOnly = fals
   const [existingNote, setExistingNote] = useState(null);
   const [loadingNote, setLoadingNote] = useState(false);
   const [chiefComplaint, setChiefComplaint] = useState('');
+  const [examination, setExamination] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
   const [plan, setPlan] = useState('');
   const [savingNote, setSavingNote] = useState(false);
@@ -66,6 +67,7 @@ export default function VisitPanel({ open, appointment, onClose, readOnly = fals
     setReason(appointment.reason || '');
     setNotes(appointment.notes || '');
     setChiefComplaint('');
+    setExamination('');
     setDiagnosis('');
     setPlan('');
     setExistingNote(null);
@@ -80,6 +82,7 @@ export default function VisitPanel({ open, appointment, onClose, readOnly = fals
             const note = notes[0];
             setExistingNote(note);
             setChiefComplaint(note.chiefComplaint || '');
+            setExamination(note.examination || '');
             setDiagnosis(note.diagnosis || '');
             setPlan(note.plan || '');
           }
@@ -146,12 +149,31 @@ export default function VisitPanel({ open, appointment, onClose, readOnly = fals
   const saveClinicalNote = async () => {
     if (!canEditEmr) return;
     if (!appointment?.patient?._id) return;
+    // PRD §6.5: the SOAP fields are mandatory on creation. They used to be sent
+    // as `undefined` when blank, which JSON.stringify drops, and examination
+    // was never collected here at all, so every POST from this panel failed
+    // validation. A PATCH on an existing note is still a partial update.
+    if (!existingNote) {
+      const missing = [
+        [t('emr.note.chiefComplaint'), chiefComplaint],
+        [t('emr.note.examination'), examination],
+        [t('emr.note.diagnosis'), diagnosis],
+        [t('emr.note.plan'), plan],
+      ]
+        .filter(([, value]) => !value.trim())
+        .map(([label]) => label);
+      if (missing.length > 0) {
+        dispatch(showErrorDialog({ message: `${t('emr.note.requiredFields')} ${missing.join(', ')}` }));
+        return;
+      }
+    }
     setSavingNote(true);
     try {
       const payload = {
         doctor: appointment.doctor?._id || appointment.doctor,
         appointment: appointment._id,
         chiefComplaint: chiefComplaint.trim() || undefined,
+        examination: examination.trim() || undefined,
         diagnosis: diagnosis.trim() || undefined,
         plan: plan.trim() || undefined,
       };
@@ -305,10 +327,14 @@ export default function VisitPanel({ open, appointment, onClose, readOnly = fals
               <Spinner label={t('common.loading')} />
             ) : (
               <div className="space-y-3">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">{t('emr.note.chiefComplaint')}</label>
                     <textarea value={chiefComplaint} onChange={(e) => setChiefComplaint(e.target.value)} rows={2} className={`${inputCls} resize-none`} maxLength={1000} />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">{t('emr.note.examination')}</label>
+                    <textarea value={examination} onChange={(e) => setExamination(e.target.value)} rows={2} className={`${inputCls} resize-none`} maxLength={2000} />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">{t('emr.note.diagnosis')}</label>

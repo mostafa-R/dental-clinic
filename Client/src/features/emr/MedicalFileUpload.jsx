@@ -5,6 +5,13 @@ import { showErrorDialog } from '../ui/uiSlice';
 import { useT } from '../../lib/i18n';
 
 const ACCEPTED = '.jpg,.jpeg,.png,.webp,.gif,.pdf';
+const MAX_BYTES = 20 * 1024 * 1024;
+// `accept` on the input is a hint to the OS file picker, not a constraint: it is
+// stripped by anything that is not a real user gesture, and a caller can hand
+// this component any File. The allowlist is duplicated from the server's, but the
+// server stays the authority — this only avoids shipping 20 MB up the wire to be
+// told off.
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
 
 export default function MedicalFileUpload({ onUploaded }) {
   const dispatch = useDispatch();
@@ -17,8 +24,16 @@ export default function MedicalFileUpload({ onUploaded }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 20 * 1024 * 1024) {
+    if (file.size > MAX_BYTES) {
       dispatch(showErrorDialog({ message: t('emr.upload.tooLarge') || 'File exceeds 20 MB limit' }));
+      return;
+    }
+
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      dispatch(showErrorDialog({
+        message: t('emr.upload.invalidType') || 'Only JPEG, PNG, WebP, GIF and PDF files can be uploaded.',
+      }));
+      if (inputRef.current) inputRef.current.value = '';
       return;
     }
 
@@ -60,7 +75,7 @@ export default function MedicalFileUpload({ onUploaded }) {
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity={0.25} />
               <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
             </svg>
-            {progress > 0 ? `${progress}%` : (t('emr.upload.encrypting') || 'Encrypting...')}
+            {progress > 0 ? `${progress}%` : (t('emr.upload.uploading') || 'Uploading...')}
           </>
         ) : (
           <>
@@ -72,7 +87,7 @@ export default function MedicalFileUpload({ onUploaded }) {
         )}
       </label>
       <span className="text-[10px] text-slate-400 dark:text-slate-500">
-        {t('emr.upload.hint') || 'JPEG, PNG, WebP, PDF · Max 20 MB · AES-256-GCM encrypted'}
+        {t('emr.upload.hint') || 'JPEG, PNG, WebP, GIF, PDF · Max 20 MB · Encrypted at rest on the server (AES-256-GCM)'}
       </span>
     </div>
   );

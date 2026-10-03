@@ -21,7 +21,7 @@ export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.validatedBody;
   const user = await authService.authenticateUser(email, password);
   setAuthCookies(res, user);
-  return sendSuccess(res, { user: user.toSafeObject() });
+  return sendSuccess(res, { user: await authService.attachRole(user.toSafeObject()) });
 });
 
 export const logout = asyncHandler(async (req, res) => {
@@ -129,7 +129,7 @@ export const updatePreferences = asyncHandler(async (req, res) => {
     .populate('branch', 'name address phone isActive')
     .populate('tenant', 'plan planModules planId status name isActive');
 
-  const safe = user.toSafeObject();
+  const safe = await authService.attachRole(user.toSafeObject());
   return sendSuccess(res, { user: safe });
 });
 
@@ -187,7 +187,7 @@ export const verifyImpersonation = asyncHandler(async (req, res) => {
   res.cookie(ACCESS_COOKIE, token, { ...cookieOptions(), maxAge });
   setCsrfCookie(res);
 
-  const safe = user.toSafeObject();
+const safe = await authService.attachRole(user.toSafeObject());
   return sendSuccess(res, {
     user: {
       ...safe,

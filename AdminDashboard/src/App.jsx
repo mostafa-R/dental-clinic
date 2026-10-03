@@ -30,7 +30,10 @@ const Performance = lazy(() => import("./pages/Performance"));
 
 function App() {
   const dispatch = useDispatch();
-  const { _initialized, loading } = useSelector((state) => state.auth);
+  // `loading` is deliberately not read: the `initiated` ref below is what
+  // guarantees a single `/auth/me` call, and the gate on `_initialized` covers
+  // the waiting.
+  const { _initialized } = useSelector((state) => state.auth);
   const { language } = useSelector((state) => state.ui);
 
   const initiated = useRef(false);

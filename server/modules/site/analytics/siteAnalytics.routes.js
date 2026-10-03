@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { protectSite, authorizeSite } from '../../../middleware/siteAuth.js';
-import { getGlobalStats, getGrowthData, getRevenueByPlan, getTenantUsage } from './siteAnalytics.controller.js';
+import { getGlobalStats, getGrowthData, getRevenueByPlan, getTenantUsage, getTenantDistribution } from './siteAnalytics.controller.js';
 
 const router = Router();
 
@@ -145,6 +145,48 @@ router.get(
   '/plans',
   authorizeSite('super_admin', 'admin', 'support'),
   getRevenueByPlan
+);
+
+/**
+ * @swagger
+ * /api/v1/site/analytics/distribution:
+ *   get:
+ *     tags: [Site Analytics]
+ *     summary: Tenant counts grouped by plan and by status
+ *     description: Site realm. Requires `super_admin`, `admin`, or `support` role. Aggregated in the database so the dashboard charts cover every tenant in one request, instead of paging through `GET /tenants` and aggregating client-side (which silently truncated at the page cap).
+ *     security:
+ *       - bearerAuth: []
+ *       - siteCookieAuth: []
+ *     responses:
+ *       '200':
+ *         description: Tenant distribution
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     byPlan:
+ *                       type: object
+ *                       additionalProperties: { type: integer }
+ *                       example: { pro_plus: 12, pro: 8, unassigned: 1 }
+ *                     byStatus:
+ *                       type: object
+ *                       additionalProperties: { type: integer }
+ *                       example: { active: 15, trial: 6 }
+ *                     total: { type: integer, example: 21 }
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ */
+router.get(
+  '/distribution',
+  authorizeSite('super_admin', 'admin', 'support'),
+  getTenantDistribution
 );
 
 export default router;
