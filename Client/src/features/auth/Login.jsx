@@ -6,12 +6,14 @@ import { resetPermissions } from '../users/userSlice';
 import { showErrorDialog } from '../ui/uiSlice';
 import { useLandingPath } from '../../lib/roles';
 import { useT } from '../../lib/i18n';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import PreferencesControls from '../preferences/PreferencesControls';
 import DentoCareLogo from '../../components/ui/DentoCareLogo';
 import Button from '../../components/ui/Button';
 import { Field, TextInput } from '../../components/ui/Field';
 
 export default function Login() {
+  useDocumentTitle("Sign in — Dental OS");
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { status, user } = useSelector((s) => s.auth);

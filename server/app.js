@@ -1,3 +1,4 @@
+import compression from "compression";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -18,9 +19,9 @@ import { logError } from "./middleware/logError.js";
 import { maintenance } from "./middleware/maintenance.js";
 import { requestId } from "./middleware/requestId.js";
 import {
-  requestSizeLimiter,
   securityAudit,
-  securityHeaders
+  securityHeaders,
+  uploadAwareBodyLimiter
 } from "./middleware/security.js";
 import { tenantRouter } from "./middleware/tenantRouter.js";
 import { userRateLimit } from "./middleware/userRateLimit.js";
@@ -96,6 +97,15 @@ app.use(
 );
 
 app.disable("x-powered-by");
+
+// Response compression. Without it every JSON payload (patient lists,
+// invoices, EMR records) travels uncompressed whenever the API is reached
+// directly — a reverse proxy may gzip today, but compression() makes it an
+// API guarantee rather than a deployment coincidence (mobile clients,
+// staging, health checks). Images/PDFs are skipped automatically by the
+// middleware's content-type check.
+app.use(compression({ threshold: 1024 }));
+
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
@@ -106,7 +116,9 @@ app.use(csrfProtection(allowedOrigins));
 // text (e.g. "<5mm pocket", notes containing "create"/"update") while zod
 // validators in each module already enforce strict input schemas.
 app.use(securityHeaders);
-app.use(requestSizeLimiter("55mb"));
+// 55mb is reserved for the EMR attachment upload endpoints; every other
+// route is capped at the 1mb body-parser limit (see uploadAwareBodyLimiter).
+app.use(uploadAwareBodyLimiter);
 app.use(securityAudit);
 
 setupSwagger(app);

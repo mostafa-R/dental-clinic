@@ -13,6 +13,7 @@ import {
   XMarkIcon,
 } from "../components/ui/icons";
 import {
+  clearError,
   createPlan,
   deletePlan,
   fetchPlanModules,
@@ -25,9 +26,14 @@ import { canUserAccess } from "../lib/permissions";
 
 export default function Plans() {
   const dispatch = useDispatch();
-  const { items, loading, availableModules } = useSelector(
-    (state) => state.plans,
-  );
+  const {
+    items,
+    loading,
+    error,
+    availableModules,
+    modulesLoading,
+    modulesError,
+  } = useSelector((state) => state.plans);
   const { language } = useSelector((state) => state.ui);
   const { user } = useSelector((state) => state.auth);
 
@@ -39,7 +45,9 @@ export default function Plans() {
   const knownKeys = new Set(serverModules.map((m) => m.key));
   const legacyKeys = [
     ...new Set(
-      (items || []).flatMap((p) => p.modules || []).filter((k) => !knownKeys.has(k)),
+      (items || [])
+        .flatMap((p) => p.modules || [])
+        .filter((k) => !knownKeys.has(k)),
     ),
   ].map((key) => ({ key, label: key }));
   const ALL_MODULES = [...serverModules, ...legacyKeys];
@@ -76,6 +84,7 @@ export default function Plans() {
   };
 
   const handleEdit = (plan) => {
+    dispatch(clearError()); // Clear any previous errors
     setSelectedPlan(plan);
     setFormData({
       name: plan.name ?? "",
@@ -112,20 +121,30 @@ export default function Plans() {
 
   const validateForm = () => {
     const errors = {};
-    if (!String(formData.name ?? "").trim()) errors.name = t("nameRequired", language);
-    if (formData.price === "" || formData.price === null || Number(formData.price) < 0)
+    if (!String(formData.name ?? "").trim())
+      errors.name = t("nameRequired", language);
+    if (
+      formData.price === "" ||
+      formData.price === null ||
+      Number(formData.price) < 0
+    )
       errors.price = t("pricePositive", language);
     if (!formData.interval) errors.interval = t("invalidValue", language);
-    if (!Array.isArray(formData.modules) || formData.modules.length === 0)
+    // Only require modules if there are modules available to select
+    if (
+      ALL_MODULES.length > 0 &&
+      (!Array.isArray(formData.modules) || formData.modules.length === 0)
+    ) {
       errors.modules = t("invalidValue", language);
+    }
     if (formData.maxBranches === "" || Number(formData.maxBranches) < 0)
       errors.maxBranches = t("invalidValue", language);
     if (formData.maxDoctors === "" || Number(formData.maxDoctors) < 0)
       errors.maxDoctors = t("invalidValue", language);
     if (formData.maxPatients === "" || Number(formData.maxPatients) < 0)
       errors.maxPatients = t("invalidValue", language);
-    if (!String(formData.storage ?? "").trim()) errors.storage = t("invalidValue", language);
-    if (serverModules.length === 0) errors.modules = t("invalidValue", language);
+    if (!String(formData.storage ?? "").trim())
+      errors.storage = t("invalidValue", language);
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -150,16 +169,29 @@ export default function Plans() {
       isActive: formData.isActive,
     };
 
-    try {
-      if (selectedPlan) {
-        await dispatch(updatePlan({ id: selectedPlan._id, data: planData }));
-      } else {
-        await dispatch(createPlan(planData));
-      }
+    let result;
+    if (selectedPlan) {
+      result = await dispatch(
+        updatePlan({ id: selectedPlan._id, data: planData }),
+      );
+    } else {
+      result = await dispatch(createPlan(planData));
+    }
+
+    // Check if the action was fulfilled or rejected
+    if (
+      createPlan.fulfilled.match(result) ||
+      updatePlan.fulfilled.match(result)
+    ) {
       setShowForm(false);
       resetForm();
-    } catch (error) {
-      console.error("Failed to save plan:", error);
+    } else if (
+      createPlan.rejected.match(result) ||
+      updatePlan.rejected.match(result)
+    ) {
+      // Error is already stored in state.error by the slice
+      // The form stays open so the user can see the error and retry
+      console.error("Failed to save plan:", result.payload);
     }
   };
 
@@ -181,12 +213,28 @@ export default function Plans() {
           {t("subscriptionPlans", language)}
         </h2>
         {can("plans.create") && (
-          <Button onClick={() => setShowForm(true)}>
+          <Button
+            onClick={() => {
+              dispatch(clearError());
+              setShowForm(true);
+            }}
+          >
             <PlusIcon className="w-4 h-4" />
             {t("addPlan", language)}
           </Button>
         )}
       </div>
+
+      {/* Display error from state */}
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+          <p className="text-red-700 dark:text-red-300 text-sm">
+            {typeof error === "string"
+              ? error
+              : t("failedToSavePlan", language)}
+          </p>
+        </div>
+      )}
 
       {items.length === 0 ? (
         <EmptyState
@@ -195,7 +243,12 @@ export default function Plans() {
           icon={Squares2X2Icon}
           action={
             can("plans.create") && (
-              <Button onClick={() => setShowForm(true)}>
+              <Button
+                onClick={() => {
+                  dispatch(clearError());
+                  setShowForm(true);
+                }}
+              >
                 <PlusIcon className="w-4 h-4" />
                 {t("addPlan", language)}
               </Button>
@@ -220,7 +273,10 @@ export default function Plans() {
                     {formatCurrency(plan.price, "USD", language)}
                   </span>
                   <span className="text-slate-500 dark:text-slate-400">
-                    /{plan.interval === "year" ? t("yearly", language).toLowerCase() : t("monthly", language).toLowerCase()}
+                    /
+                    {plan.interval === "year"
+                      ? t("yearly", language).toLowerCase()
+                      : t("monthly", language).toLowerCase()}
                   </span>
                 </div>
               </div>
@@ -294,23 +350,23 @@ export default function Plans() {
 
               <div className="flex gap-2">
                 {can("plans.update") && (
-                <Button
-                  variant="secondary"
-                  className="flex-1"
-                  onClick={() => handleEdit(plan)}
-                >
-                  {t("edit", language)}
-                </Button>
-              )}
-              {can("plans.delete") && (
-                <Button
-                  variant="ghost"
-                  className="text-red-600 hover:text-red-700"
-                  onClick={() => setDeleteConfirm(plan)}
-                >
-                  {t("delete", language)}
-                </Button>
-              )}
+                  <Button
+                    variant="secondary"
+                    className="flex-1"
+                    onClick={() => handleEdit(plan)}
+                  >
+                    {t("edit", language)}
+                  </Button>
+                )}
+                {can("plans.delete") && (
+                  <Button
+                    variant="ghost"
+                    className="text-red-600 hover:text-red-700"
+                    onClick={() => setDeleteConfirm(plan)}
+                  >
+                    {t("delete", language)}
+                  </Button>
+                )}
               </div>
             </Card>
           ))}
@@ -472,38 +528,52 @@ export default function Plans() {
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               {t("modulesAppAccess", language)}
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-              {ALL_MODULES.map((mod) => (
-                <label
-                  key={mod.key}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm ${
-                    formData.modules.includes(mod.key)
-                      ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300"
-                      : "border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={formData.modules.includes(mod.key)}
-                    onChange={() => {
-                      setFormData({
-                        ...formData,
-                        modules: formData.modules.includes(mod.key)
-                          ? formData.modules.filter((k) => k !== mod.key)
-                          : [...formData.modules, mod.key],
-                      });
-                    }}
-                    className="sr-only"
-                  />
-                  {(() => {
-                    const translated = t(mod.key, language);
-                    return translated !== mod.key
-                      ? translated
-                      : mod.label || mod.key;
-                  })()}
-                </label>
-              ))}
-            </div>
+            {modulesLoading ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {t("loading", language)}...
+              </p>
+            ) : modulesError ? (
+              <p className="text-sm text-red-500">
+                {t("failedToLoadModules", language)}: {modulesError}
+              </p>
+            ) : ALL_MODULES.length === 0 ? (
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                {t("noModulesAvailable", language)}
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                {ALL_MODULES.map((mod) => (
+                  <label
+                    key={mod.key}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm ${
+                      formData.modules.includes(mod.key)
+                        ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300"
+                        : "border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formData.modules.includes(mod.key)}
+                      onChange={() => {
+                        setFormData({
+                          ...formData,
+                          modules: formData.modules.includes(mod.key)
+                            ? formData.modules.filter((k) => k !== mod.key)
+                            : [...formData.modules, mod.key],
+                        });
+                      }}
+                      className="sr-only"
+                    />
+                    {(() => {
+                      const translated = t(mod.key, language);
+                      return translated !== mod.key
+                        ? translated
+                        : mod.label || mod.key;
+                    })()}
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
@@ -566,6 +636,17 @@ export default function Plans() {
             </label>
           </div>
 
+          {/* Show form-level error if exists */}
+          {error && (
+            <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <p className="text-red-700 dark:text-red-300 text-sm">
+                {typeof error === "string"
+                  ? error
+                  : t("failedToSavePlan", language)}
+              </p>
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-4">
             <Button
               type="button"
@@ -573,6 +654,7 @@ export default function Plans() {
               onClick={() => {
                 setShowForm(false);
                 resetForm();
+                dispatch(clearError());
               }}
             >
               {t("cancel", language)}

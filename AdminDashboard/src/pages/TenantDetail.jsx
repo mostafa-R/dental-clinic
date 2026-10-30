@@ -879,6 +879,12 @@ ${users.map((u) => `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc
         confirmLabel={confirmCopy[confirmAction?.type]?.label}
         cancelLabel={t("cancel", language)}
         variant={confirmAction?.type === "activate" ? "primary" : "danger"}
+        requireTyped={
+          confirmAction?.type === "delete" || confirmAction?.type === "archive"
+            ? tenant?.name
+            : null
+        }
+        language={language}
         onConfirm={runAction}
       />
     </div>

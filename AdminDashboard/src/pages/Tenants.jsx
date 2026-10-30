@@ -722,10 +722,7 @@ export default function Tenants() {
                             size="sm"
                             className="text-slate-500 hover:text-slate-700"
                             onClick={() =>
-                              setConfirmAction({
-                                type: "archive",
-                                id: tenant._id,
-                              })
+                              setConfirmAction({ type: "archive", id: tenant._id, name: tenant.name })
                             }
                           >
                             {t("archiveTenant", language)}
@@ -737,10 +734,7 @@ export default function Tenants() {
                             size="sm"
                             className="text-red-600 hover:text-red-700"
                             onClick={() =>
-                              setConfirmAction({
-                                type: "delete",
-                                id: tenant._id,
-                              })
+                              setConfirmAction({ type: "delete", id: tenant._id, name: tenant.name })
                             }
                           >
                             {t("deleteTenant", language)}
@@ -934,6 +928,12 @@ export default function Tenants() {
         )}
         cancelLabel={t("cancel", language)}
         variant={confirmAction?.type === "activate" ? "primary" : "danger"}
+        requireTyped={
+          confirmAction?.type === "delete" || confirmAction?.type === "archive"
+            ? confirmAction?.name
+            : null
+        }
+        language={language}
         onConfirm={runAction}
       />
 
@@ -965,6 +965,12 @@ export default function Tenants() {
         cancelLabel={t("cancel", language)}
         variant={bulkConfirm?.type === "activate" ? "primary" : "danger"}
         loading={bulkLoading}
+        requireTyped={
+          bulkConfirm?.type === "delete" || bulkConfirm?.type === "archive"
+            ? String(bulkConfirm?.ids?.length || 0)
+            : null
+        }
+        language={language}
         onConfirm={runBulkAction}
       />
     </div>

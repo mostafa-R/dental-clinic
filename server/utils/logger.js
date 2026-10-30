@@ -40,6 +40,14 @@ export function logInfo(message, data = {}) {
   logger.info(data, message);
 }
 
+// Error-level log WITHOUT an Error object: for responses (5xx security
+// audit) where the stack trace would be middleware boilerplate, not signal.
+// Building a real Error per response also pays a stack-capture cost on hot
+// paths — callers of this get structured fields only.
+export function logErrorData(message, context = {}) {
+  logger.error({ ...context }, message);
+}
+
 export function logWarn(message, data = {}) {
   logger.warn(data, message);
 }

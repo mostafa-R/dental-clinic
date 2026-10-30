@@ -6,6 +6,7 @@ import { authApi } from '../features/auth/authApi';
 import { listPublicPlans } from '../features/pricing/plansApi';
 import { landingPathFor } from '../lib/roles';
 import { moduleLabel, useT } from '../lib/i18n';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { formatMoney, formatNumber } from '../lib/format';
 import { DentoCareLogo } from '../components/ui/DentoCareLogo';
 import PreferencesControls from '../features/preferences/PreferencesControls';
@@ -68,6 +69,7 @@ function PlanCardSkeleton() {
 }
 
 export default function Pricing() {
+  useDocumentTitle("Dental OS — Pricing");
   const { t } = useT();
   const dispatch = useDispatch();
   const user = useSelector((s) => s.auth.user);

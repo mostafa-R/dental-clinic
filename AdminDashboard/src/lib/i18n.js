@@ -28,6 +28,7 @@ export const translations = {
     save: "Save",
     cancel: "Cancel",
     confirm: "Confirm",
+    typeToConfirm: 'Type "{confirmWord}" exactly to confirm',
     loading: "Loading...",
     saving: "Saving...",
     noData: "No data available",
@@ -98,7 +99,8 @@ export const translations = {
     storageLabel: "Storage:",
     unlimited: "Unlimited",
     clinicAdminAccount: "Clinic Admin Account",
-    clinicAdminDesc: "A clinic admin account is auto-provisioned using the tenant email. Set the admin name and password below.",
+    clinicAdminDesc:
+      "A clinic admin account is auto-provisioned using the tenant email. Set the admin name and password below.",
     clinicAdminName: "Admin Name",
     clinicAdminNamePlaceholder: "e.g., Dr. Sara Ahmed",
     clinicAdminNameSameAsClinic: "Leave blank to use the clinic name.",
@@ -113,7 +115,8 @@ export const translations = {
     locationInfo: "Location",
     locationOptional: "Optional — helps identify the clinic location.",
     planDetails: "Plan Details",
-    credentialsTitle: "Tenant created! Share these credentials with the clinic:",
+    credentialsTitle:
+      "Tenant created! Share these credentials with the clinic:",
     credentialsName: "Name:",
     credentialsPassword: "Password:",
     credentialsLogin: "Login:",
@@ -124,10 +127,14 @@ export const translations = {
     activateTitle: "Activate Tenant",
     archiveTitle: "Archive Tenant",
     deleteTitle: "Delete Tenant Permanently",
-    suspendConfirm: "Are you sure you want to suspend this tenant? They will lose access to the platform.",
-    activateConfirm: "Are you sure you want to activate this tenant? They will regain access to the platform.",
-    archiveConfirm: "Archive this tenant? The clinic dashboard will be inaccessible, but all data is preserved.",
-    deleteConfirm: "Permanently delete this tenant and ALL associated data (users, patients, appointments, invoices)? This cannot be undone.",
+    suspendConfirm:
+      "Are you sure you want to suspend this tenant? They will lose access to the platform.",
+    activateConfirm:
+      "Are you sure you want to activate this tenant? They will regain access to the platform.",
+    archiveConfirm:
+      "Archive this tenant? The clinic dashboard will be inaccessible, but all data is preserved.",
+    deleteConfirm:
+      "Permanently delete this tenant and ALL associated data (users, patients, appointments, invoices)? This cannot be undone.",
 
     // Tenant status
     statusActive: "Active",
@@ -148,7 +155,8 @@ export const translations = {
     deleteBranch: "Delete",
     searchBranches: "Search branches...",
     noBranchesFound: "No branches found",
-    noBranchesDesc: "No branches have been created yet. Branches are created automatically when a tenant is added.",
+    noBranchesDesc:
+      "No branches have been created yet. Branches are created automatically when a tenant is added.",
     branchCreated: "Created",
     branchActive: "Active",
     branchInactive: "Inactive",
@@ -179,7 +187,8 @@ export const translations = {
     yearly: "Yearly",
     startActiveNow: "Activate clinic immediately",
     startPending: "Leave pending until payment",
-    subscriptionCreated: "Subscription created. The plan's modules and limits were applied to the clinic.",
+    subscriptionCreated:
+      "Subscription created. The plan's modules and limits were applied to the clinic.",
     actionFailed: "Action failed",
     clinicsWithoutSubscription: "Clinics without a subscription",
     allClinicsSubscribed: "Every clinic has a subscription.",
@@ -209,9 +218,11 @@ export const translations = {
     darkTheme: "Dark",
     platformSettings: "Platform Settings",
     autoSuspendTenants: "Auto-suspend inactive tenants",
-    autoSuspendDesc: "Suspend tenants automatically after this many days of non-payment",
+    autoSuspendDesc:
+      "Suspend tenants automatically after this many days of non-payment",
     emailNotifications: "Email notifications",
-    emailNotificationsDesc: "Receive email alerts for new signups and payment issues",
+    emailNotificationsDesc:
+      "Receive email alerts for new signups and payment issues",
     trialPeriod: "Trial Period",
     trialPeriodDesc: "Default trial period for new tenants",
     defaultPlan: "Default Plan",
@@ -225,13 +236,16 @@ export const translations = {
     supportEmail: "Support Email",
     supportEmailDesc: "Address shown to tenants for support requests",
     allowedDomains: "Allowed Signup Domains",
-    allowedDomainsDesc: "One email domain per line. Leave empty to allow every domain.",
+    allowedDomainsDesc:
+      "One email domain per line. Leave empty to allow every domain.",
     allowedDomainsPlaceholder: "clinic.com\nclinic.org",
     allowedSiteIps: "IP Allowlist",
-    allowedSiteIpsDesc: "One IP address per line. Leave empty to allow every address.",
+    allowedSiteIpsDesc:
+      "One IP address per line. Leave empty to allow every address.",
     allowedSiteIpsPlaceholder: "41.33.12.5\n41.33.12.6",
     maxTenants: "Maximum Tenants",
-    maxTenantsDesc: "New signups are rejected once the platform holds this many tenants",
+    maxTenantsDesc:
+      "New signups are rejected once the platform holds this many tenants",
     backupEnabled: "Automatic Backups",
     backupEnabledDesc: "Run a nightly database backup on the schedule below",
     backupRetentionDays: "Backup Retention",
@@ -270,7 +284,8 @@ export const translations = {
     auditLogs: "Audit Logs",
     allActions: "All Actions",
     noAuditLogs: "No audit logs found",
-    noAuditLogsDesc: "All admin actions are recorded here once the system starts processing requests.",
+    noAuditLogsDesc:
+      "All admin actions are recorded here once the system starts processing requests.",
     action: "Action",
     admin: "Admin",
     target: "Target",
@@ -334,7 +349,8 @@ export const translations = {
     checkAbuse: "Check Abuse",
     quarantineConfirm: "Are you sure you want to quarantine this tenant?",
     removeQuarantineConfirm: "Remove this tenant from quarantine?",
-    quarantineDescription: "Soft-lock a tenant suspected of abuse or policy violation",
+    quarantineDescription:
+      "Soft-lock a tenant suspected of abuse or policy violation",
 
     // 2FA
     twoFactor: "Two-Factor Authentication",
@@ -343,13 +359,16 @@ export const translations = {
     disable2fa: "Disable 2FA",
     twoFactorEnabled: "2FA is enabled",
     twoFactorDisabled: "2FA is disabled",
-    superAdmin2faRequired: "2FA is mandatory for super admin accounts and cannot be disabled from the dashboard.",
-    superAdmin2faLocked: "Login to this account is blocked until 2FA is enabled. Enable it or use the recovery endpoint.",
+    superAdmin2faRequired:
+      "2FA is mandatory for super admin accounts and cannot be disabled from the dashboard.",
+    superAdmin2faLocked:
+      "Login to this account is blocked until 2FA is enabled. Enable it or use the recovery endpoint.",
     scanQrCode: "Scan this QR code with your authenticator app",
     enterToken: "Enter the 6-digit code from your authenticator app",
     verifyToken: "Verify",
     backupCodes: "Backup Codes",
-    backupCodesDesc: "Save these backup codes in a secure place. Each code can be used only once.",
+    backupCodesDesc:
+      "Save these backup codes in a secure place. Each code can be used only once.",
     tokenPlaceholder: "000000",
     manualEntry: "Can't scan? Enter this key manually instead",
     revealSecret: "Show setup key",
@@ -397,7 +416,8 @@ export const translations = {
 
     // Alerts
     alerts: "Alerts",
-    alertsDesc: "Platform monitoring alerts for infrastructure, performance and tenant activity",
+    alertsDesc:
+      "Platform monitoring alerts for infrastructure, performance and tenant activity",
     alertsOpen: "Open",
     alertsCritical: "Critical",
     alertsWarning: "Warnings",
@@ -416,7 +436,8 @@ export const translations = {
     alertsResolve: "Resolve",
     alertsMarkAllRead: "Mark all read",
     alertsMarkedAllRead: "All alerts acknowledged",
-    alertsNoneDesc: "No alerts match the current filters. Alerts will appear here when thresholds are crossed.",
+    alertsNoneDesc:
+      "No alerts match the current filters. Alerts will appear here when thresholds are crossed.",
     alertsBellTitle: "Notifications",
     alertsViewAll: "View all alerts",
     alertsNoOpen: "No open alerts",
@@ -477,14 +498,17 @@ export const translations = {
     minMs: "Min (ms)",
     maxMs: "Max (ms)",
     errorRateLabel: "Error Rate",
-    noPerfData: "No performance data yet. Routes will appear after API calls are made.",
+    noPerfData:
+      "No performance data yet. Routes will appear after API calls are made.",
     resetStats: "Reset Stats",
-    resetPerfConfirm: "Reset all performance statistics? This cannot be undone.",
+    resetPerfConfirm:
+      "Reset all performance statistics? This cannot be undone.",
     refresh: "Refresh",
 
     // 2FA Login
     twoFactorChallenge: "Two-Factor Verification",
-    twoFactorChallengeDesc: "Enter the 6-digit code from your authenticator app",
+    twoFactorChallengeDesc:
+      "Enter the 6-digit code from your authenticator app",
     backupCodeOption: "Use a backup code instead",
     enterBackupCode: "Enter backup code",
     loginCode: "Login Code",
@@ -507,7 +531,8 @@ export const translations = {
     adminCreated: "Admin Created",
     shareAdminCredentials: "Share these credentials with the admin:",
     deleteAdminTitle: "Delete Admin",
-    deleteAdminConfirm: "Are you sure you want to delete {name}? This action cannot be undone.",
+    deleteAdminConfirm:
+      "Are you sure you want to delete {name}? This action cannot be undone.",
     nameRequired: "Name is required",
     emailRequired: "Email is required",
     passwordRequired: "Password is required",
@@ -522,11 +547,15 @@ export const translations = {
     noPlansFound: "No plans found",
     noPlansDesc: "Create subscription plans for your platform.",
     modulesAppAccess: "Modules (App Access)",
+    failedToLoadModules: "Failed to load modules",
+    noModulesAvailable:
+      "No modules available. Please check server configuration.",
     addFeaturePlaceholder: "Add a feature",
     add: "Add",
     activeForNewSub: "Active (available for new subscriptions)",
     deletePlanTitle: "Delete Plan",
-    deletePlanConfirm: "Are you sure you want to delete the {name} plan? This action cannot be undone.",
+    deletePlanConfirm:
+      "Are you sure you want to delete the {name} plan? This action cannot be undone.",
     planNamePlaceholder: "e.g., Starter, Professional, Enterprise",
     zeroUnlimited: "0 for unlimited",
     storagePlaceholder: "e.g., 5GB, Unlimited",
@@ -589,10 +618,13 @@ export const translations = {
     bulkSuspendTitle: "Suspend selected tenants?",
     bulkSuspendMessage: "This will block clinic access for {count} tenant(s).",
     bulkActivateTitle: "Activate selected tenants?",
-    bulkActivateMessage: "This will re-enable clinic access for {count} tenant(s).",
+    bulkActivateMessage:
+      "This will re-enable clinic access for {count} tenant(s).",
     bulkArchiveTitle: "Archive selected tenants?",
-    bulkArchiveMessage: "This will archive {count} tenant(s). This can be undone by activating them again.",
-    bulkDeleteMessage: "This permanently deletes {count} tenant(s) and all their data. This action cannot be undone.",
+    bulkArchiveMessage:
+      "This will archive {count} tenant(s). This can be undone by activating them again.",
+    bulkDeleteMessage:
+      "This permanently deletes {count} tenant(s) and all their data. This action cannot be undone.",
     bulkFailed: "Some operations failed",
     exportTenants: "tenants.csv",
     tenantDetails: "Tenant Details",
@@ -602,7 +634,8 @@ export const translations = {
     location: "Location",
     trialEnds: "Trial ends",
     tenantNotFound: "Tenant not found",
-    tenantNotFoundDesc: "The tenant you are looking for does not exist or has been removed.",
+    tenantNotFoundDesc:
+      "The tenant you are looking for does not exist or has been removed.",
     backToTenants: "Back to tenants",
     tenantSummary: "Overview",
     tenantStatistics: "Statistics",
@@ -650,7 +683,8 @@ export const translations = {
     // Dashboard customization
     customize: "Customize",
     customizeDashboard: "Customize dashboard",
-    customizeDashboardDesc: "Choose which cards appear on this page. Your selection is saved on this device.",
+    customizeDashboardDesc:
+      "Choose which cards appear on this page. Your selection is saved on this device.",
     resetDefaults: "Reset to default",
     cardTotalTenants: "Tenants (total & new)",
     cardActiveTenants: "Active tenants",
@@ -671,7 +705,8 @@ export const translations = {
     changePlan: "Change plan",
     newPlan: "New plan",
     billingTitle: "Billing management",
-    billingDesc: "Switch plan (re-prices the subscription), extend the trial or activate the tenant.",
+    billingDesc:
+      "Switch plan (re-prices the subscription), extend the trial or activate the tenant.",
     extendTrial: "Extend trial",
     activateNow: "Activate subscription",
     planChangeSuccess: "Plan updated and subscription re-priced",
@@ -697,7 +732,8 @@ export const translations = {
     tourStatsTitle: "Key metrics at a glance",
     tourStatsDesc: "Click any card to jump straight to its page.",
     tourCustomizeTitle: "Make it yours",
-    tourCustomizeDesc: "Show, hide and drag cards into any order. Saved on this device.",
+    tourCustomizeDesc:
+      "Show, hide and drag cards into any order. Saved on this device.",
     tourNext: "Next",
     tourSkip: "Skip tour",
     tourDone: "Done",
@@ -712,7 +748,8 @@ export const translations = {
     compareTenants: "Compare",
     compareTitle: "Tenant comparison",
     revenueMovementTitle: "Revenue movement",
-    revenueMovementDesc: "Collected invoice revenue — current vs previous month",
+    revenueMovementDesc:
+      "Collected invoice revenue — current vs previous month",
     currentMonth: "This month",
     previousMonth: "Last month",
     planChangedBulk: "Plan updated for {count} tenants",
@@ -724,7 +761,8 @@ export const translations = {
 
     // Platform insights (/analytics/platform/*)
     platformInsights: "Platform Insights",
-    platformInsightsDesc: "System-wide operational, financial and security analytics across every tenant.",
+    platformInsightsDesc:
+      "System-wide operational, financial and security analytics across every tenant.",
     overview: "Overview",
     financial: "Financial",
     treatments: "Treatments",
@@ -807,7 +845,8 @@ export const translations = {
     securityEvents: "Security events",
     admin2faByRole: "Admins by role",
     auditChainValid: "Audit chain verified: the hash chain is intact.",
-    auditChainInvalid: "Audit chain verification failed. Do not trust these logs until resolved.",
+    auditChainInvalid:
+      "Audit chain verification failed. Do not trust these logs until resolved.",
     auditChainUnknown: "Audit chain verification is unavailable.",
     verifyChain: "Verify chain",
     resolveError: "Mark resolved",
@@ -851,6 +890,7 @@ export const translations = {
     save: "حفظ",
     cancel: "إلغاء",
     confirm: "تأكيد",
+    typeToConfirm: 'اكتب "{confirmWord}" للتأكيد بالضبط',
     loading: "جاري التحميل...",
     saving: "جارٍ الحفظ...",
     noData: "لا توجد بيانات",
@@ -920,7 +960,8 @@ export const translations = {
     storageLabel: "التخزين:",
     unlimited: "غير محدود",
     clinicAdminAccount: "حساب مدير العيادة",
-    clinicAdminDesc: "يتم إنشاء حساب مدير العيادة تلقائياً باستخدام البريد الإلكتروني للمشترك. قم بتعيين اسم المدير وكلمة المرور أدناه.",
+    clinicAdminDesc:
+      "يتم إنشاء حساب مدير العيادة تلقائياً باستخدام البريد الإلكتروني للمشترك. قم بتعيين اسم المدير وكلمة المرور أدناه.",
     clinicAdminName: "اسم المدير",
     clinicAdminNamePlaceholder: "مثال: د. سارة أحمد",
     clinicAdminNameSameAsClinic: "اتركه فارغاً لاستخدام اسم العيادة.",
@@ -930,7 +971,8 @@ export const translations = {
     tenantStatusLabel: "حالة المشترك",
     subscriptionEnds: "انتهاء الاشتراك",
     timezone: "المنطقة الزمنية",
-    trialDescription: "تجربة مجانية لمدة 14 يوماً. قم بالترقية بعد انتهاء الفترة التجريبية.",
+    trialDescription:
+      "تجربة مجانية لمدة 14 يوماً. قم بالترقية بعد انتهاء الفترة التجريبية.",
     activeDescription: "وصول كامل فوراً. يبدأ الفوترة الآن.",
     locationInfo: "الموقع",
     locationOptional: "اختياري — يساعد في تحديد موقع العيادة.",
@@ -947,9 +989,12 @@ export const translations = {
     archiveTitle: "أرشفة المشترك",
     deleteTitle: "حذف المشترك بشكل دائم",
     suspendConfirm: "هل أنت متأكد من إيقاف هذا المشترك؟ سيفقد الوصول للمنصة.",
-    activateConfirm: "هل أنت متأكد من تفعيل هذا المشترك؟ سيستعيد الوصول للمنصة.",
-    archiveConfirm: "أرشفة هذا المشترك؟ لن تتمكن العيادة من الوصول، لكن جميع البيانات محفوظة.",
-    deleteConfirm: "حذف هذا المشترك وجميع البيانات المرتبطة (المستخدمين والمرضى والمواعيد والفواتير) بشكل دائم؟ لا يمكن التراجع عن هذا.",
+    activateConfirm:
+      "هل أنت متأكد من تفعيل هذا المشترك؟ سيستعيد الوصول للمنصة.",
+    archiveConfirm:
+      "أرشفة هذا المشترك؟ لن تتمكن العيادة من الوصول، لكن جميع البيانات محفوظة.",
+    deleteConfirm:
+      "حذف هذا المشترك وجميع البيانات المرتبطة (المستخدمين والمرضى والمواعيد والفواتير) بشكل دائم؟ لا يمكن التراجع عن هذا.",
 
     // Tenant status
     statusActive: "نشط",
@@ -970,7 +1015,8 @@ export const translations = {
     deleteBranch: "حذف",
     searchBranches: "بحث عن فروع...",
     noBranchesFound: "لا توجد فروع",
-    noBranchesDesc: "لم يتم إنشاء أي فروع بعد. يتم إنشاء الفروع تلقائياً عند إضافة مشترك جديد.",
+    noBranchesDesc:
+      "لم يتم إنشاء أي فروع بعد. يتم إنشاء الفروع تلقائياً عند إضافة مشترك جديد.",
     branchCreated: "تاريخ الإنشاء",
     branchActive: "نشط",
     branchInactive: "غير نشط",
@@ -999,7 +1045,8 @@ export const translations = {
     billingCycle: "دورة الفوترة",
     startActiveNow: "تفعيل العيادة فوراً",
     startPending: "يبقى معلق حتى الدفع",
-    subscriptionCreated: "تم إنشاء الاشتراك، وتم تطبيق موديولز وحدود الخطة على العيادة.",
+    subscriptionCreated:
+      "تم إنشاء الاشتراك، وتم تطبيق موديولز وحدود الخطة على العيادة.",
     actionFailed: "فشل تنفيذ العملية",
     clinicsWithoutSubscription: "عيادات بدون اشتراك",
     allClinicsSubscribed: "كل العيادات لها اشتراك.",
@@ -1031,7 +1078,8 @@ export const translations = {
     autoSuspendTenants: "إيقاف المشتركين غير النشطين تلقائياً",
     autoSuspendDesc: "إيقاف المشتركين تلقائياً بعد هذا العدد من أيام عدم الدفع",
     emailNotifications: "إشعارات البريد الإلكتروني",
-    emailNotificationsDesc: "تلقي تنبيهات بريدية للتسجيلات الجديدة ومشاكل الدفع",
+    emailNotificationsDesc:
+      "تلقي تنبيهات بريدية للتسجيلات الجديدة ومشاكل الدفع",
     trialPeriod: "الفترة التجريبية",
     trialPeriodDesc: "الفترة التجريبية الافتراضية للمشتركين الجدد",
     defaultPlan: "الخطة الافتراضية",
@@ -1045,17 +1093,22 @@ export const translations = {
     supportEmail: "بريد الدعم",
     supportEmailDesc: "العنوان الظاهر للمشتركين لطلبات الدعم",
     allowedDomains: "نطاقات التسجيل المسموحة",
-    allowedDomainsDesc: "نطاق بريد واحد في كل سطر. اتركه فارغاً للسماح بكل النطاقات.",
+    allowedDomainsDesc:
+      "نطاق بريد واحد في كل سطر. اتركه فارغاً للسماح بكل النطاقات.",
     allowedDomainsPlaceholder: "clinic.com\nclinic.org",
     allowedSiteIps: "قائمة عناوين IP المسموحة",
-    allowedSiteIpsDesc: "عنوان IP واحد في كل سطر. اتركه فارغاً للسماح بكل العناوين.",
+    allowedSiteIpsDesc:
+      "عنوان IP واحد في كل سطر. اتركه فارغاً للسماح بكل العناوين.",
     allowedSiteIpsPlaceholder: "41.33.12.5\n41.33.12.6",
     maxTenants: "الحد الأقصى للمشتركين",
-    maxTenantsDesc: "تُرفض التسجيلات الجديدة بعد وصول المنصة لهذا العدد من المشتركين",
+    maxTenantsDesc:
+      "تُرفض التسجيلات الجديدة بعد وصول المنصة لهذا العدد من المشتركين",
     backupEnabled: "النسخ الاحتياطي التلقائي",
-    backupEnabledDesc: "تشغيل نسخة احتياطية ل قاعدة البيانات الليلة حسب الجدول أدناه",
+    backupEnabledDesc:
+      "تشغيل نسخة احتياطية ل قاعدة البيانات الليلة حسب الجدول أدناه",
     backupRetentionDays: "مدة الاحتفاظ بالنسخ",
-    backupRetentionDaysDesc: "عدد الأيام التي تُحفظ فيها النسخ القديمة قبل حذفها",
+    backupRetentionDaysDesc:
+      "عدد الأيام التي تُحفظ فيها النسخ القديمة قبل حذفها",
     trialDaysLabel: "مدة الفترة التجريبية",
     backupTime: "وقت النسخ الاحتياطي",
     backupTimeDesc: "توقيت UTC اليومي للنسخة الاحتياطية",
@@ -1090,7 +1143,8 @@ export const translations = {
     auditLogs: "سجل التدقيق",
     allActions: "جميع الإجراءات",
     noAuditLogs: "لا توجد سجلات تدقيق",
-    noAuditLogsDesc: "جميع إجراءات المسؤولين يتم تسجيلها هنا بمجرد بدء معالجة الطلبات.",
+    noAuditLogsDesc:
+      "جميع إجراءات المسؤولين يتم تسجيلها هنا بمجرد بدء معالجة الطلبات.",
     action: "الإجراء",
     admin: "المسؤول",
     target: "الهدف",
@@ -1163,13 +1217,16 @@ export const translations = {
     disable2fa: "تعطيل المصادقة الثنائية",
     twoFactorEnabled: "المصادقة الثنائية مفعّلة",
     twoFactorDisabled: "المصادقة الثنائية معطّلة",
-    superAdmin2faRequired: "المصادقة الثنائية إلزامية لحساب مدير النظام ولا يمكن تعطيلها من لوحة التحكم.",
-    superAdmin2faLocked: "تسجيل الدخول لهذا الحساب محظور حتى تفعيل المصادقة الثنائية. فعّلها أو استخدم endpoint الاسترداد.",
+    superAdmin2faRequired:
+      "المصادقة الثنائية إلزامية لحساب مدير النظام ولا يمكن تعطيلها من لوحة التحكم.",
+    superAdmin2faLocked:
+      "تسجيل الدخول لهذا الحساب محظور حتى تفعيل المصادقة الثنائية. فعّلها أو استخدم endpoint الاسترداد.",
     scanQrCode: "امسح رمز QR هذا باستخدام تطبيق المصادقة",
     enterToken: "أدخل الرمز المكون من 6 أرقام من تطبيق المصادقة",
     verifyToken: "تحقق",
     backupCodes: "رموز النسخ الاحتياطي",
-    backupCodesDesc: "احفظ رموز النسخ الاحتياطي هذه في مكان آمن. يمكن استخدام كل رمز مرة واحدة فقط.",
+    backupCodesDesc:
+      "احفظ رموز النسخ الاحتياطي هذه في مكان آمن. يمكن استخدام كل رمز مرة واحدة فقط.",
     tokenPlaceholder: "000000",
     manualEntry: "تعذّر مسح الرمز؟ أدخل هذا المفتاح يدويًا",
     revealSecret: "إظهار مفتاح الإعداد",
@@ -1179,7 +1236,8 @@ export const translations = {
     // Settings form validation
     validationWholeNumber: "{field} يجب أن يكون رقمًا صحيحًا.",
     validationRange: "{field} يجب أن يكون بين {min} و {max}.",
-    validationBackupTime: "وقت النسخ الاحتياطي يجب أن يكون وقتًا صالحًا (ساعة:دقيقة).",
+    validationBackupTime:
+      "وقت النسخ الاحتياطي يجب أن يكون وقتًا صالحًا (ساعة:دقيقة).",
     validationEmail: "بريد الدعم يجب أن يكون بريدًا إلكترونيًا صالحًا.",
 
     // Audit Actions
@@ -1236,7 +1294,8 @@ export const translations = {
     alertsResolve: "حل",
     alertsMarkAllRead: "إقرار الكل كمقروء",
     alertsMarkedAllRead: "تم إقرار جميع التنبيهات",
-    alertsNoneDesc: "لا توجد تنبيهات مطابقة لعوامل التصفية الحالية. ستظهر التنبيهات هنا عند تجاوز الحدود.",
+    alertsNoneDesc:
+      "لا توجد تنبيهات مطابقة لعوامل التصفية الحالية. ستظهر التنبيهات هنا عند تجاوز الحدود.",
     alertsBellTitle: "الإشعارات",
     alertsViewAll: "عرض جميع التنبيهات",
     alertsNoOpen: "لا توجد تنبيهات مفتوحة",
@@ -1270,7 +1329,8 @@ export const translations = {
 
     // Backups
     backups: "النسخ الاحتياطي",
-    backupsDesc: "سجل النسخ الاحتياطي لقاعدة البيانات وتشغيل نسخة احتياطية يدوية",
+    backupsDesc:
+      "سجل النسخ الاحتياطي لقاعدة البيانات وتشغيل نسخة احتياطية يدوية",
     triggerBackup: "تشغيل نسخة احتياطية",
     noBackups: "لا توجد نسخ احتياطية",
     filename: "اسم الملف",
@@ -1299,7 +1359,8 @@ export const translations = {
     errorRateLabel: "معدل الخطأ",
     noPerfData: "لا توجد بيانات أداء بعد. ستظهر المسارات بعد إجراء طلبات API.",
     resetStats: "إعادة تعيين الإحصائيات",
-    resetPerfConfirm: "إعادة تعيين جميع إحصائيات الأداء؟ لا يمكن التراجع عن هذا.",
+    resetPerfConfirm:
+      "إعادة تعيين جميع إحصائيات الأداء؟ لا يمكن التراجع عن هذا.",
     refresh: "تحديث",
 
     // 2FA Login
@@ -1327,7 +1388,8 @@ export const translations = {
     adminCreated: "تم إنشاء المسؤول",
     shareAdminCredentials: "شارك بيانات الدخول هذه مع المسؤول:",
     deleteAdminTitle: "حذف المسؤول",
-    deleteAdminConfirm: "هل أنت متأكد من حذف {name}؟ لا يمكن التراجع عن هذا الإجراء.",
+    deleteAdminConfirm:
+      "هل أنت متأكد من حذف {name}؟ لا يمكن التراجع عن هذا الإجراء.",
     nameRequired: "الاسم مطلوب",
     emailRequired: "البريد الإلكتروني مطلوب",
     passwordRequired: "كلمة المرور مطلوبة",
@@ -1344,11 +1406,14 @@ export const translations = {
     monthly: "شهري",
     yearly: "سنوي",
     modulesAppAccess: "الوحدات (الوصول للتطبيق)",
+    failedToLoadModules: "فشل تحميل الوحدات",
+    noModulesAvailable: "لا توجد وحدات متاحة. يرجى التحقق من إعدادات الخادم.",
     addFeaturePlaceholder: "أضف ميزة",
     add: "إضافة",
     activeForNewSub: "نشط (متاح للاشتراكات الجديدة)",
     deletePlanTitle: "حذف الخطة",
-    deletePlanConfirm: "هل أنت متأكد من حذف خطة {name}؟ لا يمكن التراجع عن هذا الإجراء.",
+    deletePlanConfirm:
+      "هل أنت متأكد من حذف خطة {name}؟ لا يمكن التراجع عن هذا الإجراء.",
     planNamePlaceholder: "مثال: مبتدئ، احترافي، مؤسسي",
     zeroUnlimited: "0 للغير محدود",
     storagePlaceholder: "مثال: 5GB، غير محدود",
@@ -1413,8 +1478,10 @@ export const translations = {
     bulkActivateTitle: "تفعيل المشتركين المحددين؟",
     bulkActivateMessage: "سيتم إعادة تمكين وصول العيادات لعدد {count} مشترك.",
     bulkArchiveTitle: "أرشفة المشتركين المحددين؟",
-    bulkArchiveMessage: "سيتم أرشفة {count} مشترك. يمكن التراجع عبر إعادة التفعيل.",
-    bulkDeleteMessage: "سيتم حذف {count} مشترك وكل بياناتهم نهائياً. لا يمكن التراجع عن هذه العملية.",
+    bulkArchiveMessage:
+      "سيتم أرشفة {count} مشترك. يمكن التراجع عبر إعادة التفعيل.",
+    bulkDeleteMessage:
+      "سيتم حذف {count} مشترك وكل بياناتهم نهائياً. لا يمكن التراجع عن هذه العملية.",
     bulkFailed: "فشلت بعض العمليات",
     exportTenants: "tenants.csv",
     tenantDetails: "تفاصيل المشترك",
@@ -1472,7 +1539,8 @@ export const translations = {
     // Dashboard customization
     customize: "تخصيص",
     customizeDashboard: "تخصيص لوحة التحكم",
-    customizeDashboardDesc: "اختر البطاقات التي تظهر في هذه الصفحة. يُحفظ اختيارك على هذا الجهاز.",
+    customizeDashboardDesc:
+      "اختر البطاقات التي تظهر في هذه الصفحة. يُحفظ اختيارك على هذا الجهاز.",
     resetDefaults: "إعادة الضبط الافتراضي",
     cardTotalTenants: "المشتركين (الإجمالي والجدد)",
     cardActiveTenants: "المشتركين النشطين",
@@ -1483,7 +1551,8 @@ export const translations = {
     cardPlanDistribution: "توزيع الخطط",
     cardStatusDistribution: "حالة المشتركين",
     dashboardDesc: "نظرة عامة على المنصة في لمحة",
-    subscriptionDetailsDesc: "فترة الفوترة والمنطقة الزمنية وحدود الخطة الحالية",
+    subscriptionDetailsDesc:
+      "فترة الفوترة والمنطقة الزمنية وحدود الخطة الحالية",
     dormantOnly: "الخاملون فقط",
     trialExpiringWithin: "تنتهي التجربة خلال",
     anyDays: "الكل",
@@ -1493,15 +1562,18 @@ export const translations = {
     changePlan: "تغيير الخطة",
     newPlan: "الخطة الجديدة",
     billingTitle: "إدارة الفوترة",
-    billingDesc: "بدّل الخطة (مع إعادة تسعير الاشتراك) أو مدّد التجربة أو فعّل المشترك.",
+    billingDesc:
+      "بدّل الخطة (مع إعادة تسعير الاشتراك) أو مدّد التجربة أو فعّل المشترك.",
     extendTrial: "تمديد الفترة التجريبية",
     activateNow: "تفعيل الاشتراك",
     planChangeSuccess: "تم تحديث الخطة وإعادة تسعير الاشتراك",
-    trialExtendedMsg: "تمديد الفترة التجريبية حسب مدة التجربة في إعدادات المنصة",
+    trialExtendedMsg:
+      "تمديد الفترة التجريبية حسب مدة التجربة في إعدادات المنصة",
     exportTenantData: "تصدير البيانات",
     exportPlansFile: "revenue-by-plan.csv",
     revenueByPlanTitle: "الإيراد حسب الخطة",
-    revenueByPlanDesc: "الإيراد الشهري المتكرر للاشتراكات النشطة مجمّعًا حسب الخطة",
+    revenueByPlanDesc:
+      "الإيراد الشهري المتكرر للاشتراكات النشطة مجمّعًا حسب الخطة",
     subscribers: "المشتركون",
     recentAlertsTitle: "تنبيهات نشطة",
     recentAlertsDesc: "أحدث تنبيهات المنصة المفتوحة — تُحدَّث تلقائيًا",
@@ -1519,7 +1591,8 @@ export const translations = {
     tourStatsTitle: "مؤشرات رئيسية في لمحة",
     tourStatsDesc: "انقر أي بطاقة للانتقال مباشرة إلى صفحتها.",
     tourCustomizeTitle: "خصّصها كما تشاء",
-    tourCustomizeDesc: "أظهر البطاقات وأخفها واسحبها بأي ترتيب. تُحفظ على هذا الجهاز.",
+    tourCustomizeDesc:
+      "أظهر البطاقات وأخفها واسحبها بأي ترتيب. تُحفظ على هذا الجهاز.",
     tourNext: "التالي",
     tourSkip: "تخطّي الجولة",
     tourDone: "تم",
@@ -1548,7 +1621,8 @@ export const translations = {
     // Platform insights (/analytics/platform/*)
     stopImpersonationConfirm: "هل تريد إنهاء جلسة impersonation الحالية؟",
     platformInsights: "رؤى المنصة",
-    platformInsightsDesc: "تحليلات تشغيلية ومالية وأمنية شاملة عبر جميع العيادات.",
+    platformInsightsDesc:
+      "تحليلات تشغيلية ومالية وأمنية شاملة عبر جميع العيادات.",
     overview: "نظرة عامة",
     financial: "مالي",
     treatments: "العلاجات",
@@ -1631,7 +1705,8 @@ export const translations = {
     securityEvents: "الأحداث الأمنية",
     admin2faByRole: "المسؤولون حسب الدور",
     auditChainValid: "تم التحقق من سلسلة التدقيق: السلسلة سليمة.",
-    auditChainInvalid: "فشل التحقق من سلسلة التدقيق. لا تثق بهذه السجلات حتى تُحل المشكلة.",
+    auditChainInvalid:
+      "فشل التحقق من سلسلة التدقيق. لا تثق بهذه السجلات حتى تُحل المشكلة.",
     auditChainUnknown: "التحقق من سلسلة التدقيق غير متاح.",
     verifyChain: "تحقق من السلسلة",
     resolveError: "تحديد كمحلول",
@@ -1645,12 +1720,15 @@ export const translations = {
     acknowledgedBy: "تم الإقرار بواسطة",
     resolvedBy: "تم الحل بواسطة",
     resolvedAt: "تاريخ الحل",
-  }
+  },
 };
 
 // Get translation
 export const t = (key, params = {}, language = "en") => {
-  if (typeof params === "string") { language = params; params = {}; }
+  if (typeof params === "string") {
+    language = params;
+    params = {};
+  }
   const lang = translations[language] || translations.en;
   let text = lang[key] || key;
   if (params) {
