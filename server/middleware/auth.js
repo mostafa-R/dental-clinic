@@ -29,6 +29,15 @@ export async function protect(req, _res, next) {
       throw ApiError.unauthorized('Invalid or expired access token');
     }
 
+    // Token-type assertion (audit M5): `protect` is the clinic realm gate, so
+    // only clinic-realm tokens may pass. Site-admin (`site`) and 2FA-challenge
+    // tokens are signed with the same key family but belong to a different
+    // realm; accepting them here would let a dashboard session ride clinic
+    // middleware verifiers.
+    if (decoded.type !== 'clinic') {
+      throw ApiError.unauthorized('Invalid or expired access token');
+    }
+
     // NOTE: role is intentionally NOT populated here — RBAC resolution happens
     // lazily in middleware/checkPermission.js resolveRole() (Redis-cached,
     // tenant-scoped). Populating it here would double-query on every request.
@@ -51,6 +60,17 @@ export async function protect(req, _res, next) {
     // Reject revoked tokens (password change, admin-initiated rotation).
     if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== user.tokenVersion) {
       throw ApiError.unauthorized('Token revoked — please log in again');
+    }
+
+    // Impersonation deadline (audit C1): refresh never extends a support
+    // window. The claim is an absolute epoch-ms deadline minted from the
+    // single-use grant, so even a valid access token stops working the moment
+    // the original 30-minute grant would have expired.
+    if (decoded.impersonating === true) {
+      const deadline = Number(decoded.impersonationExpiresAt);
+      if (!Number.isFinite(deadline) || Date.now() > deadline) {
+        throw ApiError.unauthorized('Impersonation session has expired');
+      }
     }
 
     // Enforce tenant subscription status on every protected request.
@@ -149,10 +169,15 @@ export async function protect(req, _res, next) {
     // `phiRestrict` middleware) means a future patient-bearing route that
     // forgets phiRestrict still cannot leak PHI to an impersonator: it can
     // simply read req.isImpersonation like every other serializer does.
-    if (decoded.type === 'impersonation') {
+    //
+    // C1 fix: the clinic session issued by `verifyImpersonation` is a normal
+    // `type: "clinic"` token carrying an `impersonating: true` claim — the old
+    // `type: "impersonation"` token never survives `verifyAccessToken`, which
+    // made this branch dead code and left every impersonated request unmasked.
+    if (decoded.impersonating === true) {
       req.isImpersonation = true;
       req.user._impersonating = true;
-      req.user._impersonator = decoded.impersonator;
+      req.user._impersonator = decoded.impersonatorName || decoded.impersonatorId || 'Admin';
     }
 
     return next();

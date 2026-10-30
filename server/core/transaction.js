@@ -87,7 +87,16 @@ export async function withTransaction(fn) {
       }
       throw err;
     } finally {
-      session.endSession();
+      // M10: `endSession()` returns a promise (return-to-pool teardown), and
+      // letting it float meant the loop could `startSession()` again while the
+      // previous teardown was still in flight — under concurrent load that
+      // surfaces as "Cannot use a session that has ended" for an unrelated
+      // caller. Awaiting it makes cleanup sequential with the next attempt.
+      try {
+        await session.endSession();
+      } catch (endErr) {
+        logger.warn({ err: endErr }, 'Failed to end transaction session');
+      }
     }
   }
 }

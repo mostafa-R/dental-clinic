@@ -61,16 +61,26 @@ const quarantineSlice = createSlice({
       })
       .addCase(fetchAbuseChecks.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
       .addCase(setQuarantine.fulfilled, (state, action) => {
+        const payload = action.payload || {};
         state.checks = state.checks.map((check) =>
           check.tenantId === action.meta.arg.tenantId
-            ? { ...check, quarantined: true, quarantineReason: action.meta.arg.reason || check.quarantineReason }
+            ? {
+                ...check,
+                quarantined: payload.quarantined ?? payload.isActive === false ?? true,
+                quarantineReason: payload.reason || action.meta.arg.reason || check.quarantineReason,
+              }
             : check,
         );
       })
       .addCase(removeQuarantine.fulfilled, (state, action) => {
+        const payload = action.payload || {};
         state.checks = state.checks.map((check) =>
           check.tenantId === action.meta.arg
-            ? { ...check, quarantined: false, quarantineReason: null }
+            ? {
+                ...check,
+                quarantined: payload.quarantined ?? (payload.isActive === true ? false : false),
+                quarantineReason: payload.reason === undefined ? null : payload.reason,
+              }
             : check,
         );
       });

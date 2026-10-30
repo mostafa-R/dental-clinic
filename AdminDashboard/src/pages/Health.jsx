@@ -91,8 +91,31 @@ export default function Health() {
 
   useEffect(() => {
     dispatch(fetchHealth());
-    const interval = setInterval(() => dispatch(fetchHealth()), 30000);
-    return () => clearInterval(interval);
+    let interval = setInterval(() => {
+      if (document.hidden) return;
+      dispatch(fetchHealth());
+    }, 30000);
+    const handleVisibility = () => {
+      if (document.hidden) {
+        if (interval) {
+          clearInterval(interval);
+          interval = null;
+        }
+      } else {
+        dispatch(fetchHealth());
+        if (!interval) {
+          interval = setInterval(() => {
+            if (document.hidden) return;
+            dispatch(fetchHealth());
+          }, 30000);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      if (interval) clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [dispatch]);
 
   return (

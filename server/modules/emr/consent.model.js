@@ -82,6 +82,14 @@ const signatureSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    // Audit M2: when the signature method is `otp`, the controller stamps the
+    // moment a delivered code was verified here (null for other methods).
+    // The stamp is also bound into the signature hash (consent.service), so
+    // erasing "this was an OTP-verified signature" breaks tamper-evidence.
+    otpVerifiedAt: {
+      type: Date,
+      default: null,
+    },
   },
   { _id: false },
 );

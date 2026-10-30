@@ -54,8 +54,40 @@ export function computeSignatureHash(consent, signedAt, name) {
     consent.expiresAt ? new Date(consent.expiresAt).toISOString() : '',
     ts,
     String(name || ''),
-  ].join('|');
-  return crypto.createHmac('sha256', signingKey()).update(payload).digest('hex');
+  ];
+  // Audit M2: bind the OTP-verification stamp into the HMAC — appended ONLY
+  // when present, so records signed before the OTP flow existed (and all
+  // non-OTP methods) hash to byte-identical payloads and keep verifying.
+  if (consent.otpVerifiedAt) {
+    payload.push(new Date(consent.otpVerifiedAt).toISOString());
+  }
+  return crypto.createHmac('sha256', signingKey()).update(payload.join('|')).digest('hex');
+}
+
+// ---------------------------------------------------------------------------
+// Consent OTP (audit M2)
+
+export const OTP_CODE_LENGTH = 6;
+export const OTP_TTL_SECONDS = 10 * 60;
+
+/**
+ * Generate a fresh, unbiased OTP code. Zero-padded six digits. The code itself
+ * is NEVER stored — the caller persists only its HMAC (single-use, Redis).
+ */
+export function generateOtpCode() {
+  return crypto.randomInt(0, 1_000_000).toString().padStart(OTP_CODE_LENGTH, '0');
+}
+
+/**
+ * HMAC a one-time code under the same signing key. `identity` (consent +
+ * patient pair) binds the code to exactly the record it was issued for, so a
+ * code delivered for consent A can never sign consent B.
+ */
+export function hashOtpCode(code, identity) {
+  return crypto
+    .createHmac('sha256', signingKey())
+    .update(`consent-otp|${identity}|${String(code)}`)
+    .digest('hex');
 }
 
 /**
@@ -77,6 +109,9 @@ export function isSignatureValid(consent) {
       treatmentPlan: consent.treatmentPlan,
       attachmentUrl: consent.attachmentUrl,
       expiresAt: consent.expiresAt,
+      // Audit M2: OTP-verified signatures bind the verification stamp into the
+      // HMAC; non-OTP records leave it unset and hash as before.
+      otpVerifiedAt: sig.otpVerifiedAt || null,
     },
     sig.signedAt,
     sig.name,

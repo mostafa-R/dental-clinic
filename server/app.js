@@ -164,6 +164,24 @@ app.use("/api/site/auth/refresh", authLimiter);
 app.use("/api/v1/auth/refresh", authLimiter);
 app.use("/api/v1/site/auth/refresh", authLimiter);
 
+// Audit M11: `/auth/verify-impersonation` is public by design (a 60-second,
+// single-use handoff code), but an unthrottled redemption endpoint is still a
+// brute-force surface for handoff codes and a free Redis write. Same posture
+// as the login limiters, on a tighter budget.
+const impersonationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many impersonation attempts, please try again later",
+  },
+});
+["/api/auth/verify-impersonation", "/api/v1/auth/verify-impersonation"].forEach((p) => {
+  app.use(p, impersonationLimiter);
+});
+
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 200,
@@ -202,6 +220,7 @@ export async function upgradeRateLimitStore() {
     authLimiter.store = store;
     emailAuthLimiter.store = store;
     generalLimiter.store = store;
+    impersonationLimiter.store = store;
     logInfo("[RateLimit] Upgraded auth + general limiters to Redis store");
     return true;
   } catch {

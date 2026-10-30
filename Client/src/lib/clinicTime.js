@@ -30,9 +30,9 @@
  * an `Intl` constructor mid-render.
  */
 function safeZone(tz) {
-  if (typeof tz !== 'string' || tz.trim() === '') return browserZone();
+  if (typeof tz !== "string" || tz.trim() === "") return browserZone();
   try {
-    new Intl.DateTimeFormat('en-US', { timeZone: tz }).format();
+    new Intl.DateTimeFormat("en-US", { timeZone: tz }).format();
     return tz;
   } catch {
     return browserZone();
@@ -41,10 +41,33 @@ function safeZone(tz) {
 
 function browserZone() {
   try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   } catch {
-    return 'UTC';
+    return "UTC";
   }
+}
+
+/**
+ * Cached Intl.DateTimeFormat instances to avoid constructing a new formatter
+ * on every cell render. The cache key is `locale|zone|options`. This is critical
+ * for the live queue where 200 cards × 2 timestamps = 400 formatter allocations
+ * per repaint, repeated on every socket event.
+ */
+const formatterCache = new Map();
+
+function getCachedFormatter(locale, zone, options) {
+  const key = `${locale}|${zone}|${JSON.stringify(options)}`;
+  let formatter = formatterCache.get(key);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, { timeZone: zone, ...options });
+    formatterCache.set(key, formatter);
+  }
+  return formatter;
+}
+
+// Invalidate all cached formatters when the clinic zone changes
+function invalidateFormatterCache() {
+  formatterCache.clear();
 }
 
 let currentZone = null;
@@ -60,7 +83,11 @@ export function clinicTimeZone() {
  * changes its zone does not need a re-login).
  */
 export function setClinicTimeZone(tz) {
-  currentZone = safeZone(tz);
+  const newZone = safeZone(tz);
+  if (newZone !== currentZone) {
+    currentZone = newZone;
+    invalidateFormatterCache();
+  }
   return currentZone;
 }
 
@@ -71,30 +98,32 @@ export function clearClinicTimeZone() {
 
 /** `YYYY-MM-DD` for an instant, read in `tz`. */
 export function localDateString(instantMs, tz = clinicTimeZone()) {
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone: safeZone(tz),
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
+  const zone = safeZone(tz);
+  const dtf = getCachedFormatter("en-US", zone, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
   });
   const parts = {};
-  for (const p of dtf.formatToParts(new Date(instantMs))) parts[p.type] = p.value;
+  for (const p of dtf.formatToParts(new Date(instantMs)))
+    parts[p.type] = p.value;
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 /** `YYYY-MM-DDTHH:mm` for an instant, read in `tz` — the `datetime-local` shape. */
 export function localDateTimeString(instantMs, tz = clinicTimeZone()) {
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone: safeZone(tz),
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
+  const zone = safeZone(tz);
+  const dtf = getCachedFormatter("en-US", zone, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
   });
   const parts = {};
-  for (const p of dtf.formatToParts(new Date(instantMs))) parts[p.type] = p.value;
+  for (const p of dtf.formatToParts(new Date(instantMs)))
+    parts[p.type] = p.value;
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
 }
 
@@ -103,18 +132,19 @@ export function localDateTimeString(instantMs, tz = clinicTimeZone()) {
  * instant into the zone and diffing the wall clock against the UTC instant.
  */
 export function zonedOffsetMs(instantMs, tz) {
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone: safeZone(tz),
-    hourCycle: 'h23',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
+  const zone = safeZone(tz);
+  const dtf = getCachedFormatter("en-US", zone, {
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
   });
   const parts = {};
-  for (const p of dtf.formatToParts(new Date(instantMs))) parts[p.type] = p.value;
+  for (const p of dtf.formatToParts(new Date(instantMs)))
+    parts[p.type] = p.value;
   const asUtc = Date.UTC(
     Number(parts.year),
     Number(parts.month) - 1,
@@ -128,7 +158,7 @@ export function zonedOffsetMs(instantMs, tz) {
 
 /** Parse a `YYYY-MM-DD` string, rejecting impossible dates like `2026-02-30`. */
 export function parseDateOnly(value) {
-  if (typeof value !== 'string') return null;
+  if (typeof value !== "string") return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
   if (!m) return null;
   const y = Number(m[1]);
@@ -168,10 +198,14 @@ export function zonedDayStartUtc(value, tz = clinicTimeZone()) {
 /** UTC instant of local midnight for the day after the day containing `target`. */
 export function zonedNextDayStartUtc(target, tz = clinicTimeZone()) {
   const zone = safeZone(tz);
-  const start = typeof target === 'number' ? target : zonedDayStartUtc(target, zone);
+  const start =
+    typeof target === "number" ? target : zonedDayStartUtc(target, zone);
   if (start == null || Number.isNaN(start)) return null;
-  const [y, mo, d] = localDateString(start, zone).split('-').map(Number);
-  return zonedDayStartUtc(new Date(Date.UTC(y, mo - 1, d + 1)).toISOString().slice(0, 10), zone);
+  const [y, mo, d] = localDateString(start, zone).split("-").map(Number);
+  return zonedDayStartUtc(
+    new Date(Date.UTC(y, mo - 1, d + 1)).toISOString().slice(0, 10),
+    zone,
+  );
 }
 
 /** Inclusive local-day `{ start, end }` (end is exclusive) for a date in `tz`. */
@@ -199,10 +233,10 @@ export function zonedToday(nowMs = Date.now(), tz = clinicTimeZone()) {
  * there is nothing to convert and re-reading it through a zone would shift it.
  */
 export function toDateInputValue(value, tz = clinicTimeZone()) {
-  if (value == null || value === '') return '';
-  if (typeof value === 'string' && isDateOnlyString(value)) return value.trim();
+  if (value == null || value === "") return "";
+  if (typeof value === "string" && isDateOnlyString(value)) return value.trim();
   const d = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(d.getTime())) return '';
+  if (Number.isNaN(d.getTime())) return "";
   return localDateString(d.getTime(), safeZone(tz));
 }
 
@@ -214,9 +248,9 @@ export function zonedMinutesOfDay(instantMs, tz = clinicTimeZone()) {
 
 /** Value for `<input type="datetime-local">`: clinic-local wall clock. */
 export function toDateTimeInputValue(value, tz = clinicTimeZone()) {
-  if (value == null || value === '') return '';
+  if (value == null || value === "") return "";
   const d = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(d.getTime())) return '';
+  if (Number.isNaN(d.getTime())) return "";
   return localDateTimeString(d.getTime(), safeZone(tz));
 }
 
@@ -238,7 +272,9 @@ export function toDateTimeInputValue(value, tz = clinicTimeZone()) {
  */
 export function fromDateTimeInputValue(value, tz = clinicTimeZone()) {
   if (!value) return null;
-  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(String(value).trim());
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(
+    String(value).trim(),
+  );
   if (!m) {
     const d = new Date(value);
     return Number.isNaN(d.getTime()) ? null : d;
@@ -249,7 +285,14 @@ export function fromDateTimeInputValue(value, tz = clinicTimeZone()) {
   const y = Number(ys);
   const mo = Number(mos);
   const d = Number(ds);
-  const wallMs = Date.UTC(y, mo - 1, d, Number(hs), Number(mis), Number(ss || 0));
+  const wallMs = Date.UTC(
+    y,
+    mo - 1,
+    d,
+    Number(hs),
+    Number(mis),
+    Number(ss || 0),
+  );
   // The instant for a wall clock is `wall clock - offset in effect at that
   // wall clock`. Seed with the day's midday offset, then refine against the
   // offset actually in effect at the candidate instant so a DST change inside
@@ -264,12 +307,18 @@ export function fromDateTimeInputValue(value, tz = clinicTimeZone()) {
 }
 
 /** Current instant as a `datetime-local` value in the clinic's zone. */
-export function nowAsDateTimeInputValue(tz = clinicTimeZone(), nowMs = Date.now()) {
+export function nowAsDateTimeInputValue(
+  tz = clinicTimeZone(),
+  nowMs = Date.now(),
+) {
   return toDateTimeInputValue(new Date(nowMs), tz);
 }
 
 /** Today's date-only value in the clinic's zone. */
-export function todayAsDateInputValue(tz = clinicTimeZone(), nowMs = Date.now()) {
+export function todayAsDateInputValue(
+  tz = clinicTimeZone(),
+  nowMs = Date.now(),
+) {
   return localDateString(nowMs, safeZone(tz));
 }
 
@@ -279,6 +328,6 @@ export function todayAsDateInputValue(tz = clinicTimeZone(), nowMs = Date.now())
  */
 export function combineDateAndTime(dateStr, timeStr, tz = clinicTimeZone()) {
   if (!dateStr) return null;
-  const time = timeStr || '00:00';
+  const time = timeStr || "00:00";
   return fromDateTimeInputValue(`${dateStr}T${String(time).slice(0, 5)}`, tz);
 }

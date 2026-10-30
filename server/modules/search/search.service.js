@@ -48,6 +48,9 @@ const EMPTY_RESULT = {
   wallets: [], installments: [],
 };
 
+/** Audit M1: the patient-match candidates drippable into patient-linked collections. */
+const PATIENT_MATCH_CAP = 50;
+
 function buildSearchCacheKey(branchFilter, query, allowedModules, { userId, impersonating } = {}) {
   const sorted = Object.keys(branchFilter).sort().reduce((acc, k) => {
     acc[k] = String(branchFilter[k]);
@@ -101,17 +104,25 @@ export async function globalSearch(branchFilter, query, can = () => true, option
   const regex = new RegExp(esc, 'i');
   const phoneLike = isPhoneLike(q);
 
-  const matchedPatients = can('patients')
+  // Audit M1: resolve the matching patients ONCE into a bounded candidate set
+  // (50) and reuse those ids everywhere. The previous shape ran the patient
+  // query for the result page (.limit(5)) and then let wallets/installments
+  // do an populate()-match over their WHOLE collection and drop rows after a
+  // `.limit(5)` taken from the WRONG end — a legitimate wallet match outside
+  // the first five rows silently disappeared. Wallet/installment matching now
+  // happens inside the node: no unbounded patient-id materialization.
+  const patientCandidates = can('patients')
     ? await Patient.find({
       ...branchFilter,
       $or: [{ firstName: regex }, { lastName: regex }, { phone: regex }, { email: regex }, { patientId: regex }],
     })
       .select('firstName lastName phone patientId')
-      .limit(5)
+      .limit(PATIENT_MATCH_CAP)
       .lean()
     : [];
 
-  const matchedIds = matchedPatients.map((p) => p._id);
+  const matchedPatients = patientCandidates.slice(0, 5);
+  const matchedIds = patientCandidates.map((p) => p._id);
 
   const patientLinkQuery = matchedIds.length ? [{ patient: { $in: matchedIds } }] : [];
 
@@ -170,30 +181,29 @@ export async function globalSearch(branchFilter, query, can = () => true, option
     corePromises.push(Promise.resolve([]));
   }
   if (can('billing')) {
+    // Audit M1: match inside the query (indexed `patient` membership against
+    // the bounded candidate set) instead of populate()-matching the whole
+    // collection and dropping rows after a misplaced limit.
     corePromises.push(
-      Wallet.find({ ...branchFilter })
-        .populate({
-          path: 'patient',
-          match: { $or: [{ firstName: regex }, { lastName: regex }, { patientId: regex }, { phone: regex }] },
-          select: 'firstName lastName phone patientId',
-        })
-        .limit(5)
-        .lean(),
+      matchedIds.length
+        ? Wallet.find({ ...branchFilter, patient: { $in: matchedIds } })
+          .populate({ path: 'patient', select: 'firstName lastName phone patientId' })
+          .limit(5)
+          .lean()
+        : Promise.resolve([]),
     );
   } else {
     corePromises.push(Promise.resolve([]));
   }
   if (can('billing')) {
     corePromises.push(
-      InstallmentPlan.find({ ...branchFilter })
-        .populate({
-          path: 'patient',
-          match: { $or: [{ firstName: regex }, { lastName: regex }, { patientId: regex }, { phone: regex }] },
-          select: 'firstName lastName phone patientId',
-        })
-        .select('planNo totalAmount paidAmount status')
-        .limit(5)
-        .lean(),
+      matchedIds.length
+        ? InstallmentPlan.find({ ...branchFilter, patient: { $in: matchedIds } })
+          .populate({ path: 'patient', select: 'firstName lastName phone patientId' })
+          .select('planNo totalAmount paidAmount status')
+          .limit(5)
+          .lean()
+        : Promise.resolve([]),
     );
   } else {
     corePromises.push(Promise.resolve([]));
@@ -307,11 +317,16 @@ export async function globalSearch(branchFilter, query, can = () => true, option
     installments: filteredInstallments,
   };
 
-  // Impersonating sessions read the PHI-stripped payload — the sanitized copy
-  // is what gets stored in the cache tier, so no protected health information
-  // ever rests in Redis AND an impersonator never receives it on a cache hit.
-  // Regular clinic users search against the live FULL result: their own search
-  // results must not be silently stripped of diagnoses/notes/medications.
+  // Audit M1, cache posture (kept deliberately): the cache tier is Redis —
+  // shared, persistent JSON storage — so full search results (which include
+  // diagnoses, notes, medications) are cached ONLY for impersonation sessions
+  // in the PHI-stripped form. Regular clinic users stay on the live FULL
+  // result: a per-user full cache would sit patient PHI in Redis and serve
+  // one user silently stripped copies on a later hit. The recurring cost is
+  // contained structurally instead: the single bounded patient query above is
+  // reused, wallet/installment matching moved from unbounded populate-match
+  // scans into indexed `patient: { $in }` queries, and every list remains
+  // capped at 5.
   if (options.impersonating) {
     const cacheSafe = sanitizeForCache(result);
     await cacheSet('search', cacheKey, cacheSafe, 60);

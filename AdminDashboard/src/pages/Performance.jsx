@@ -25,8 +25,31 @@ export default function Performance() {
 
   useEffect(() => {
     dispatch(fetchPerfStats());
-    const interval = setInterval(() => dispatch(fetchPerfStats()), 15000);
-    return () => clearInterval(interval);
+    let interval = setInterval(() => {
+      if (document.hidden) return;
+      dispatch(fetchPerfStats());
+    }, 15000);
+    const handleVisibility = () => {
+      if (document.hidden) {
+        if (interval) {
+          clearInterval(interval);
+          interval = null;
+        }
+      } else {
+        dispatch(fetchPerfStats());
+        if (!interval) {
+          interval = setInterval(() => {
+            if (document.hidden) return;
+            dispatch(fetchPerfStats());
+          }, 15000);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      if (interval) clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [dispatch]);
 
   const handleReset = () => {

@@ -45,23 +45,27 @@ const CHAT_CHANNELS = ['doctors', 'accounting', 'general'];
 const IP_CONNECTION_LIMIT = 20;
 const connectionsByIp = new Map();
 
-// Whether to trust a configured reverse proxy hop when deriving the client IP
-// for the connection cap. Mirrors the Express `app.set('trust proxy', 1)`
-// used elsewhere; when disabled, the raw socket address (the proxy's IP) is
-// used, which lets a single clinic exceed the cap and be throttled together.
-const TRUST_PROXY = process.env.TRUST_PROXY === 'true' || process.env.NODE_ENV === 'production';
+// Audit H3: mirror the Express `app.set('trust proxy', TRUST_PROXY_HOPS)`
+// policy exactly (server/app.js). Trust NOTHING by default — `X-Forwarded-For`
+// is attacker-controlled, so blindly trusting it in production let a client
+// rotate the header per connection and completely bypass the per-IP socket
+// cap below. Opt in with TRUST_PROXY_HOPS=N, then accept the Nth hop from the
+// RIGHT (the one appended by our own trusted proxy), never the first entry.
+const TRUST_PROXY_HOPS = Number.parseInt(process.env.TRUST_PROXY_HOPS || "0", 10);
+const SOCKET_TRUST_PROXY = Number.isFinite(TRUST_PROXY_HOPS) && TRUST_PROXY_HOPS > 0;
 
 function realClientIp(socket) {
-  if (TRUST_PROXY) {
-    const req = socket.request;
-    const forwarded = req?.headers?.['x-forwarded-for'];
+  if (SOCKET_TRUST_PROXY) {
+    const forwarded = socket.request?.headers?.['x-forwarded-for'];
     if (forwarded) {
-      const first = String(forwarded).split(',')[0].trim();
-      if (first) return first;
+      const hops = String(forwarded).split(',').map((part) => part.trim()).filter(Boolean);
+      const index = hops.length - TRUST_PROXY_HOPS;
+      if (index >= 0 && hops[index]) return hops[index];
     }
-    const realIp = req?.headers?.['x-real-ip'];
-    if (realIp) return realIp;
   }
+  // Untrusted fallback: the peer address (proxy IP without a proxy config).
+  // Every client behind one proxy shares one identity — that is the safe
+  // failure mode, unlike header rotation which fragments identity.
   return socket.handshake?.address || 'unknown';
 }
 
@@ -105,15 +109,23 @@ export function initSocket(httpServer) {
       return next(new Error('Invalid or expired token'));
     }
 
+    // Audit M5: only these two realms may open a socket at all. 2FA-challenge,
+    // recovery and impersonation-grant tokens are signed with trusted keys but
+    // are not session credentials.
+    const isSiteToken = decoded.type === 'site';
+    if (!isSiteToken && decoded.type !== 'clinic') {
+      return next(new Error('Invalid or expired token'));
+    }
+
     // Site-admin (dashboard) sessions authenticate with a `type: "site"`
     // token: they join the admin room so platform alerts reach them live.
-    if (decoded.type === 'site') {
+    if (isSiteToken) {
       SiteAdmin.findById(decoded.sub)
         .then((admin) => {
           if (!admin || !admin.isActive) {
             return next(new Error('Admin no longer valid'));
           }
-          if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== admin.tokenVersion) {
+          if (decoded.tokenVersion === undefined || decoded.tokenVersion !== admin.tokenVersion) {
             return next(new Error('Token revoked — please log in again'));
           }
           socket.user = {
@@ -123,7 +135,8 @@ export function initSocket(httpServer) {
             tenant: null,
             isSystemAdmin: admin.role === 'super_admin',
             // A dashboard session is never clinic staff: it must not be able to
-            // join a clinic branch room or the live queue.
+            // join a clinic branch room or the live queue. (`siteAdmin: true`
+            // is enforced in every room handler below.)
             isTenantWide: false,
             siteRole: admin.role,
             siteAdmin: true,
@@ -140,7 +153,7 @@ export function initSocket(httpServer) {
         if (!user || !user.isActive) {
           return next(new Error('User no longer valid'));
         }
-        if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== user.tokenVersion) {
+        if (decoded.tokenVersion === undefined || decoded.tokenVersion !== user.tokenVersion) {
           return next(new Error('Token revoked — please log in again'));
         }
 
@@ -181,9 +194,15 @@ export function initSocket(httpServer) {
 
         // Tag impersonated sessions so room membership below can restrict
         // them to branch data and never chat/DM rooms.
-        if (decoded.type === 'impersonation') {
+        //
+        // C1 fix: impersonation rides a normal `type: "clinic"` access token
+        // carrying `impersonating: true` (see auth.controller
+        // verifyImpersonation). The old `type: "impersonation"` grant token
+        // never survives the session, so this branch was unreachable and
+        // impersonated sockets received full PHI.
+        if (decoded.impersonating === true) {
           socket.user.impersonating = true;
-          socket.user.impersonator = decoded.impersonator || null;
+          socket.user.impersonator = decoded.impersonatorId || null;
         }
 
         // Enforce tenant subscription status (mirrors middleware/auth.js
@@ -255,11 +274,16 @@ export function initSocket(httpServer) {
     socket.on('subscribe:branch', async (branchId) => {
       try {
         if (!branchId) return;
-        // System admins can subscribe to any branch.
-        if (socket.user.isSystemAdmin) {
-          socket.join(branchRoom(branchId));
+        // Audit H2: dashboard sessions are platform staff, not clinic staff.
+        // The old `isSystemAdmin` shortcut ran BEFORE any tenant check, so a
+        // super-admin socket could join any clinic's branch room — the exact
+        // opposite of this file's own connection comment — and read every
+        // patient record broadcast to it.
+        if (socket.user.siteAdmin || !socket.user.tenant) {
+          socket.emit('error', { message: 'Not authorized to subscribe to this branch' });
           return;
         }
+
         // Branch-scoped users may only ever subscribe to their OWN branch.
         // Checking the tenant alone let a receptionist at branch A join
         // branch B's room and receive every patient record broadcast to it.
@@ -271,12 +295,14 @@ export function initSocket(httpServer) {
           socket.join(branchRoom(branchId));
           return;
         }
-        // Clinic-wide users can subscribe to branches in their own tenant.
-        if (socket.user.tenant) {
-          const branch = await Branch.findOne({ _id: branchId, tenant: socket.user.tenant }).select('_id').lean();
-          if (branch) {
-            socket.join(branchRoom(branchId));
-          }
+
+        // Clinic-wide users AND tenant system admins can subscribe to branches
+        // in their OWN tenant. The DB check is authoritative — trusting the
+        // client-supplied branchId (the old admin path) is cross-tenant by
+        // construction whenever the id guesses another clinic's branch.
+        const branch = await Branch.findOne({ _id: branchId, tenant: socket.user.tenant }).select('_id').lean();
+        if (branch) {
+          socket.join(branchRoom(branchId));
         }
       } catch (err) {
         console.error('[Socket] subscribe:branch error:', err);

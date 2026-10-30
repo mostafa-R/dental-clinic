@@ -106,7 +106,14 @@ function makeUser({ branch, role, id = oid(20) }) {
 }
 
 async function connect({ user, role }) {
-  const token = jwt.sign({ sub: user._id, tokenVersion: 0 }, SOCKET_JWT_SECRET, { expiresIn: '10m' });
+  // Real access tokens always carry `type: "clinic"` (utils/jwt buildPayload);
+  // the socket middleware rejects anything that is neither `clinic` nor
+  // `site`, so the fixture must sign a proper clinic token.
+  const token = jwt.sign(
+    { sub: user._id, tokenVersion: 0, type: 'clinic' },
+    SOCKET_JWT_SECRET,
+    { expiresIn: '10m' },
+  );
   findById.mockReturnValue(query(user));
   roleFindOne.mockReturnValue(query(role));
   branchFindOne.mockImplementation((filter) =>

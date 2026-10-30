@@ -58,4 +58,12 @@ export function clearClientSessionTraces() {
   } catch {
     /* ignore */
   }
+  try {
+    localStorage.removeItem("dashboard_cards");
+    localStorage.removeItem("tenants_views");
+    localStorage.removeItem("dashboard_cards_layout");
+    localStorage.removeItem("dashboard_tour_done");
+  } catch {
+    /* ignore */
+  }
 }

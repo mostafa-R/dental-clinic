@@ -6,6 +6,7 @@ import {
   deleteConsent,
   getConsent,
   listConsents,
+  sendConsentOtp,
   signConsent,
   updateConsent,
   verifyConsent,
@@ -178,6 +179,33 @@ router.patch('/:consentId', protect, checkPermission('consents', 'update'), phiR
  *         description: Consent signed
  */
 router.post('/:consentId/sign', protect, checkPermission('consents', 'update'), phiRestrict, validate(signConsentSchema), signConsent);
+
+/**
+ * @swagger
+ * /api/v1/patients/{patientId}/consents/{consentId}/send-otp:
+ *   post:
+ *     tags: [Consents]
+ *     summary: Send an OTP verification code to the patient (for otp signatures)
+ *     description: "Requires `consents:update`. Sends a 6-digit code over WhatsApp to the patient's phone ON FILE (never a caller-supplied number), stores only its single-use HMAC, and reports the masked destination. Sign with `method: 'otp'` + this code."
+ *     security: [{ cookieAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: patientId
+ *         required: true
+ *         schema: { $ref: '#/components/schemas/ObjectId' }
+ *       - in: path
+ *         name: consentId
+ *         required: true
+ *         schema: { $ref: '#/components/schemas/ObjectId' }
+ *     responses:
+ *       '200':
+ *         description: Code delivered
+ *       '400':
+ *         description: Patient has no phone on file
+ *       '409':
+ *         description: WhatsApp not connected / consent not signable
+ */
+router.post('/:consentId/send-otp', protect, checkPermission('consents', 'update'), phiRestrict, sendConsentOtp);
 
 /**
  * @swagger

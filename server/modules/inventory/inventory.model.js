@@ -8,6 +8,12 @@ import {
 export { INVENTORY_CATEGORIES, INVENTORY_UNITS };
 
 const MAX_INVENTORY_TRANSACTIONS = 1000;
+// Audit H6: the cap must be enforceable from outside the model. The
+// stock-adjust / auto-deduction / reversal flows all write through
+// `findOneAndUpdate({ $push })`, and Mongo update validators never run
+// document hooks — so the inline trim below only fired on full-document
+// saves. Every $push site now trims explicitly with `$each` + `$slice`.
+export const INVENTORY_TRANSACTIONS_CAP = MAX_INVENTORY_TRANSACTIONS;
 
 /**
  * StockTransaction — an immutable ledger entry for every quantity change.
@@ -153,9 +159,13 @@ inventoryItemSchema.set('toJSON', { virtuals: true });
 inventoryItemSchema.set('toObject', { virtuals: true });
 
 // Cap embedded transactions array to prevent unbounded document growth.
-// Runs in `pre('validate')` (not `pre('save')`) because the stock-adjust and
-// auto-deduction flows use `findOneAndUpdate` + `$push` with `runValidators`,
-// which triggers `validate` but not `save` (issue #8).
+// This hook is the SECOND line of defense: it fires on full-document saves
+// (e.g. `createItem`'s initial stock entry). The real enforcement for the hot
+// write path lives at each `$push` site via `$slice` — see
+// INVENTORY_TRANSACTIONS_CAP above and every `$push` in inventory.service.js.
+// (The old comment claimed `runValidators` made this hook run for
+// `findOneAndUpdate` writes — it does not; update validators validate the
+// update document, not the hydrated document, and never run document hooks.)
 inventoryItemSchema.pre('validate', function capTransactions() {
   if (this.isModified('transactions') && Array.isArray(this.transactions) && this.transactions.length > MAX_INVENTORY_TRANSACTIONS) {
     this.transactions = this.transactions.slice(-MAX_INVENTORY_TRANSACTIONS);

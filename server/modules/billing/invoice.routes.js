@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   addPayment,
   createInvoice,
+  exportInvoicesCsv,
   getBillingSummary,
   getInvoice,
   getInvoiceAging,
@@ -79,6 +80,46 @@ const router = Router();
  *         $ref: '#/components/responses/Forbidden'
  */
 router.get('/', protect, checkPermission('billing', 'read'), phiRestrict, validate(listInvoicesQuerySchema, 'query'), listInvoices);
+
+/**
+ * @swagger
+ * /api/v1/billing/export:
+ *   get:
+ *     tags: [Billing]
+ *     summary: Export invoices as CSV (Report Builder v1)
+ *     description: >-
+ *       Requires `billing:read`. Streams the invoice list as an RFC-4180 CSV
+ *       with `Content-Disposition: attachment`. Accepts the same filters as
+ *       the list endpoint (search/status/patient/appointment); rows are capped
+ *       at 5000, so callers with larger scopes must narrow their filter.
+ *       Formula-lookalike cells are neutralized for spreadsheet safety.
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [unpaid, partial, paid, void] }
+ *       - in: query
+ *         name: patient
+ *         schema: { $ref: '#/components/schemas/ObjectId' }
+ *       - in: query
+ *         name: appointment
+ *         schema: { $ref: '#/components/schemas/ObjectId' }
+ *     responses:
+ *       '200':
+ *         description: CSV file
+ *         content:
+ *           text/csv:
+ *             schema: { type: string }
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '403':
+ *         $ref: '#/components/responses/Forbidden'
+ */
+router.get('/export', protect, checkPermission('billing', 'read'), phiRestrict, validate(listInvoicesQuerySchema, 'query'), exportInvoicesCsv);
 
 /**
  * @swagger

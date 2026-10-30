@@ -1,7 +1,15 @@
 import mongoose from 'mongoose';
 
 import Consent from './consent.model.js';
-import { computeSignatureHash, isSignatureValid } from './consent.service.js';
+import {
+  computeSignatureHash,
+  generateOtpCode,
+  hashOtpCode,
+  isSignatureValid,
+  OTP_TTL_SECONDS,
+} from './consent.service.js';
+import { cacheDel, cacheGet, cacheSet } from '../../utils/cache.js';
+import { sendWhatsAppMessage } from '../../services/whatsapp.js';
 import { emitToBranch } from '../../socket/index.js';
 import { publishEvent } from '../../services/eventBus.js';
 import ApiError from '../../utils/ApiError.js';
@@ -160,6 +168,58 @@ export const updateConsent = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Deliver a 6-digit verification code to the patient's phone on file so an
+ * `otp` signature can carry real proof of identity (audit M2). The code is
+ * stored ONLY as an HMAC in Redis, single-use, 10-minute TTL, bound to this
+ * consent + patient pair; the plaintext never leaves the outgoing message.
+ * Using the phone ON FILE (not a caller-supplied number) is deliberate: the
+ * code must reach the actual patient, not a phone the signer picks.
+ */
+export const sendConsentOtp = asyncHandler(async (req, res) => {
+  const patient = await loadScopedPatient(req, req.params.patientId);
+  const consent = await loadConsent(patient, req.params.consentId);
+  if (!consent) {
+    throw ApiError.notFound('Consent not found');
+  }
+  if (!['draft', 'sent'].includes(consent.status)) {
+    throw ApiError.conflict('Only drafts or sent consents can be signed');
+  }
+  if (consent.expiresAt && new Date() > new Date(consent.expiresAt)) {
+    throw ApiError.conflict('This consent has expired — please create a new version');
+  }
+
+  const phone = String(patient.phone || '').trim();
+  if (!phone) {
+    throw ApiError.badRequest('This patient has no phone number on file — add one before using OTP signatures');
+  }
+
+  const identity = `${consent._id}:${patient._id}`;
+  const code = generateOtpCode();
+  try {
+    await cacheSet('consent-otp', identity, { hash: hashOtpCode(code, identity) }, OTP_TTL_SECONDS);
+    await sendWhatsAppMessage(String(consent.tenant), phone, [
+      'تأكيد موافقة طبية 🦷',
+      '',
+      `رمز التحقق الخاص بك: ${code}`,
+      'صالح لمدة 10 دقائق. لا تشارك هذا الرمز مع أي شخص.',
+    ].join('\n'));
+  } catch (err) {
+    // A code that was never delivered must never be verifiable: consume it.
+    await cacheDel('consent-otp', identity).catch(() => {});
+    throw ApiError.conflict(
+      `Could not deliver the verification code: ${err.message || 'WhatsApp not connected'}`,
+    );
+  }
+
+  // Return a masked number only — the staff member already sees the patient's
+  // contact info, but never the code.
+  const masked = `***${phone.slice(-3)}`;
+  return sendSuccess(res, {
+    otp: { expiresInSeconds: OTP_TTL_SECONDS, sentTo: masked },
+  });
+});
+
+/**
  * Sign the consent with the patient's electronic signature. Freezes the record
  * and publishes the `consent.signed` event so automation rules can react.
  */
@@ -180,9 +240,34 @@ export const signConsent = asyncHandler(async (req, res) => {
     throw ApiError.conflict('This consent has expired — please create a new version');
   }
 
-  const { signature, patientStatement } = req.validatedBody;
+  const { signature, patientStatement, otp } = req.validatedBody;
   const signedAt = new Date();
   const name = signature.name.trim();
+
+  // Audit M2: an `otp` signature must stand on a REAL verified code. The stamp
+  // is wiped from Redis regardless of outcome (single-use), so every code can
+  // be attempted exactly once.
+  let otpVerifiedAt = null;
+  if (signature.method === 'otp') {
+    const identity = `${consent._id}:${patient._id}`;
+    const pending = await cacheGet('consent-otp', identity);
+    if (!pending || !pending.hash) {
+      throw ApiError.badRequest('No active verification code — request one via send-otp first');
+    }
+    await cacheDel('consent-otp', identity).catch(() => {});
+    const candidate = hashOtpCode(String(otp), identity);
+    if (candidate !== pending.hash) {
+      throw ApiError.conflict('Invalid verification code');
+    }
+    // The code was delivered to the phone on file; the signature must claim
+    // the same number, not phone entered by the signer.
+    if (signature.phone && signature.phone.trim() !== String(patient.phone || '').trim()) {
+      throw ApiError.conflict(
+        `The code was sent to the phone on file (***${String(patient.phone || '').slice(-3)})`,
+      );
+    }
+    otpVerifiedAt = new Date();
+  }
 
   consent.status = 'signed';
   // M4: summary (drafted by staff) stays immutable once shown — the patient's
@@ -199,6 +284,9 @@ export const signConsent = asyncHandler(async (req, res) => {
     ip: req.ip || req.socket?.remoteAddress || '',
     signedAt,
     signedBy: req.user._id,
+    // Audit M2: stamp the successful code verification (otp method only) and
+    // bind it into the HMAC below, so the "OTP-verified" claim is tamper-aware.
+    ...(otpVerifiedAt ? { otpVerifiedAt } : {}),
     hash: computeSignatureHash(
       {
         // Use the raw patient id — after populate this field is a ref/doc and
@@ -213,6 +301,7 @@ export const signConsent = asyncHandler(async (req, res) => {
         treatmentPlan: consent.treatmentPlan,
         attachmentUrl: consent.attachmentUrl,
         expiresAt: consent.expiresAt,
+        otpVerifiedAt,
       },
       signedAt,
       name,

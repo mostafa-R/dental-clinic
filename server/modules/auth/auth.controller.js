@@ -60,6 +60,20 @@ export const refresh = asyncHandler(async (req, res) => {
 
   await authService.assertTenantActive(user.tenant);
 
+  // C1 fix: rotate the impersonation session in place. The refresh token
+  // carries the same `impersonating` claims the access token did, so a
+  // token refresh keeps PHI masking active. `impersonationExpiresAt` is an
+  // absolute deadline minted from the one-use grant — it is copied verbatim,
+  // never recomputed, so refreshing cannot extend a support window.
+  const impersonating = decoded.impersonating === true;
+  if (impersonating) {
+    const deadline = Number(decoded.impersonationExpiresAt);
+    if (!Number.isFinite(deadline) || Date.now() > deadline) {
+      clearAuthCookies(res);
+      throw ApiError.unauthorized('Impersonation session has expired');
+    }
+  }
+
   // Atomic compare-and-swap: only increment if tokenVersion still matches,
   // preventing two concurrent refreshes from both succeeding.
   const updated = await User.findOneAndUpdate(
@@ -72,7 +86,14 @@ export const refresh = asyncHandler(async (req, res) => {
   }
 
   user.tokenVersion = updated.tokenVersion;
-  setAuthCookies(res, user);
+  setAuthCookies(res, user, 'clinic', impersonating
+    ? {
+      impersonating: true,
+      impersonatorId: decoded.impersonatorId,
+      impersonatorName: decoded.impersonatorName,
+      impersonationExpiresAt: decoded.impersonationExpiresAt,
+    }
+    : {});
   return sendSuccess(res, { message: 'Token refreshed' });
 });
 
@@ -180,11 +201,25 @@ export const verifyImpersonation = asyncHandler(async (req, res) => {
     throw ApiError.unauthorized('Token revoked — please request a new impersonation token');
   }
 
-  // Establish the impersonation session by reusing the signed impersonation token as
-  // the access cookie. Downstream clinic calls then authenticate through `protect`,
-  // which marks the request `_impersonating` so `phiRestrict` can mask patient PHI.
-  const maxAge = Math.max(0, (decoded.exp ?? 0) * 1000 - Date.now());
-  res.cookie(ACCESS_COOKIE, token, { ...cookieOptions(), maxAge });
+  // C1 fix: issue a proper clinic session (access+refresh) signed with JWT_SECRET so
+  // `protect` -> `verifyAccessToken` can verify it. Reusing the impersonation grant
+  // directly fails when JWT_IMPERSONATION_SECRET !== JWT_SECRET and provides no
+  // refresh path. The impersonation context is carried in extra claims so PHI
+  // masking still applies.
+  //
+  // `impersonationExpiresAt` is an ABSOLUTE deadline copied from the grant's own
+  // exp. Refresh rotates the cookies but must never extend a support window:
+  // without this claim a refreshed impersonation session would inherit the
+  // normal 7-day refresh lifetime.
+  const impersonationExpiresAt = decoded.exp
+    ? decoded.exp * 1000
+    : Date.now() + 30 * 60 * 1000;
+  setAuthCookies(res, user, 'clinic', {
+    impersonating: true,
+    impersonatorId: decoded.impersonator,
+    impersonatorName: decoded.impersonatorName || 'Admin',
+    impersonationExpiresAt,
+  });
   setCsrfCookie(res);
 
 const safe = await authService.attachRole(user.toSafeObject());

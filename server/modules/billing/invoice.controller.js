@@ -4,6 +4,8 @@ import { currentTenant, filterByBranch, resolveBranchForCreate, toObjectId } fro
 import { emitToBranch } from '../../socket/index.js';
 import { stripPHI } from '../../middleware/phiRestrict.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
+import { sendCsv } from '../../utils/csv.js';
+import { round2 } from '../../constants/accounting.js';
 
 function emitInvoice(branchId, event, invoice) {
   const payload = { invoice: invoice.toJSON ? invoice.toJSON() : invoice };
@@ -31,6 +33,38 @@ export const getBillingSummary = asyncHandler(async (req, res) => {
   const branchFilter = filterByBranch(req);
   const result = await invoiceService.getBillingSummary(branchFilter);
   return sendSuccess(res, result);
+});
+
+/**
+ * Audit M6 (Report Builder v1): CSV export for the invoice list. The query
+ * filters are validated by the SAME schema as `GET /billing`, and the service
+ * reuses `listInvoices`' filter builder, so an export can never return more
+ * (or more sensitive) data than the caller could page through in the UI.
+ * Columns are deliberately flat/financial — no line items, payments or
+ * changelog arrays — and the patient columns match what `billing:read` users
+ * already see.
+ */
+export const exportInvoicesCsv = asyncHandler(async (req, res) => {
+  const branchFilter = filterByBranch(req);
+  const invoices = await invoiceService.listInvoicesForExport(branchFilter, req.validatedQuery);
+
+  const headers = [
+    { label: 'Invoice No', getValue: (r) => r.invoiceNo },
+    { label: 'Patient ID', getValue: (r) => r.patient?.patientId || '' },
+    { label: 'Patient Name', getValue: (r) => [r.patient?.firstName, r.patient?.lastName].filter(Boolean).join(' ') },
+    { label: 'Phone', getValue: (r) => r.patient?.phone || '' },
+    { label: 'Status', getValue: (r) => r.status },
+    { label: 'Total', getValue: (r) => r.total },
+    { label: 'Paid', getValue: (r) => r.paidAmount },
+    { label: 'Outstanding', getValue: (r) => round2((r.total || 0) - (r.paidAmount || 0)) },
+    { label: 'Due Date', getValue: (r) => (r.dueDate ? new Date(r.dueDate).toISOString().slice(0, 10) : '') },
+    { label: 'Created', getValue: (r) => (r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : '') },
+  ];
+  return sendCsv(res, {
+    filename: `invoices-${new Date().toISOString().slice(0, 10)}.csv`,
+    headers,
+    rows: invoices,
+  });
 });
 
 export const getInvoice = asyncHandler(async (req, res) => {

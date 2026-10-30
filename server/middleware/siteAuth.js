@@ -7,10 +7,19 @@ import {
 } from "../constants/sitePermissions.js";
 
 /**
- * Extract client IP from request
+ * Extract client IP from request.
+ *
+ * Audit L6: the old chain fell back to parsing `X-Forwarded-For` itself, which
+ * (a) contradicts the app's proxy policy — `app.js` deliberately keeps
+ * `trust proxy` OFF by default because the header is attacker-controlled, and
+ * (b) was dead code anyway, since `req.ip`/`remoteAddress` are always present
+ * on a real request. When the deployment opts into `TRUST_PROXY_HOPS`, Express
+ * already resolves `req.ip` to the trusted Nth hop; without it, `req.ip` is
+ * the peer address — clients behind one proxy legitimately share one identity.
+ * Same hardening as `socket/index.js` (audit H3).
  */
 function getClientIp(req) {
-  return req.ip || req.connection?.remoteAddress || req.headers?.['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown';
+  return req.ip || req.socket?.remoteAddress || 'unknown';
 }
 
 // Protect routes for site admin only

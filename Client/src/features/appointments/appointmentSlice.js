@@ -1,118 +1,129 @@
-import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
-import { appointmentApi } from './appointmentApi';
-import { localDateString } from '../../lib/clinicTime';
-import { errPayload } from '../../lib/errors';
+import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+import { localDateString } from "../../lib/clinicTime";
+import { errPayload } from "../../lib/errors";
+import { appointmentApi } from "./appointmentApi";
 
 export const fetchAppointments = createAsyncThunk(
-  'appointments/fetchList',
+  "appointments/fetchList",
   async (params, { rejectWithValue }) => {
     try {
       return await appointmentApi.list(params);
     } catch (err) {
-      return rejectWithValue(errPayload(err, 'Failed to load appointments'));
+      return rejectWithValue(errPayload(err, "Failed to load appointments"));
     }
   },
 );
 
 export const createAppointment = createAsyncThunk(
-  'appointments/create',
+  "appointments/create",
   async (payload, { rejectWithValue }) => {
     try {
       const { appointment } = await appointmentApi.create(payload);
       return appointment;
     } catch (err) {
-      return rejectWithValue(errPayload(err, 'Failed to create appointment'));
+      return rejectWithValue(errPayload(err, "Failed to create appointment"));
     }
   },
 );
 
 export const updateAppointment = createAsyncThunk(
-  'appointments/update',
+  "appointments/update",
   async ({ id, payload }, { rejectWithValue }) => {
     try {
       const { appointment } = await appointmentApi.update(id, payload);
       return appointment;
     } catch (err) {
-      return rejectWithValue(errPayload(err, 'Failed to update appointment'));
+      return rejectWithValue(errPayload(err, "Failed to update appointment"));
     }
   },
 );
 
 export const transitionAppointment = createAsyncThunk(
-  'appointments/transition',
+  "appointments/transition",
   async ({ id, status }, { rejectWithValue }) => {
     try {
       const { appointment } = await appointmentApi.transition(id, status);
       return appointment;
     } catch (err) {
-      return rejectWithValue(errPayload(err, 'Failed to update status'));
+      return rejectWithValue(errPayload(err, "Failed to update status"));
     }
   },
 );
 
 export const cancelAppointment = createAsyncThunk(
-  'appointments/cancel',
+  "appointments/cancel",
   async (id, { rejectWithValue }) => {
     try {
       const { appointment } = await appointmentApi.cancel(id);
       return appointment;
     } catch (err) {
-      return rejectWithValue(errPayload(err, 'Failed to cancel appointment'));
+      return rejectWithValue(errPayload(err, "Failed to cancel appointment"));
     }
   },
 );
 
 export const fetchQueue = createAsyncThunk(
-  'appointments/fetchQueue',
+  "appointments/fetchQueue",
   async (_, { rejectWithValue }) => {
     try {
       return await appointmentApi.queue();
     } catch (err) {
-      return rejectWithValue(errPayload(err, 'Failed to load queue'));
+      return rejectWithValue(errPayload(err, "Failed to load queue"));
     }
   },
 );
 
 export const callNextPatient = createAsyncThunk(
-  'appointments/callNext',
+  "appointments/callNext",
   async (body, { rejectWithValue }) => {
     try {
       const { appointment } = await appointmentApi.callNext(body);
       return appointment;
     } catch (err) {
-      return rejectWithValue(errPayload(err, 'Failed to call next patient'));
+      return rejectWithValue(errPayload(err, "Failed to call next patient"));
     }
   },
 );
 
 const initialQuery = {
-  date: '',
-  from: '',
-  to: '',
-  doctor: '',
-  patient: '',
-  status: '',
+  date: "",
+  from: "",
+  to: "",
+  doctor: "",
+  patient: "",
+  status: "",
   page: 1,
   limit: 100,
 };
 
 const appointmentsSlice = createSlice({
-  name: 'appointments',
+  name: "appointments",
   initialState: {
     items: [],
     pagination: { page: 1, limit: 100, total: 0, pages: 1 },
     query: { ...initialQuery },
-    status: 'idle',
+    status: "idle",
     error: null,
     // requestId of the newest in-flight list request; older responses are
     // ignored so they cannot overwrite the current day's appointments.
     currentRequestId: null,
-    formStatus: 'idle',
+    // Flag to distinguish initial load (show spinner) from background refetch
+    // (keep existing data visible). Without this, every socket event triggered
+    // a pending action that set status='loading', which blanked the calendar
+    // and unmounted LiveQueue cards, destroying drag/scroll state.
+    isRefreshing: false,
+    formStatus: "idle",
     formError: null,
-    queue: { waiting: [], inChair: [], completedToday: 0, completedIds: [], updatedAt: null },
-    queueStatus: 'idle',
+    queue: {
+      waiting: [],
+      inChair: [],
+      completedToday: 0,
+      completedIds: [],
+      updatedAt: null,
+    },
+    queueStatus: "idle",
     queueError: null,
-    callStatus: 'idle',
+    callStatus: "idle",
     callError: null,
   },
   reducers: {
@@ -123,7 +134,7 @@ const appointmentsSlice = createSlice({
     setFromTo(state, action) {
       state.query.from = action.payload.from;
       state.query.to = action.payload.to;
-      state.query.date = '';
+      state.query.date = "";
       state.query.page = 1;
     },
     setDoctorFilter(state, action) {
@@ -141,11 +152,11 @@ const appointmentsSlice = createSlice({
     resetAppointments(state) {
       state.items = [];
       state.query = { ...initialQuery };
-      state.status = 'idle';
+      state.status = "idle";
       state.error = null;
     },
     resetFormState(state) {
-      state.formStatus = 'idle';
+      state.formStatus = "idle";
       state.formError = null;
     },
     /** Apply a real-time update pushed from the server (socket). */
@@ -178,13 +189,13 @@ const appointmentsSlice = createSlice({
       };
       const emptied = (list) => list.filter((a) => a._id !== incoming._id);
 
-      if (incoming.status === 'checked_in') {
+      if (incoming.status === "checked_in") {
         state.queue.waiting = moveTo([...state.queue.waiting]);
         state.queue.inChair = emptied(state.queue.inChair);
-      } else if (incoming.status === 'in_progress') {
+      } else if (incoming.status === "in_progress") {
         state.queue.inChair = moveTo([...state.queue.inChair]);
         state.queue.waiting = emptied(state.queue.waiting);
-      } else if (incoming.status === 'completed') {
+      } else if (incoming.status === "completed") {
         state.queue.waiting = emptied(state.queue.waiting);
         state.queue.inChair = emptied(state.queue.inChair);
         // Compare calendar days in the clinic's zone, not the browser's:
@@ -199,7 +210,10 @@ const appointmentsSlice = createSlice({
           // the ids instead: it still absorbs a duplicate socket event for the
           // same appointment, but each distinct patient now adds one.
           if (!state.queue.completedIds?.includes(incoming._id)) {
-            state.queue.completedIds = [...(state.queue.completedIds || []), incoming._id];
+            state.queue.completedIds = [
+              ...(state.queue.completedIds || []),
+              incoming._id,
+            ];
             state.queue.completedToday += 1;
           }
         }
@@ -213,7 +227,14 @@ const appointmentsSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(fetchAppointments.pending, (state, action) => {
-        state.status = 'loading';
+        // Stale-while-revalidate: keep showing existing data during background
+        // refetches (socket events, visibility change). Only show loading state
+        // on the initial fetch when we have no data yet.
+        const hasExistingData = state.items.length > 0;
+        if (!hasExistingData) {
+          state.status = "loading";
+        }
+        state.isRefreshing = hasExistingData;
         state.error = null;
         state.currentRequestId = action.meta.requestId;
       })
@@ -226,35 +247,37 @@ const appointmentsSlice = createSlice({
         if (action.meta.requestId !== state.currentRequestId) return;
         state.items = action.payload.appointments;
         state.pagination = action.payload.pagination;
-        state.status = 'succeeded';
+        state.status = "succeeded";
+        state.isRefreshing = false;
       })
       .addCase(fetchAppointments.rejected, (state, action) => {
         if (action.meta.requestId !== state.currentRequestId) return;
-        state.status = 'failed';
+        state.status = "failed";
+        state.isRefreshing = false;
         state.error = action.payload;
       })
       .addCase(createAppointment.pending, (state) => {
-        state.formStatus = 'loading';
+        state.formStatus = "loading";
         state.formError = null;
       })
       .addCase(createAppointment.fulfilled, (state) => {
-        state.formStatus = 'succeeded';
+        state.formStatus = "succeeded";
       })
       .addCase(createAppointment.rejected, (state, action) => {
-        state.formStatus = 'failed';
+        state.formStatus = "failed";
         state.formError = action.payload;
       })
       .addCase(updateAppointment.pending, (state) => {
-        state.formStatus = 'loading';
+        state.formStatus = "loading";
         state.formError = null;
       })
       .addCase(updateAppointment.fulfilled, (state, action) => {
         const idx = state.items.findIndex((a) => a._id === action.payload._id);
         if (idx >= 0) state.items[idx] = action.payload;
-        state.formStatus = 'succeeded';
+        state.formStatus = "succeeded";
       })
       .addCase(updateAppointment.rejected, (state, action) => {
-        state.formStatus = 'failed';
+        state.formStatus = "failed";
         state.formError = action.payload;
       })
       .addCase(transitionAppointment.fulfilled, (state, action) => {
@@ -266,12 +289,13 @@ const appointmentsSlice = createSlice({
         if (idx >= 0) state.items[idx] = action.payload;
       })
       .addCase(fetchQueue.pending, (state) => {
-        state.queueStatus = 'loading';
+        state.queueStatus = "loading";
         state.queueError = null;
       })
       .addCase(fetchQueue.fulfilled, (state, action) => {
         const q = action.payload ?? {};
-        const serverCount = typeof q.completedToday === 'number' ? q.completedToday : 0;
+        const serverCount =
+          typeof q.completedToday === "number" ? q.completedToday : 0;
         // The queue is polled, so rebuilding `queue` wholesale here used to drop
         // the dedup set that keeps a repeated `queue.status.changed` from
         // counting one appointment twice. Keep it while the count is moving
@@ -285,14 +309,14 @@ const appointmentsSlice = createSlice({
           completedIds: sameDay ? state.queue.completedIds : [],
           updatedAt: q.updatedAt ?? null,
         };
-        state.queueStatus = 'succeeded';
+        state.queueStatus = "succeeded";
       })
       .addCase(fetchQueue.rejected, (state, action) => {
-        state.queueStatus = 'failed';
+        state.queueStatus = "failed";
         state.queueError = action.payload;
       })
       .addCase(callNextPatient.pending, (state) => {
-        state.callStatus = 'loading';
+        state.callStatus = "loading";
         state.callError = null;
       })
       .addCase(callNextPatient.fulfilled, (state, action) => {
@@ -302,17 +326,23 @@ const appointmentsSlice = createSlice({
         // reading `_id` off that threw inside the reducer, which takes the
         // whole store down and white-screens the queue.
         if (!called || !called._id) {
-          state.callStatus = 'succeeded';
+          state.callStatus = "succeeded";
           return;
         }
-        state.queue.inChair = state.queue.inChair.filter((a) => a._id !== called._id);
+        state.queue.inChair = state.queue.inChair.filter(
+          (a) => a._id !== called._id,
+        );
         state.queue.inChair.push(called);
-        state.queue.inChair.sort((a, b) => new Date(a.start) - new Date(b.start));
-        state.queue.waiting = state.queue.waiting.filter((a) => a._id !== called._id);
-        state.callStatus = 'succeeded';
+        state.queue.inChair.sort(
+          (a, b) => new Date(a.start) - new Date(b.start),
+        );
+        state.queue.waiting = state.queue.waiting.filter(
+          (a) => a._id !== called._id,
+        );
+        state.callStatus = "succeeded";
       })
       .addCase(callNextPatient.rejected, (state, action) => {
-        state.callStatus = 'failed';
+        state.callStatus = "failed";
         state.callError = action.payload;
       });
   },

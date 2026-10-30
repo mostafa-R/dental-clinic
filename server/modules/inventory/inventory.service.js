@@ -4,7 +4,24 @@ import { emitItemAlerts } from '../../services/inventoryCron.js';
 import ApiError from '../../utils/ApiError.js';
 import { toObjectId } from '../../utils/branchScope.js';
 import { escapeRegex } from '../../utils/escapeRegex.js';
-import InventoryItem from './inventory.model.js';
+import InventoryItem, { INVENTORY_TRANSACTIONS_CAP } from './inventory.model.js';
+
+/**
+ * Wrap one ledger entry in the `$push` form that keeps the embedded
+ * transaction list bounded (audit H6). Mongo's `$push` with `$each` + a
+ * negative `$slice` keeps only the last N entries after the append — the
+ * database enforces the cap atomically, on every write, without a separate
+ * read. (The `pre('validate')` hook in the model never runs for
+ * `findOneAndUpdate` writes, so this is the only reliable enforcement.)
+ */
+function pushTransaction(entry) {
+  return {
+    transactions: {
+      $each: [entry],
+      $slice: -INVENTORY_TRANSACTIONS_CAP,
+    },
+  };
+}
 
 // Sane upper bound for a single item's quantity. Protects against an
 // unbounded `adjustment` inflating stock far beyond any real physical
@@ -210,15 +227,13 @@ export async function adjustStock(id, branchFilter, { type, quantity, reason, re
       { ...baseFilter, quantity: { $gte: Math.abs(delta) } },
       {
         $inc: { quantity: delta },
-        $push: {
-          transactions: {
-            type,
-            quantity: delta,
-            reason: reason || '',
-            reference: reference || '',
-            recordedBy: userId,
-          },
-        },
+        $push: pushTransaction({
+          type,
+          quantity: delta,
+          reason: reason || '',
+          reference: reference || '',
+          recordedBy: userId,
+        }),
       },
       { returnDocument: "after", runValidators: true },
     );
@@ -244,15 +259,13 @@ export async function adjustStock(id, branchFilter, { type, quantity, reason, re
     baseFilter,
     {
       $inc: { quantity: delta },
-      $push: {
-        transactions: {
-          type,
-          quantity: delta,
-          reason: reason || '',
-          reference: reference || '',
-          recordedBy: userId,
-        },
-      },
+      $push: pushTransaction({
+        type,
+        quantity: delta,
+        reason: reason || '',
+        reference: reference || '',
+        recordedBy: userId,
+      }),
     },
     { returnDocument: "after", runValidators: true },
   );
@@ -317,15 +330,13 @@ export async function deductForProcedure({
       { _id: item._id, quantity: { $gte: take } },
       {
         $inc: { quantity: -take },
-        $push: {
-          transactions: {
-            type: 'stock_out',
-            quantity: -take,
-            reason: `Auto-deduction: ${procedureName || 'procedure'}`,
-            reference: `${referenceBase}:${procedureName || 'unknown'}`,
-            recordedBy: userId,
-          },
-        },
+        $push: pushTransaction({
+          type: 'stock_out',
+          quantity: -take,
+          reason: `Auto-deduction: ${procedureName || 'procedure'}`,
+          reference: `${referenceBase}:${procedureName || 'unknown'}`,
+          recordedBy: userId,
+        }),
       },
       opts,
     );
@@ -364,15 +375,13 @@ export async function deductForProcedure({
         { _id: item._id, quantity: { $gte: take } },
         {
           $inc: { quantity: -take },
-          $push: {
-            transactions: {
-              type: 'stock_out',
-              quantity: -take,
-              reason: `Auto-deduction (fallback): ${procedureName || 'procedure'}`,
-              reference: `${referenceBase}:${procedureName || 'unknown'}`,
-              recordedBy: userId,
-            },
-          },
+          $push: pushTransaction({
+            type: 'stock_out',
+            quantity: -take,
+            reason: `Auto-deduction (fallback): ${procedureName || 'procedure'}`,
+            reference: `${referenceBase}:${procedureName || 'unknown'}`,
+            recordedBy: userId,
+          }),
         },
         opts,
       );
@@ -393,54 +402,96 @@ export async function deductForProcedure({
 
 /**
  * Reverse a procedure's auto-deduction when its invoice is voided or refunded.
- * Re-stocks the items that were deducted for that invoice by looking up the
- * `reference` entries created by deductForProcedure. Returns the number of
- * ledger reversals applied (used for logging only).
+ *
+ * Audit H5: the old implementation had two defects that made stock drift:
+ *   1. when `procedureName` was given, the DB query searched for references
+ *      shaped `invoice:<id>:<procedureName>:` (trailing colon) while
+ *      `deductForProcedure` writes `invoice:<id>:<procedureName>` (no trailing
+ *      segment) — so a scoped restock found nothing; the caller iterating one
+ *      call per procedure instead restocked the whole invoice once per call;
+ *   2. there was no reversal marker check, so repeated calls (void retries,
+ *      refund followed by void) kept re-adding stock.
+ *
+ * This rewrite makes reversal NET, the same reconciliation philosophy the
+ * commission ledger uses: for every item document,
+ *
+ *   net = Σ|quantity| of target stock_out entries − Σ quantity of target
+ *                                                          reversal entries
+ *
+ * and only a net > 0 is re-added. Reversal entries are written with a stable
+ * reference (`…:reversal` / `…:<procedure>:reversal`), so the second call nets
+ * to zero — idempotent under retries and repeated failures. `procedureName`
+ * scopes the net to that procedure's entries (matched exactly, mirroring what
+ * `deductForProcedure` writes); `voidInvoice` calls without one and nets the
+ * whole invoice. Callers should use one consistent scope — a scoped call after
+ * a whole-invoice reversal cannot attribute the earlier marker, so it may add
+ * stock for a procedure that was already covered. The only current caller is
+ * `voidInvoice` (whole scope).
  */
 export async function restockForInvoice({ branchId, tenantId, invoiceId, userId, session, procedureName }) {
   const refPrefix = `invoice:${String(invoiceId)}`;
-  const term = procedureName ? `${refPrefix}:${procedureName}` : refPrefix;
+  // deductForProcedure tags deduction entries `invoice:<id>:<procedure>`.
+  const scopeTerm = procedureName ? `${refPrefix}:${procedureName}` : refPrefix;
+  const scopeReversalTerm = `${scopeTerm}:reversal`;
 
-  const items = session
-    ? await InventoryItem.find({
-      branch: toObjectId(branchId),
-      tenant: tenantId ? toObjectId(tenantId) : null,
-      'transactions.type': 'stock_out',
-      'transactions.reference': { $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:` },
-    }).session(session)
-    : await InventoryItem.find({
-      branch: toObjectId(branchId),
-      tenant: tenantId ? toObjectId(tenantId) : null,
-      'transactions.type': 'stock_out',
-      'transactions.reference': { $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:` },
-    });
+  // Whole-invoice scope: deduction refs (`invoice:<id>:<proc>`) AND both
+  // reversal markers (`invoice:<id>:reversal`, `invoice:<id>:<proc>:reversal`)
+  // all share the `invoice:<id>:` prefix, so one regex covers them.
+  const wholeScope = new RegExp(`^${escapeRegex(refPrefix)}:`);
+
+  const isTargetOut = (t) => {
+    if (t.type !== 'stock_out' || !t.reference) return false;
+    return procedureName ? t.reference === scopeTerm : wholeScope.test(t.reference);
+  };
+  const isTargetReversal = (t) => {
+    if (t.type !== 'stock_in' || !t.reference) return false;
+    return procedureName ? t.reference === scopeReversalTerm : wholeScope.test(t.reference);
+  };
+
+  const dbRefFilter = procedureName ? scopeTerm : wholeScope;
+  const findOpts = session ? { session } : {};
+  const items = await InventoryItem.find({
+    branch: toObjectId(branchId),
+    tenant: tenantId ? toObjectId(tenantId) : null,
+    'transactions.type': 'stock_out',
+    'transactions.reference': dbRefFilter,
+  }, null, findOpts);
 
   let reversals = 0;
   for (const item of items) {
-    const deducted = (item.transactions || [])
-      .filter((t) => t.type === 'stock_out' && t.reference && t.reference.startsWith(`${refPrefix}:`))
+    const txs = item.transactions || [];
+    const deducted = txs
+      .filter(isTargetOut)
       .reduce((sum, t) => sum + Math.abs(Number(t.quantity) || 0), 0);
-    if (deducted <= 0) continue;
+    const alreadyReversed = txs
+      .filter(isTargetReversal)
+      .reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
+
+    const net = roundQty(deducted - alreadyReversed);
+    if (net <= 0) continue; // reversal already applied (or nothing to undo)
 
     const opts = { returnDocument: "after" };
     if (session) opts.session = session;
     await InventoryItem.findOneAndUpdate(
       { _id: item._id },
       {
-        $inc: { quantity: deducted },
-        $push: {
-          transactions: {
-            type: 'stock_in',
-            quantity: deducted,
-            reason: `Reversal of voided/refunded invoice ${invoiceId}`,
-            reference: `${refPrefix}:reversal`,
-            recordedBy: userId,
-          },
-        },
+        $inc: { quantity: net },
+        $push: pushTransaction({
+          type: 'stock_in',
+          quantity: net,
+          reason: `Reversal of voided/refunded invoice ${invoiceId}`,
+          reference: scopeReversalTerm,
+          recordedBy: userId,
+        }),
       },
       opts,
     );
     reversals += 1;
   }
   return reversals;
+}
+
+/** Round to 2dp defensively; stock quantities are whole units in practice. */
+function roundQty(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
 }

@@ -6,6 +6,8 @@ import User from '../users/user.model.js';
 import { round2 } from '../../constants/accounting.js';
 import { planIncludesModule } from '../../constants/plans.js';
 import { MODULES } from '../../constants/permissions.js';
+import { localDateString, zonedDayRangeUtc } from '../../utils/zonedDates.js';
+import { loadTenantTimezone } from '../../utils/timezoneUtils.js';
 
 /**
  * The modules the caller can actually open, in catalog order.
@@ -42,13 +44,25 @@ export async function getDashboardStats(branchFilter, user, role = {}) {
   const perms =
     typeof role.permissionMap === 'function' ? role.permissionMap() || {} : {};
 
-  const now = new Date();
-  const dayStart = new Date(now);
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(now);
-  dayEnd.setHours(23, 59, 59, 999);
+  // Audit H8: "today" is the clinic's calendar day, resolved through the
+  // tenant's stored IANA timezone — the same helper every other date-scoped
+  // module (appointments, accounting day-close) already uses. The old
+  // `setHours(0,0,0,0)` window folded the day with the SERVER's timezone, so a
+  // clinic a few hours east/west of the server counted its dashboard and its
+  // branch aggregates against the wrong day around midnight. Result is a
+  // half-open window [start, end) where end is local midnight of the NEXT day.
+  const tz = await loadTenantTimezone(user.tenant);
+  const zonedDay = localDateString(Date.now(), tz);
+  const zonedRange = zonedDayRangeUtc(zonedDay, tz);
+  // Defensive fallback (zonedDay is always well-formed so this never fires).
+  const dayStart = zonedRange ? zonedRange.start : new Date(new Date().setHours(0, 0, 0, 0));
+  const dayEnd = zonedRange
+    ? zonedRange.end
+    : new Date(new Date(new Date().setHours(0, 0, 0, 0)).getTime() + 86400000);
 
-  const todayFilter = { ...branchFilter, start: { $gte: dayStart, $lte: dayEnd } };
+  // Half-open consistently (see M4): end is next local midnight, so a record
+  // at exactly `end` belongs to the *next* day's window, not both.
+  const todayFilter = { ...branchFilter, start: { $gte: dayStart, $lt: dayEnd } };
 
   const [
     staffStats,
@@ -106,7 +120,7 @@ export async function getDashboardStats(branchFilter, user, role = {}) {
     Invoice.countDocuments({
       ...branchFilter,
       status: { $ne: 'void' },
-      createdAt: { $gte: dayStart, $lte: dayEnd },
+      createdAt: { $gte: dayStart, $lt: dayEnd },
     }),
   ]);
 

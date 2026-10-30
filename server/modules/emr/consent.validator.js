@@ -30,7 +30,11 @@ export const updateConsentSchema = z
   });
 
 /**
- * Sign — records the patient's e-signature. `otp` requires a delivery phone.
+ * Sign — records the patient's e-signature. `otp` requires a delivery phone
+ * AND the code that was SMS/WhatsApp-delivered and verified server-side
+ * (audit M2: previously any name + phone passed as an "OTP signature" without
+ * a code ever being checked — staff could sign as the patient with a phone
+ * number alone).
  */
 export const signConsentSchema = z
   .object({
@@ -40,6 +44,9 @@ export const signConsentSchema = z
       phone: z.string().max(30).optional(),
       imageUrl: z.string().max(1024).optional(),
     }),
+    // Auto-verified: the 6-digit code issued by `POST .../send-otp`, consumed
+    // once. Required only for `otp` signatures.
+    otp: z.string().regex(/^\d{6}$/, 'OTP must be 6 digits').optional(),
     patientStatement: z.string().max(1000).optional(),
   })
   .refine((data) => {
@@ -47,7 +54,13 @@ export const signConsentSchema = z
       return false;
     }
     return true;
-  }, { message: 'OTP signatures require a phone number', path: ['signature', 'phone'] });
+  }, { message: 'OTP signatures require a phone number', path: ['signature', 'phone'] })
+  .refine((data) => {
+    if (data.signature?.method === 'otp' && !data.otp) {
+      return false;
+    }
+    return true;
+  }, { message: 'OTP signatures require the verification code (request one via send-otp first)', path: ['otp'] });
 
 export const declineConsentSchema = z.object({
   reason: z.string().min(3, 'Reason is required').max(500),

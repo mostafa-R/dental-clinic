@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { round2 } from '../../constants/accounting.js';
 import { withTransaction } from '../../core/transaction.js';
 import { publishEvent } from '../../services/eventBus.js';
+import { logWarn } from '../../utils/logger.js';
 import ApiError from '../../utils/ApiError.js';
 import { restockForInvoice } from '../inventory/inventory.service.js';
 import { toObjectId } from '../../utils/branchScope.js';
@@ -28,6 +29,96 @@ export function accountForMethod(method) {
   if (method === 'cash') return 'cash';
   if (method === 'wallet') return 'wallet_clearing';
   return 'bank'; // card / transfer
+}
+
+/**
+ * Net balance the `commissions_payable` journal currently carries for one
+ * invoice's commissions (C3 fix).
+ *
+ * Every entry that touches this invoice's liability is netted in:
+ *   - accruals posted by `reconcileCommissionLiability` (sourceId: invoice._id),
+ *   - legacy refund/void adjustments that were also keyed on the invoice,
+ *   - payout entries posted by `updateCommissionStatus`, which are
+ *     commission-scoped (sourceId: commission._id).
+ * The `sourceId` union covers both keyings, and the `lines.account` filter
+ * keeps unrelated invoice entries (payments, refunds, receivable reversals)
+ * from leaking into the balance. Skipping payouts is precisely what made the
+ * old code understate the liability on refund-then-repay histories.
+ */
+async function commissionLedgerBalance(invoice, session) {
+  const commissionIds = (
+    await Commission.find({ invoice: invoice._id }).select('_id').session(session).lean()
+  ).map((c) => c._id);
+
+  const entries = await JournalEntry.find({
+    branch: invoice.branch,
+    'lines.account': 'commissions_payable',
+    $or: [{ sourceId: invoice._id }, { sourceId: { $in: commissionIds } }],
+  })
+    .select('lines')
+    .session(session)
+    .lean();
+
+  let balance = 0;
+  for (const entry of entries) {
+    for (const line of entry.lines || []) {
+      if ((line.account || '') !== 'commissions_payable') continue;
+      balance += (Number(line.credit) || 0) - (Number(line.debit) || 0);
+    }
+  }
+  return round2(balance);
+}
+
+/**
+ * Force the `commissions_payable` journal balance to equal the pending
+ * commission sub-ledger for an invoice (C3 fix).
+ *
+ * `desired` is what the commission records still owe. `current` is the net
+ * journal balance.Posting the *difference* makes every mutation a pure
+ * function of those two ledgers, which is idempotent and self-healing where
+ * the old per-event diffs were not:
+ *   - void after refund no longer debits the gross original accrual a second
+ *     time (the old path could drive `commissions_payable` negative);
+ *   - an invoice refunded in full and re-paid in full re-accrues — the old
+ *     accrual diff compared against one entry's `totalCredit`, computed
+ *     delta = 0, and quietly under-accrued;
+ *   - payouts already on the books are netted, never re-reversed.
+ * The single `findOne` this replaces was also non-deterministic once an
+ * invoice carried more than one commission entry.
+ */
+async function reconcileCommissionLiability(invoice, session, { userId, describe }) {
+  const desired = round2(
+    (await Commission.find({ invoice: invoice._id, status: 'pending' }).session(session))
+      .reduce((sum, c) => sum + (Number(c.amount) || 0), 0),
+  );
+  const current = await commissionLedgerBalance(invoice, session);
+  const delta = round2(desired - current);
+  if (Math.abs(delta) <= 0.01) return;
+
+  const increasing = delta > 0;
+  const amount = Math.abs(delta);
+  await postJournalEntry(
+    {
+      tenant: invoice.tenant,
+      branch: invoice.branch,
+      date: new Date(),
+      sourceType: 'commission',
+      sourceId: invoice._id,
+      sourceModel: 'Invoice',
+      description: describe(increasing, invoice),
+      lines: increasing
+        ? [
+            { account: 'expenses', debit: amount, memo: 'doctor commission' },
+            { account: 'commissions_payable', credit: amount, memo: invoice.invoiceNo },
+          ]
+        : [
+            { account: 'commissions_payable', debit: amount, memo: invoice.invoiceNo },
+            { account: 'expenses', credit: amount, memo: 'commission adjustment' },
+          ],
+      userId: userId || null,
+    },
+    session,
+  );
 }
 
 /**
@@ -159,48 +250,28 @@ async function accrueCommissionForInvoice(invoice, session, userId) {
     }
   }
 
-  // Items removed from the invoice since the last accrual lose their record.
+  // Items removed from the invoice since the last accrual lose their record —
+  // EXCEPT commissions already paid out (audit M12): deleting a `paid`
+  // commission orphans its payout journal entry (sourceId: commission._id),
+  // which the net reconcile below can no longer attribute to this invoice and
+  // so would double-accrue. Keeping the record preserves the payout trail.
   for (const stale of unmatched.values()) {
+    if (stale.status === 'paid') continue;
     await stale.deleteOne({ session });
   }
 
   // BR-BL-05: accrue the commission obligation (Dr expenses / Cr
-  // commissions_payable). The invoice's total earned (pending) commission is
-  // the liability; it is cleared from commissions_payable when paid out. If an
-  // accrual entry already exists for this invoice (e.g. a voided commission
-  // re-earned), post only the net change so the ledger never double counts.
-  const pendingTotal = round2(
-    (await Commission.find({ invoice: invoice._id, doctor: doctor._id, status: 'pending' }).session(session))
-      .reduce((sum, c) => sum + (Number(c.amount) || 0), 0),
-  );
-  if (pendingTotal > 0) {
-    const prior = await JournalEntry.findOne({
-      branch: invoice.branch,
-      sourceType: 'commission',
-      sourceId: invoice._id,
-    }).session(session);
-    const priorAmount = prior ? round2(Math.abs(prior.totalCredit || 0)) : 0;
-    const delta = round2(pendingTotal - priorAmount);
-    if (Math.abs(delta) > 0.01) {
-      await postJournalEntry(
-        {
-          tenant: invoice.tenant,
-          branch: invoice.branch,
-          date: new Date(),
-          sourceType: 'commission',
-          sourceId: invoice._id,
-          sourceModel: 'Commission',
-          description: `Doctor commission accrual — invoice ${invoice.invoiceNo}`,
-          lines: [
-            { account: 'expenses', debit: Math.abs(delta), memo: 'doctor commission' },
-            { account: 'commissions_payable', credit: Math.abs(delta), memo: invoice.invoiceNo },
-          ],
-          userId,
-        },
-        session,
-      );
-    }
-  }
+  // commissions_payable). C3 fix: reconcile against the NET journal balance
+  // instead of diffing one prior accrual entry — that comparison saw only the
+  // totalCredit of a single `findOne` result, stayed at zero after a
+  // refund→re-pay, and picked an arbitrary entry when several existed.
+  await reconcileCommissionLiability(invoice, session, {
+    userId,
+    describe: (increasing) =>
+      increasing
+        ? `Doctor commission accrual — invoice ${invoice.invoiceNo}`
+        : `Doctor commission adjustment — invoice ${invoice.invoiceNo}`,
+  });
 }
 
 async function resolveSearchFilter(search, patientId, branchFilter) {
@@ -240,6 +311,38 @@ export async function listInvoices(branchFilter, { search, status, patient, appo
     invoices,
     pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) },
   };
+}
+
+// Audit M6 / Report Builder v1: the hardest cap on a single CSV export.
+// Pagination exists because unbounded lists strangle the API; an export that
+// silently un-paginates would reintroduce exactly that. 5000 rows is the
+// practicable ceiling for a spreadsheet, callers needing more should narrow
+// their filter.
+export const CSV_EXPORT_ROW_CAP = 5000;
+
+/**
+ * Rows for the CSV invoice export. Reuses `resolveSearchFilter` + the status /
+ * appointment handling of `listInvoices` verbatim, so the export's scope is
+ * IDENTICAL to what the caller could have read in the UI — no new data path.
+ * Returns plain lean documents (no populate: the export column set only needs
+ * the patient name strings shipped on the invoice document itself).
+ */
+export async function listInvoicesForExport(branchFilter, { search, status, patient, appointment }) {
+  const filter = { ...branchFilter };
+  Object.assign(filter, await resolveSearchFilter(search, patient, branchFilter));
+  if (status) filter.status = status;
+  if (appointment) filter.appointment = toObjectId(appointment);
+
+  const invoices = await Invoice.find(filter)
+    // Same minimal patient hydrate the JSON list uses (patientId + names +
+    // phone): the export's consumer needs to identify the patient, nothing
+    // more. No deep populate of appointments/users — the column set stays lean.
+    .populate({ path: 'patient', select: 'patientId firstName lastName phone' })
+    .sort('-createdAt')
+    .limit(CSV_EXPORT_ROW_CAP)
+    .lean();
+
+  return invoices;
 }
 
 export async function getBillingSummary(branchFilter) {
@@ -847,9 +950,14 @@ export async function voidInvoice(id, branchFilter, { reason, userId } = {}) {
     } catch (err) {
       // Inventory reversal is best-effort and must never block voiding a
       // financial invoice. The stock ledger keeps its audit trail.
-      console.warn(
-        `[Invoice] Inventory reversal skipped for voided invoice ${invoice.invoiceNo}: ${err.message}`,
-      );
+      // L2: structured (pino) instead of console.warn — the record joins the
+      // observable event stream with its context so void reports can be
+      // reconciled against skipped reversals without grepping free-text logs.
+      logWarn('Inventory reversal skipped for voided invoice', {
+        invoiceNo: invoice.invoiceNo,
+        invoiceId: String(invoice._id),
+        error: err.message,
+      });
     }
 
     // BR-BL-05 reversal entries so the ledger stays reconciled after a void:
@@ -879,30 +987,16 @@ export async function voidInvoice(id, branchFilter, { reason, userId } = {}) {
       );
     }
 
-    const priorCommissionEntry = await JournalEntry.findOne({
-      branch: invoice.branch,
-      sourceType: 'commission',
-      sourceId: invoice._id,
-    }).session(session);
-    if (priorCommissionEntry) {
-      await postJournalEntry(
-        {
-          tenant: invoice.tenant,
-          branch: invoice.branch,
-          date: new Date(),
-          sourceType: 'adjustment',
-          sourceId: invoice._id,
-          sourceModel: 'Commission',
-          description: `Void invoice ${invoice.invoiceNo} — reverse commission accrual`,
-          lines: [
-            { account: 'commissions_payable', debit: priorCommissionEntry.totalCredit, memo: invoice.invoiceNo },
-            { account: 'expenses', credit: priorCommissionEntry.totalCredit, memo: 'commission reversal' },
-          ],
-          userId: userId || null,
-        },
-        session,
-      );
-    }
+    // BR-BL-05: after voiding the commission records, bring the liability back
+    // to zero. C3 fix: the old path debited the ORIGINAL accrual's gross
+    // totalCredit again — on top of any refund reversal — over-reversing
+    // `commissions_payable` below zero. Reconciling the net balance is correct
+    // for every history: plain void, refund→void, or legacy data where no
+    // accrual entry ever existed but commission records do (audit M3).
+    await reconcileCommissionLiability(invoice, session, {
+      userId: userId || null,
+      describe: () => `Void invoice ${invoice.invoiceNo} — reverse commission accrual`,
+    });
 
     return invoice;
   });
@@ -1067,49 +1161,18 @@ export async function refundPayment(id, branchFilter, { amount, method, referenc
       }
     }
 
-    // BR-BL-05: a refund shrinks (or cancels) the commission still owed, so the
-    // accrual booked when the invoice was paid has to be adjusted by the same
-    // net change. Without this the `commissions_payable` liability keeps the
-    // pre-refund amount while the commission records have been reduced — the
-    // ledger stops reconciling with the commission sub-ledger.
-    //
-    // This posts only the delta against the accrual already booked for this
-    // invoice, exactly mirroring `accrueCommissionForInvoice`. That makes it
-    // safe for repeated partial refunds: the running liability tracks the
-    // running commission total instead of being reversed twice.
-    const pendingTotal = round2(
-      (await Commission.find({ invoice: invoice._id, status: 'pending' }).session(session))
-        .reduce((sum, c) => sum + (Number(c.amount) || 0), 0),
-    );
-    const priorCommissionEntry = await JournalEntry.findOne({
-      branch: invoice.branch,
-      sourceType: 'commission',
-      sourceId: invoice._id,
-    }).session(session);
-    const priorAmount = priorCommissionEntry ? round2(Math.abs(priorCommissionEntry.totalCredit || 0)) : 0;
-    const delta = round2(pendingTotal - priorAmount);
-    if (Math.abs(delta) > 0.01) {
-      const fullVoid = pendingTotal === 0;
-      await postJournalEntry(
-        {
-          tenant: invoice.tenant,
-          branch: invoice.branch,
-          date: new Date(),
-          sourceType: 'adjustment',
-          sourceId: invoice._id,
-          sourceModel: 'Commission',
-          description: fullVoid
-            ? `Refund invoice ${invoice.invoiceNo} — reverse commission accrual`
-            : `Refund invoice ${invoice.invoiceNo} — reduce commission accrual`,
-          lines: [
-            { account: 'commissions_payable', debit: Math.abs(delta), memo: invoice.invoiceNo },
-            { account: 'expenses', credit: Math.abs(delta), memo: 'commission reversal' },
-          ],
-          userId,
-        },
-        session,
-      );
-    }
+    // BR-BL-05: a refund shrinks (or cancels) the commission still owed, and
+    // the liability must follow. C3 fix: reconcile the NET journal balance —
+    // which already includes prior adjustments and any payout entries — against
+    // the scaled pending commissions, instead of diffing a single accrual
+    // entry's totalCredit. Repeated partial refunds then each post exactly
+    // their remaining share, and histories where the liability was already
+    // reduced (by a prior refund or a legacy payout) re-accrue correctly.
+    await reconcileCommissionLiability(invoice, session, {
+      userId,
+      describe: (increasing) =>
+        `Refund invoice ${invoice.invoiceNo} — ${increasing ? 'reinstate' : 'reduce'} commission accrual`,
+    });
 
     return invoice;
   });

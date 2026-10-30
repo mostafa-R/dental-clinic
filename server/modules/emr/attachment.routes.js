@@ -3,11 +3,11 @@ import { Router } from 'express';
 import { protect } from '../../middleware/auth.js';
 import { checkPermission } from '../../middleware/checkPermission.js';
 import { uploadMedicalFile, assertFileSignature, UPLOADS_ROOT } from '../../middleware/upload.js';
-import { encryptFile, decryptFile, decryptFileWithKeys, isEncrypted } from '../../utils/encryption.js';
+import { encryptFile, decryptFileWithKeys } from '../../utils/encryption.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/sendSuccess.js';
-import { unlink, access, readFile } from 'node:fs/promises';
+import { unlink, access } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import crypto from 'node:crypto';
 import MedicalAttachment from './attachment.model.js';
@@ -30,8 +30,13 @@ const router = Router();
 function attachmentScope(req) {
   const isSystemAdmin = req._roleResolved?.isSystemAdmin;
   if (isSystemAdmin) {
+    // Audit H4: fail closed. A role that resolved to system-admin while
+    // carrying no tenant used to fall through to `{}` — an unscoped filter
+    // that made `findOne(filename)` readable for EVERY attachment in the
+    // database. There is deliberately no "platform read" path for clinical
+    // files: a tenant-less admin gets a filter that matches nothing.
     if (req.user.tenant) return { tenant: toObjectId(req.user.tenant) };
-    return {};
+    return { _id: null };
   }
 
   if (!req.user.branch) {
@@ -117,33 +122,34 @@ router.post(
       throw ApiError.badRequest('No file uploaded');
     }
 
-    // The file is bound to a patient, which pins branch + tenant ownership.
-    const patient = await loadScopedPatient(req, req.body.patient);
-
-    const { type, caption } = req.body;
-    if (type && !ATTACHMENT_TYPES.includes(type)) {
-      throw ApiError.badRequest('Invalid attachment type');
-    }
-
-    // L4: verify the on-disk bytes match the declared mimetype — the request's
-    // `file.mimetype` is client-controlled and cannot be trusted.
-    try {
-      await assertFileSignature(req.file.path, req.file.mimetype, ApiError);
-    } catch (err) {
-      await unlink(req.file.path).catch(() => {});
-      throw err;
-    }
-
     const originalPath = req.file.path;
     const encryptedPath = originalPath + ENCRYPTED_SUFFIX;
 
+    // Audit H12: the whole handler runs inside one cleanup envelope. The old
+    // code only removed the plaintext when encryption or the DB write failed —
+    // a bad patient scope, a bad `type`, or a signature mismatch left the
+    // freshly-written file (unencrypted PHI) orphaned on disk with no record.
     try {
+      // The file is bound to a patient, which pins branch + tenant ownership.
+      const patient = await loadScopedPatient(req, req.body.patient);
+
+      const { type, caption } = req.body;
+      if (type && !ATTACHMENT_TYPES.includes(type)) {
+        throw ApiError.badRequest('Invalid attachment type');
+      }
+
+      // L4: verify the on-disk bytes match the declared mimetype — the
+      // request's `file.mimetype` is client-controlled and cannot be trusted.
+      await assertFileSignature(req.file.path, req.file.mimetype, ApiError);
+
       // Encrypt with the tenant's own key (never the shared backup key).
       // Patient data already pins tenant ownership, so `patient.tenant` is the
       // authoritative owner even for system admins.
       const tenantKey = await getTenantKey(patient.tenant);
       await encryptFile(originalPath, encryptedPath, tenantKey);
-      await unlink(originalPath);
+      // Remove the plaintext the moment the ciphertext exists — anything that
+      // fails below must not leave it standing (H12).
+      await unlink(originalPath).catch(() => {});
 
       const record = await MedicalAttachment.create({
         tenant: patient.tenant || null,
@@ -181,6 +187,7 @@ router.post(
         201,
       );
     } catch (err) {
+      // H12: all-or-nothing — no plaintext, no ciphertext, no orphan.
       await unlink(originalPath).catch(() => {});
       await unlink(encryptedPath).catch(() => {});
       throw err;
@@ -245,40 +252,45 @@ router.get(
     const plainPath = path.join(UPLOADS_ROOT, safeName);
     const tmpPath = path.join(UPLOADS_ROOT, `.tmp_${crypto.randomUUID()}_${safeName}`);
 
-    let fileExists = false;
-    try {
-      await access(encryptedPath);
-      fileExists = true;
-    } catch {
-      fileExists = false;
-    }
-
-    if (!fileExists) {
+    const accessible = async (p) => {
       try {
-        await access(plainPath);
-        fileExists = true;
+        await access(p);
+        return true;
       } catch {
-        fileExists = false;
+        return false;
       }
-    }
+    };
 
-    if (!fileExists) {
+    let hasEncrypted = await accessible(encryptedPath);
+    const hasPlain = !hasEncrypted && (await accessible(plainPath));
+    if (!hasEncrypted && !hasPlain) {
       throw ApiError.notFound('File not found');
     }
 
-    // Only the header needs reading to detect the ENC1 magic — reading the
-    // whole (up to 20MB) file into memory just to peek at 4 bytes wastes RAM.
-    const isPlainFile = await (async () => {
+    // Audit H1/H11: the legacy path streamed a plaintext file straight off
+    // disk, so every record written before per-tenant keys (or by any failure
+    // of the old upload path) stayed decrypted forever. Migrate this record
+    // NOW, in place: encrypt it under the tenant's key (or the shared
+    // BACKUP_ENCRYPTION_KEY for tenant-less legacy data) and remove the
+    // plaintext, then fall through to the normal decrypt-and-stream path.
+    // Running the backfill script (`scripts/encrypt-legacy-attachments.js`)
+    // makes the download path a no-op afterwards.
+    if (!hasEncrypted) {
+      const tenantKey = await getTenantKey(record.tenant);
       try {
-        const header = await readFile(encryptedPath, { start: 0, end: 63 });
-        return !isEncrypted(header);
-      } catch {
-        return true;
+        await encryptFile(plainPath, encryptedPath, tenantKey || undefined);
+      } catch (err) {
+        // Fail closed: silently serving plaintext is exactly the hole this
+        // closes. (A missing BACKUP_ENCRYPTION_KEY is a boot-validation
+        // problem in production, not something to paper over per request.)
+        console.error(
+          `[Attachments] Failed to encrypt legacy plaintext ${safeName}: ${err.message}`,
+        );
+        throw ApiError.internal('File is not encrypted and could not be migrated');
       }
-    })();
-
-    if (isPlainFile) {
-      return res.sendFile(plainPath);
+      // Only delete the plaintext once the ciphertext exists and is intact.
+      await unlink(plainPath).catch(() => {});
+      hasEncrypted = true;
     }
 
     try {

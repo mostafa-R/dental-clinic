@@ -164,7 +164,7 @@ export default function Sidebar() {
     dispatch(fetchAlertSummary());
     const timer = setInterval(() => dispatch(fetchAlertSummary()), 30000);
     return () => clearInterval(timer);
-  }, [dispatch, user]);
+  }, [dispatch, user?._id]);
 
   const openAlerts = alertSummary?.open ?? alertSummary?.active ?? 0;
 

@@ -1,14 +1,14 @@
 import { Suspense, useEffect } from "react";
-import { Outlet, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
-import Sidebar from "./Sidebar";
-import Topbar from "./Topbar";
+import { Outlet } from "react-router-dom";
 import ChatGlobalListener from "../../features/chat/ChatGlobalListener";
 import { applyServerPreferences } from "../../features/preferences/usePreferences";
-import { initNotifications } from "../../lib/notificationSound";
 import { setClinicTimeZone } from "../../lib/clinicTime";
 import { useT } from "../../lib/i18n";
+import { initNotifications } from "../../lib/notificationSound";
 import Skeleton from "../ui/Skeleton";
+import Sidebar from "./Sidebar";
+import Topbar from "./Topbar";
 
 function ImpersonationBanner() {
   const user = useSelector((s) => s.auth.user);
@@ -48,7 +48,6 @@ function PageFallback() {
 export default function AppLayout() {
   const user = useSelector((s) => s.auth.user);
   const clinicTimezone = useSelector((s) => s.users?.myPermissions?.timezone);
-  const location = useLocation();
 
   // The clinic's IANA zone is the reference for every date the UI renders or
   // submits. It arrives with the permissions payload and is re-applied whenever
@@ -57,6 +56,10 @@ export default function AppLayout() {
   // Until it lands, date helpers fall back to the browser zone.
   useEffect(() => {
     setClinicTimeZone(clinicTimezone);
+    // Also invalidate the format.js cache when timezone changes
+    import("../../lib/format").then(({ invalidateFormatCache }) => {
+      invalidateFormatCache?.();
+    });
   }, [clinicTimezone]);
 
   // Apply server-stored preferences once the authenticated user is known.
@@ -92,7 +95,10 @@ export default function AppLayout() {
               and open state. Scoping the fallback to the outlet keeps the chrome
               mounted and only the page area waits. */}
           <Suspense fallback={<PageFallback />}>
-            <div key={location.pathname} className="animate-page-in">
+            {/* NOTE: key={location.pathname} removed. It was causing the entire
+                page to remount on every navigation, losing date/filter/scroll
+                state. The router already handles route transitions correctly. */}
+            <div className="animate-page-in">
               <Outlet />
             </div>
           </Suspense>

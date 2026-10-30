@@ -65,6 +65,32 @@ function validateEnv() {
     process.exit(1);
   }
 
+  // Audit H9: consent signatures and the audit hash chain previously fell back
+  // to JWT_SECRET / BACKUP_ENCRYPTION_KEY when unset, silently coupling
+  // tamper-evidence to unrelated keys — rotating the JWT key would have
+  // invalidated every stored consent signature, and rotating the backup key
+  // would have broken the audit chain. Production must declare both keys so
+  // each has an independent rotation story. Dev keeps the fallbacks (with a
+  // loud warning) so a fresh checkout boots without ceremony.
+  if (process.env.NODE_ENV === "production") {
+    const prodRequired = [
+      ["CONSENT_SIGNING_KEY", "HMAC key for patient consent signatures (consent.service)"],
+      ["AUDIT_CHAIN_SECRET", "HMAC key for the audit-log hash chain (utils/auditChain)"],
+    ];
+    const missingProd = prodRequired.filter(([key]) => !process.env[key]);
+    if (missingProd.length > 0) {
+      console.error("Missing required environment variables in production:");
+      missingProd.forEach(([key, desc]) => console.error(`  ${key} - ${desc}`));
+      process.exit(1);
+    }
+  } else if (!process.env.CONSENT_SIGNING_KEY || !process.env.AUDIT_CHAIN_SECRET) {
+    console.warn(
+      "[Security] CONSENT_SIGNING_KEY and/or AUDIT_CHAIN_SECRET are unset — " +
+        "consent signatures / audit chain fall back to JWT/backup secrets. " +
+        "Set both variables before any real deployment.",
+    );
+  }
+
   // Token lifetimes drive cookie security, so a malformed value must fail the
   // boot rather than be silently reinterpreted at first login.
   for (const key of ["ACCESS_TOKEN_EXPIRY", "REFRESH_TOKEN_EXPIRY"]) {

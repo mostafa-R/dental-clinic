@@ -7,6 +7,7 @@ import Patient from "../modules/patients/patient.model.js";
 import Branch from "../modules/users/branch.model.js";
 import { sendWhatsAppMessage } from "./whatsapp.js";
 import { tryAcquireCronLock, releaseCronLock } from "./cronLock.js";
+import { loadTenantTimezone, normalizeTimeZone } from "../utils/timezoneUtils.js";
 
 const REMINDER_CHECK_INTERVAL = "*/30 * * * *";
 // Single-instance guard for the 30-min tick. TTL stays under the interval so
@@ -19,15 +20,32 @@ const CRON_LOCK_TTL_MS = 25 * 60 * 1000;
 const WEEKEND_DAYS = [5, 6]; // getDay(): 5=Friday, 6=Saturday
 const WINDOW_TOLERANCE_MS = 30 * 60 * 1000;
 
-function buildMessage(patient, appointment, type) {
+// Audit M7: date/time rendering and weekend detection both used the SERVER's
+// local clock. `noShowCron` already renders in the tenant zone; the reminder
+// messages now do too, and the Fri/Sat weekend shift below is decided from the
+// clinic's calendar as well (the two must not disagree — a Friday in Cairo is
+// still Thursday on a UTC server).
+const WEEKDAY_INDEX = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+function zonedWeekday(instantMs, tz) {
+  const label = new Intl.DateTimeFormat("en-US", {
+    timeZone: normalizeTimeZone(tz),
+    weekday: "short",
+  }).format(new Date(instantMs));
+  return WEEKDAY_INDEX[label] ?? new Date(instantMs).getDay();
+}
+
+function buildMessage(patient, appointment, type, timezone = "UTC") {
   const date = new Date(appointment.start);
   const day = date.toLocaleDateString("ar-EG", {
+    timeZone: timezone,
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
   });
   const time = date.toLocaleTimeString("ar-EG", {
+    timeZone: timezone,
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -53,6 +71,10 @@ async function sendMessagesForTenant(settings, type) {
   const tenantId = settings.tenant;
   const isReminder = type === "reminder";
   const isReminder24 = type === "reminder24";
+
+  // Audit M7: the clinic's IANA zone drives both message rendering and the
+  // weekend-shift decision, never the server clock.
+  const tenantTz = await loadTenantTimezone(tenantId);
 
   // The short-window reminder uses settings.reminderHours; the long window
   // uses settings.reminderHoursSecondary (0 disables it — handled by caller).
@@ -105,7 +127,7 @@ async function sendMessagesForTenant(settings, type) {
   let eligible = appointments.filter((apt) => apt.patient?.phone);
   if (isReminder24 && hoursAhead > 0) {
     eligible = eligible.filter((apt) => {
-      const day = new Date(apt.start).getDay();
+      const day = zonedWeekday(new Date(apt.start).getTime(), tenantTz);
       const shiftedHours = WEEKEND_DAYS.includes(day) ? hoursAhead + 24 : hoursAhead;
       const target = new Date(apt.start).getTime() - shiftedHours * 60 * 60 * 1000;
       return Math.abs(target - now.getTime()) <= WINDOW_TOLERANCE_MS;
@@ -119,7 +141,7 @@ async function sendMessagesForTenant(settings, type) {
     await Promise.allSettled(
       batch.map(async (apt) => {
         try {
-          const message = await buildMessage(apt.patient, apt, type);
+          const message = await buildMessage(apt.patient, apt, type, tenantTz);
           await sendWhatsAppMessage(String(tenantId), apt.patient.phone, message);
           await Appointment.findByIdAndUpdate(apt._id, { [filterField]: new Date() });
           console.log(

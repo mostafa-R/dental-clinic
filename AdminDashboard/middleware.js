@@ -18,9 +18,15 @@ export default async function middleware(request) {
   const timeout = setTimeout(() => controller.abort(), 25000);
 
   try {
+    const forwardHeaders = new Headers();
+    const allowed = ['content-type', 'accept', 'accept-language', 'origin', 'referer', 'user-agent', 'cookie'];
+    for (const key of allowed) {
+      const value = request.headers.get(key);
+      if (value) forwardHeaders.set(key, value);
+    }
     const response = await fetch(destination, {
       method: request.method,
-      headers: request.headers,
+      headers: forwardHeaders,
       body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
       redirect: 'manual',
       signal: controller.signal,

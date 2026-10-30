@@ -18,6 +18,7 @@ import { withTransaction } from "../../core/transaction.js";
 import { emitToBranch } from '../../socket/index.js';
 import { stripPHI } from '../../middleware/phiRestrict.js';
 import { postJournalEntry } from './journal.service.js';
+import { appendAuditLog } from '../../utils/auditChain.js';
 import { loadTenantTimezone } from '../../utils/timezoneUtils.js';
 import { localDateString, zonedDayRangeUtc, zonedDayStartUtc } from '../../utils/zonedDates.js';
 
@@ -391,6 +392,21 @@ export const updateCommissionStatus = asyncHandler(async (req, res) => {
   }
   const { status } = req.validatedBody;
 
+  // Audit H10: commission statuses are a one-way state machine, not free
+  // setters. `pending → paid` posts a cash payout; `pending → void` cancels an
+  // unearned commission. Everything else is rejected:
+  //   - a `void` commission (already unearned by a refund/void flow) can no
+  //     longer be flipped to `paid`, which used to post a cash payout with no
+  //     accrual entry behind it;
+  //   - a `paid` commission cannot be un-paid or voided here — its cash has
+  //     left the business, so clawing it back needs a payout-reversal flow,
+  //     not a status write.
+  const ALLOWED_COMMISSION_TRANSITIONS = {
+    pending: ['paid', 'void'],
+    paid: [],
+    void: [],
+  };
+
   const result = await withTransaction(async (session) => {
     const commission = await Commission.findOne({
       _id: req.params.id,
@@ -400,7 +416,18 @@ export const updateCommissionStatus = asyncHandler(async (req, res) => {
       throw ApiError.notFound("Commission not found");
     }
 
-    const wasPaid = commission.status === 'paid';
+    const wasPaid = commission.status === "paid";
+    const previousStatus = commission.status;
+    const allowed = ALLOWED_COMMISSION_TRANSITIONS[commission.status] || [];
+    if (commission.status === status) {
+      throw ApiError.conflict(`Commission is already ${status}`);
+    }
+    if (!allowed.includes(status)) {
+      throw ApiError.conflict(
+        `Commission status cannot move from ${commission.status} to ${status}`,
+      );
+    }
+
     commission.status = status;
     if (status === "paid") commission.paidDate = new Date();
 
@@ -434,11 +461,36 @@ export const updateCommissionStatus = asyncHandler(async (req, res) => {
     }
 
     await commission.populate("doctor", "name commissionRate");
-    return commission;
+    return { commission, wasPaid, previousStatus };
   });
 
-  emitToBranch(String(result.branch || ''), 'commission:updated', { commission: serializePHI(result, req) });
-  return sendSuccess(res, { commission: serializePHI(result, req) });
+  // Audit L3: status changes move money (paid posts a cash payout, void
+  // cancels an obligation) but previously left no audit trail. Write one
+  // tamper-evident audit entry after the transaction commits.
+  try {
+    await appendAuditLog({
+      tenantActor: req.user._id,
+      admin: null,
+      scope: "tenant",
+      action: "commission.status.update",
+      target: { type: "commission", id: result.commission._id },
+      details: {
+        from: result.previousStatus,
+        to: req.validatedBody.status,
+        amount: result.commission.amount,
+        procedureName: result.commission.procedureName,
+        invoice: result.commission.invoice,
+      },
+      requestId: req.id || null,
+      ip: req.ip || "",
+      userAgent: (req.headers?.["user-agent"] || "").substring(0, 500),
+    });
+  } catch (err) {
+    console.error("[Audit] Failed to persist commission status change:", err.message);
+  }
+
+  emitToBranch(String(result.commission.branch || ''), 'commission:updated', { commission: serializePHI(result.commission, req) });
+  return sendSuccess(res, { commission: serializePHI(result.commission, req) });
 });
 
 /**
@@ -562,15 +614,20 @@ export const getAccountingSummary = asyncHandler(async (req, res) => {
   const totalRevenue = round2(revenue.totalPaid || 0);
   const totalExpenses = round2(expenses);
   const totalDrawings = round2(drawings);
-  const pendingCommissions = round2(commissions.pending?.total || 0);
-  const paidCommissions = round2(commissions.paid?.total || 0);
+  const pendingCommissions = round2(commissions.pending?.total || 0);  const paidCommissions = round2(commissions.paid?.total || 0);
   // Commission expense is booked in the GL as an accrual (Dr expenses /
   // Cr commissions_payable) when earned, but it does NOT appear in the
   // Expense-collection aggregate above (that only sums Expense docs). The
   // full commission obligation — pending + paid — is that GL expense, so it is
   // subtracted explicitly to keep netProfit consistent with the ledger.
+  // Audit H7: owner drawings are equity movements (Dr owner_drawing / Cr
+  // cash) — they never touch the P&L, and neither Expense docs nor the GL
+  // expense account record them. Subtracting them here understated netProfit
+  // (the old comment claimed this kept consistency "with the ledger", but the
+  // ledger books drawings against equity, not expenses). They are still
+  // returned in the summary so the owner's take-home stays visible.
   const totalCommissionExpense = round2(pendingCommissions + paidCommissions);
-  const netProfit = round2(totalRevenue - totalExpenses - totalDrawings - totalCommissionExpense);
+  const netProfit = round2(totalRevenue - totalExpenses - totalCommissionExpense);
 
   return sendSuccess(res, {
     summary: {
@@ -646,7 +703,11 @@ async function computeExpectedTakings(branchFilter, start, end) {
     Invoice.aggregate([
       { $match: { ...paymentMatch, payments: { $exists: true, $ne: [] } } },
       { $unwind: '$payments' },
-      { $match: { 'payments.date': { $gte: start, $lte: end } } },
+      // M4: the window is half-open `[start, end)` — `end` is the start of the
+      // NEXT day, so `$lte: end` made a payment at exactly next-midnight
+      // land in BOTH day-close windows and double-count it in the expected
+      // takings. `$lt: end` keeps the partitions disjoint.
+      { $match: { 'payments.date': { $gte: start, $lt: end } } },
       {
         $group: {
           _id: '$payments.method',
@@ -660,7 +721,7 @@ async function computeExpectedTakings(branchFilter, start, end) {
         $match: {
           ...branchFilter,
           isActive: { $ne: false },
-          date: { $gte: start, $lte: end },
+          date: { $gte: start, $lt: end },
         },
       },
       { $group: { _id: '$paymentMethod', total: { $sum: '$amount' }, count: { $sum: 1 } } },
@@ -670,7 +731,7 @@ async function computeExpectedTakings(branchFilter, start, end) {
         $match: {
           ...branchFilter,
           isActive: { $ne: false },
-          date: { $gte: start, $lte: end },
+          date: { $gte: start, $lt: end },
         },
       },
       { $group: { _id: '$paymentMethod', total: { $sum: '$amount' }, count: { $sum: 1 } } },

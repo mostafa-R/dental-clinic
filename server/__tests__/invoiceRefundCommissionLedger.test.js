@@ -7,22 +7,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * asset account the money left through) but the invoice total is deliberately
  * NOT reduced — that is what voiding is for. The doctor commission, however, is
  * earned on what was actually collected, so a refund must shrink it. That
- * adjustment is only half the work: the commission liability booked by
- * `accrueCommissionForInvoice` (Dr expenses / Cr commissions_payable) also has
- * to move, otherwise `commissions_payable` keeps carrying an obligation the
- * doctor no longer has while the commission records say otherwise.
+ * adjustment is only half the work: the `commissions_payable` liability booked
+ * while the invoice was paid also has to move, otherwise the journal keeps
+ * carrying an obligation the doctor no longer has.
  *
- * The old refund path updated the commission documents and stopped there, so a
- * full refund voided the commission and left the accrual booked forever. The
- * properties pinned below are:
+ * The C3 fix replaced the old "diff one prior accrual entry" arithmetic with a
+ * net reconcile: desired = sum of `pending` commission amounts, current = net
+ * (credits − debits) of `commissions_payable` lines across every journal entry
+ * attributable to the invoice or its commissions — accruals, prior refund/void
+ * adjustments AND the commission-scoped payout entries. The properties pinned
+ * below:
  *
- *   1. the liability posted for a refund equals the change in what is still
- *      owed — i.e. the entry is a delta against the existing accrual, never a
- *      second full reversal;
+ *   1. the entry posted for a refund moves the liability from its NET current
+ *      value to the new owed value — never a second full reversal of the
+ *      original accrual;
  *   2. the entry balances and uses the reversal direction (Dr the liability,
  *      Cr the expense) so it cannot drift the P&L the wrong way;
  *   3. a refund on an invoice with no accrued commission posts nothing, rather
- *      than inventing a liability out of a zero balance.
+ *      than inventing a liability out of a zero balance;
+ *   4. an already-paid commission whose payout is on the books is left alone —
+ *      the two entries net to zero, so no adjustment can run cash out twice.
  *
  * `postJournalEntry` is mocked so the assertions are about the *intent* the
  * refund path expresses. Its own balance validation is already covered by the
@@ -35,19 +39,16 @@ const INVOICE_ID = 'invoice-1';
 
 const INVOICE_NO = 'INV-00001';
 
-/** Accrual as booked when the invoice was fully paid. */
-const ACCRUAL_TOTAL = 100;
-
 /**
  * A minimal query stub. `session()` is chained onto every builder in this
- * codebase, so it has to exist on every one of these.
- *
- * The awaited value is the document itself, so every chainable method returns
- * `then`-able `this` rather than a nested wrapper.
+ * codebase, and the net reconcile additionally chains `.select()`, so both
+ * exist here. The awaited value is the document/array itself, so every
+ * chainable method returns `then`-able `this`.
  */
 const query = (value) => {
   const q = {
     session: () => q,
+    select: () => q,
     sort: () => q,
     limit: () => q,
     lean: () => q,
@@ -57,7 +58,7 @@ const query = (value) => {
 };
 
 const postJournalEntry = vi.fn().mockResolvedValue({});
-const journalFindOne = vi.fn();
+const journalFind = vi.fn();
 const commissionFind = vi.fn();
 
 vi.mock('mongoose', () => ({
@@ -90,7 +91,7 @@ vi.mock('../modules/billing/commission.model.js', () => ({
 }));
 
 vi.mock('../modules/accounting/journalEntry.model.js', () => ({
-  default: { findOne: (...a) => journalFindOne(...a), create: vi.fn() },
+  default: { find: (...a) => journalFind(...a) },
 }));
 
 vi.mock('../modules/accounting/journal.service.js', () => ({
@@ -99,13 +100,24 @@ vi.mock('../modules/accounting/journal.service.js', () => ({
 
 const { refundPayment } = await import('../modules/billing/invoice.service.js');
 
+/** The journal side of a commission accrual that booked `amount` of liability. */
+const accrualEntry = (amount) => ({
+  lines: [{ account: 'commissions_payable', debit: 0, credit: amount }],
+});
+
+/** The journal side of a commission payout: pays the doctor in cash. */
+const payoutEntry = (amount) => ({
+  lines: [{ account: 'commissions_payable', debit: amount, credit: 0 }],
+});
+
 /**
  * A commission document as Mongoose would hand it back. `save()` recomputes
  * `amount` from `baseAmount`, which is how scaling the base shrinks the money
  * actually owed.
  */
-function commissionDoc({ baseAmount, rate = 10, status = 'pending' } = {}) {
+function commissionDoc({ _id = 'comm-1', baseAmount, rate = 10, status = 'pending' } = {}) {
   const doc = {
+    _id,
     baseAmount,
     rate,
     status,
@@ -117,6 +129,7 @@ function commissionDoc({ baseAmount, rate = 10, status = 'pending' } = {}) {
     doc.amount = Number(((doc.baseAmount * rate) / 100).toFixed(2));
     return doc;
   });
+  doc.amount = Number(((doc.baseAmount * rate) / 100).toFixed(2));
   return doc;
 }
 
@@ -148,18 +161,21 @@ const invoiceDoc = (paidAmount, payments = []) => ({
 });
 
 /**
- * Drives `refundInvoicePayment` with the given commission state and the
- * accrual already booked for the invoice.
+ * Drives `refundPayment` with the given commission state and the commission
+ * journal history already on the books.
  *
  * @param {object} opts
  * @param {number} opts.paidAmount        collected before the refund
  * @param {number} opts.refundAmount      the refund being issued
- * @param {Array}  opts.commissions       pending commission documents
- * @param {number|null} opts.accruedTotal accrual booked, or null for none
+ * @param {Array}  opts.commissions       commission documents for the invoice
+ * @param {number|Array} opts.ledger      net credit shorthand (number) or a
+ *                                        raw entry list, e.g. accrual + payout
  */
-async function refund({ paidAmount, refundAmount, commissions, accruedTotal }) {
+async function refund({ paidAmount, refundAmount, commissions, ledger }) {
   // Honour the `status` filter so a `paid` document is genuinely excluded
-  // rather than being handed back by an over-permissive stub.
+  // rather than being handed back by an over-permissive stub. The unfiltered
+  // call (used to collect commission ids for the payout entry union) returns
+  // everything.
   commissionFind.mockImplementation((filter) =>
     query(
       track(
@@ -169,13 +185,9 @@ async function refund({ paidAmount, refundAmount, commissions, accruedTotal }) {
       ),
     ),
   );
-  journalFindOne.mockReturnValue(
-    query(
-      accruedTotal === null
-        ? null
-        : { _id: 'entry-1', totalCredit: accruedTotal, totalDebit: accruedTotal },
-    ),
-  );
+
+  const entries = Array.isArray(ledger) ? ledger : ledger === null ? [] : [accrualEntry(ledger)];
+  journalFind.mockImplementation(() => query(entries));
 
   // `refundPayment` takes the invoice id and re-fetches inside the transaction;
   // the stub `Invoice.findOne` hands back the fixture document.
@@ -192,11 +204,11 @@ async function refund({ paidAmount, refundAmount, commissions, accruedTotal }) {
   return result;
 }
 
-/** The entries this refund posted that reverse a commission accrual. */
+/** The liability-moving entries this refund posted. */
 const commissionAdjustments = () =>
   postJournalEntry.mock.calls
     .map(([entry]) => entry)
-    .filter((entry) => entry.sourceModel === 'Commission');
+    .filter((entry) => entry.sourceType === 'commission' && entry.sourceModel === 'Invoice');
 
 /** Net movement the refund applied to `commissions_payable`. */
 const payableMovement = () =>
@@ -212,16 +224,17 @@ beforeEach(() => {
 
 describe('refund adjusts the accrued commission liability', () => {
   it('reverses the whole accrual when the refund clears the invoice', async () => {
-    // 1000 collected at 10% commission -> 100 accrued. Refunding it all leaves
-    // nothing owed, so the liability must go to zero.
+    // 1000 collected at 10% commission -> 100 accrued and nothing else on the
+    // books. Refunding it all leaves nothing owed, so the liability must go
+    // from its net value (100) to zero.
     await refund({
       paidAmount: 1000,
       refundAmount: 1000,
       commissions: [commissionDoc({ baseAmount: 1000 })],
-      accruedTotal: ACCRUAL_TOTAL,
+      ledger: 100,
     });
 
-    expect(payableMovement()).toBe(ACCRUAL_TOTAL);
+    expect(payableMovement()).toBe(100);
   });
 
   it('voids the commission records when the invoice is fully refunded', async () => {
@@ -230,7 +243,7 @@ describe('refund adjusts the accrued commission liability', () => {
       paidAmount: 1000,
       refundAmount: 1000,
       commissions: [doc],
-      accruedTotal: ACCRUAL_TOTAL,
+      ledger: 100,
     });
 
     expect(doc.status).toBe('void');
@@ -244,7 +257,7 @@ describe('refund adjusts the accrued commission liability', () => {
       paidAmount: 1000,
       refundAmount: 500,
       commissions: [doc],
-      accruedTotal: ACCRUAL_TOTAL,
+      ledger: 100,
     });
 
     expect(doc.status).toBe('pending');
@@ -257,7 +270,7 @@ describe('refund adjusts the accrued commission liability', () => {
       paidAmount: 1000,
       refundAmount: 250,
       commissions: [commissionDoc({ baseAmount: 1000 })],
-      accruedTotal: ACCRUAL_TOTAL,
+      ledger: 100,
     });
 
     const [entry] = commissionAdjustments();
@@ -275,19 +288,20 @@ describe('refund adjusts the accrued commission liability', () => {
       paidAmount: 1000,
       refundAmount: 500,
       commissions: [commissionDoc({ baseAmount: 1000 })],
-      accruedTotal: ACCRUAL_TOTAL,
+      ledger: 100,
     });
 
     expect(payableMovement()).toBe(50);
 
     vi.clearAllMocks();
+    postJournalEntry.mockResolvedValue({});
 
     const stillPending = commissionDoc({ baseAmount: 500 });
     await refund({
       paidAmount: 500,
       refundAmount: 500,
       commissions: [stillPending],
-      accruedTotal: 50,
+      ledger: 50,
     });
 
     // Liability outstanding before the second refund was 50; it must now be 0,
@@ -302,7 +316,7 @@ describe('refund adjusts the accrued commission liability', () => {
       paidAmount: 400,
       refundAmount: 400,
       commissions: [],
-      accruedTotal: null,
+      ledger: null,
     });
 
     expect(commissionAdjustments()).toHaveLength(0);
@@ -313,7 +327,7 @@ describe('refund adjusts the accrued commission liability', () => {
       paidAmount: 400,
       refundAmount: 400,
       commissions: [],
-      accruedTotal: null,
+      ledger: null,
     });
 
     const collection = postJournalEntry.mock.calls
@@ -323,17 +337,21 @@ describe('refund adjusts the accrued commission liability', () => {
     expect(collection).toHaveLength(1);
   });
 
-  it('does not disturb an already-paid commission', async () => {
-    // Cash has already left the business; voiding the record would hide a real
-    // payout. Clawing it back is a separate flow, so the refund leaves it be.
-    const paid = commissionDoc({ baseAmount: 1000, status: 'paid' });
+  it('does not double-reverse an already-paid commission', async () => {
+    // Cash has already left the business for the doctor (the payout entry is
+    // commission-scoped, so it precisely cancels the accrual in the net
+    // balance). Voiding the record would hide a real payout, and the old
+    // non-net arithmetic posted a bogus second reversal against an
+    // already-zero liability — clawing it back is a separate payout flow.
+    const paid = commissionDoc({ _id: 'comm-9', baseAmount: 1000, status: 'paid' });
     await refund({
       paidAmount: 1000,
       refundAmount: 1000,
       commissions: [paid],
-      accruedTotal: ACCRUAL_TOTAL,
+      ledger: [accrualEntry(100), payoutEntry(100)],
     });
 
     expect(paid.status).toBe('paid');
+    expect(commissionAdjustments()).toHaveLength(0);
   });
 });
