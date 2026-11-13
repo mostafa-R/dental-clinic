@@ -15,6 +15,7 @@ import {
 } from "../components/ui/icons";
 import BranchFormModal from "../features/branches/BranchFormModal";
 import {
+  clearError as clearBranchesError,
   deleteBranch,
   fetchBranches,
   setPage,
@@ -27,7 +28,7 @@ import { canUserAccess } from "../lib/permissions";
 
 export default function Branches() {
   const dispatch = useDispatch();
-  const { items, loading, pagination, filters } = useSelector(
+  const { items, loading, pagination, filters, error } = useSelector(
     (state) => state.branches,
   );
   const { items: tenants } = useSelector((state) => state.tenants);
@@ -38,6 +39,8 @@ export default function Branches() {
   const [showForm, setShowForm] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
 
   useEffect(() => {
     dispatch(fetchBranches({ page: pagination.page, ...filters }));
@@ -61,8 +64,18 @@ export default function Branches() {
   };
 
   const handleDelete = async () => {
-    await dispatch(deleteBranch(deleteTarget._id));
-    setDeleteTarget(null);
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    setDeleteError(null);
+    dispatch(clearBranchesError());
+    try {
+      await dispatch(deleteBranch(deleteTarget._id)).unwrap();
+      setDeleteTarget(null);
+    } catch (err) {
+      setDeleteError(typeof err === "string" ? err : t("actionFailed", language));
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const exportRows = () => {
@@ -127,6 +140,12 @@ export default function Branches() {
           </Button>
         )}
       </div>
+
+      {error && !deleteTarget && (
+        <div role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-300">
+          {error}
+        </div>
+      )}
 
       <Card padding="p-0">
         {items.length === 0 ? (
@@ -219,7 +238,7 @@ export default function Branches() {
                             variant="ghost"
                             size="sm"
                             className="text-red-600 hover:text-red-700"
-                            onClick={() => setDeleteTarget(branch)}
+                            onClick={() => { setDeleteError(null); dispatch(clearBranchesError()); setDeleteTarget(branch); }}
                           >
                             {t("deleteBranch", language)}
                           </Button>
@@ -252,18 +271,23 @@ export default function Branches() {
 
       <Modal
         isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
+        onClose={() => { if (deleteLoading) return; setDeleteTarget(null); setDeleteError(null); dispatch(clearBranchesError()); }}
         title={t("deleteBranch", language)}
         size="sm"
       >
-        <p className="text-slate-600 dark:text-slate-300 mb-6">
+        <p className="text-slate-600 dark:text-slate-300 mb-4">
           {t("deleteBranchConfirm", language)}
         </p>
+        {(deleteError || error) && (
+          <div role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-300">
+            {deleteError || error}
+          </div>
+        )}
         <div className="flex justify-end gap-3">
-          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
+          <Button variant="secondary" onClick={() => { setDeleteTarget(null); setDeleteError(null); }} disabled={deleteLoading}>
             {t("cancel", language)}
           </Button>
-          <Button variant="danger" onClick={handleDelete}>
+          <Button variant="danger" onClick={handleDelete} loading={deleteLoading} disabled={deleteLoading}>
             {t("deleteBranch", language)}
           </Button>
         </div>

@@ -59,10 +59,18 @@ export default function WalletTab({ patientId }) {
       dispatch(fetchInstallmentPlans({ patientId, params: { limit: 100 } }));
     }
   }, [dispatch, patientId]);
+
+  const onInstallmentOverdue = useCallback((payload) => {
+    if (!patientId) return;
+    if (payload?.patientId && String(payload.patientId) !== String(patientId)) return;
+    refetchWallet();
+  }, [patientId, refetchWallet]);
+
   useSocketEvent(SOCKET_EVENTS.WALLET_UPDATED, refetchWallet);
   useSocketEvent(SOCKET_EVENTS.INSTALLMENT_CREATED, refetchWallet);
   useSocketEvent(SOCKET_EVENTS.INSTALLMENT_UPDATED, refetchWallet);
   useSocketEvent(SOCKET_EVENTS.INSTALLMENT_PAID, refetchWallet);
+  useSocketEvent(SOCKET_EVENTS.INSTALLMENT_OVERDUE, onInstallmentOverdue);
 
   const handleAddFunds = useCallback(async (e) => {
     e.preventDefault();

@@ -19,6 +19,7 @@ import {
   RolesIcon,
   SettingsIcon,
   BranchIcon as BranchesIcon,
+  AutomationsIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   CloseIcon,
@@ -36,6 +37,7 @@ const NAV_ICON = {
   '/chat': ChatIcon,
   '/users': UsersIcon,
   '/roles': RolesIcon,
+  '/automations': AutomationsIcon,
   '/settings': SettingsIcon,
 };
 

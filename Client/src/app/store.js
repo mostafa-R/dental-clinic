@@ -2,6 +2,7 @@ import { combineReducers, configureStore } from '@reduxjs/toolkit';
 import accountingReducer from '../features/accounting/accountingSlice';
 import appointmentReducer from '../features/appointments/appointmentSlice';
 import authReducer from '../features/auth/authSlice';
+import automationReducer from '../features/automations/automationSlice';
 import billingReducer from '../features/billing/billingSlice';
 import branchReducer from '../features/branches/branchSlice';
 import chatReducer from '../features/chat/chatSlice';
@@ -20,6 +21,7 @@ const appReducer = combineReducers({
   accounting: accountingReducer,
   appointments: appointmentReducer,
   auth: authReducer,
+  automations: automationReducer,
   billing: billingReducer,
   branches: branchReducer,
   chat: chatReducer,

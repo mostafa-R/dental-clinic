@@ -158,6 +158,7 @@ const tenantsSlice = createSlice({
       // Create tenant
       .addCase(createTenant.pending, (state) => {
         state.loading = true;
+        state.error = null;
       })
       .addCase(createTenant.fulfilled, (state, action) => {
         state.loading = false;
@@ -169,7 +170,11 @@ const tenantsSlice = createSlice({
         state.error = action.payload;
       })
       // Update tenant
+      .addCase(updateTenant.rejected, (state, action) => {
+        state.error = action.payload;
+      })
       .addCase(updateTenant.fulfilled, (state, action) => {
+        state.error = null;
         const index = state.items.findIndex(
           (t) => t._id === action.payload._id,
         );
@@ -181,7 +186,11 @@ const tenantsSlice = createSlice({
         }
       })
       // Suspend/Activate
+      .addCase(suspendTenant.rejected, (state, action) => {
+        state.error = action.payload;
+      })
       .addCase(suspendTenant.fulfilled, (state, action) => {
+        state.error = null;
         const index = state.items.findIndex(
           (t) => t._id === action.payload._id,
         );
@@ -189,7 +198,11 @@ const tenantsSlice = createSlice({
           state.items[index] = action.payload;
         }
       })
+      .addCase(activateTenant.rejected, (state, action) => {
+        state.error = action.payload;
+      })
       .addCase(activateTenant.fulfilled, (state, action) => {
+        state.error = null;
         const index = state.items.findIndex(
           (t) => t._id === action.payload._id,
         );
@@ -198,7 +211,11 @@ const tenantsSlice = createSlice({
         }
       })
       // Archive
+      .addCase(archiveTenant.rejected, (state, action) => {
+        state.error = action.payload;
+      })
       .addCase(archiveTenant.fulfilled, (state, action) => {
+        state.error = null;
         const index = state.items.findIndex(
           (t) => t._id === action.payload._id,
         );
@@ -207,7 +224,11 @@ const tenantsSlice = createSlice({
         }
       })
       // Delete
+      .addCase(deleteTenant.rejected, (state, action) => {
+        state.error = action.payload;
+      })
       .addCase(deleteTenant.fulfilled, (state, action) => {
+        state.error = null;
         state.items = state.items.filter((t) => t._id !== action.payload);
       });
   },

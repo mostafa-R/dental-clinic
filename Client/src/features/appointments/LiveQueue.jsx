@@ -163,6 +163,10 @@ export default function LiveQueue() {
         (payload) => dispatch(upsertFromSocket(payload.appointment)),
       ],
       [
+        SOCKET_EVENTS.APPOINTMENT_LATE_ARRIVAL,
+        (payload) => dispatch(upsertFromSocket(payload.appointment)),
+      ],
+      [
         SOCKET_EVENTS.APPOINTMENT_UPDATED,
         (payload) => dispatch(upsertFromSocket(payload.appointment)),
       ],

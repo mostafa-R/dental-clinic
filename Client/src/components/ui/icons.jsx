@@ -310,3 +310,11 @@ export function ChevronRightIcon(props) {
     </svg>
   );
 }
+
+export function AutomationsIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M13 2 4 14h6l-1 8 9-12h-6z" />
+    </svg>
+  );
+}

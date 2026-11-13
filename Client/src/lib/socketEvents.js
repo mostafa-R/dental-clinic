@@ -23,6 +23,7 @@ export const SOCKET_EVENTS = Object.freeze({
   APPOINTMENT_CREATED: 'appointment:created',
   APPOINTMENT_UPDATED: 'appointment:updated',
   APPOINTMENT_STATUS_CHANGED: 'appointment:statusChanged',
+  APPOINTMENT_LATE_ARRIVAL: 'appointment.lateArrival',
   QUEUE_STATUS_CHANGED: 'queue.status.changed',
   QUEUE_PATIENT_CALLED: 'queue.patient.called',
 

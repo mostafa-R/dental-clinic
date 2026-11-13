@@ -63,6 +63,8 @@
     "zod": "^4.6.6"
   },
   "overrides": {
-    "basic-ftp": "^6.2.3"
+    "basic-ftp": "^6.2.3",
+    "glob": "^14.0.2",
+    "minimatch": "^11.0.2"
   }
 }

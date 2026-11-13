@@ -12,6 +12,113 @@ import { verifyAccessToken } from '../utils/jwt.js';
 
 let io = null;
 
+// Explicit authorization policy for events delivered via PHI-capable clinic emitters
+// (emitToBranch, emitToTenantQueue, emitToChat). Unknown events on these paths are
+// denied by default to prevent silent authorization bypass.
+export const PHI_CAPABLE_EVENT_PERMISSION_REQUIREMENTS = Object.freeze({
+  // PHI / patient-sensitive: appointments & queue
+  'appointment:created': [['appointments', 'read']],
+  'appointment:updated': [['appointments', 'read']],
+  'appointment:statusChanged': [['appointments', 'read']],
+  'appointment:lateArrival': [['appointments', 'read']],
+  'queue.status.changed': [['appointments', 'read'], ['queue', 'read']],
+  'queue.patient.called': [['appointments', 'read'], ['queue', 'read']],
+
+  // PHI / patient-sensitive: patients
+  'patient:created': [['patients', 'read']],
+  'patient:updated': [['patients', 'read']],
+  'patient:archived': [['patients', 'read']],
+  'patient:merged': [['patients', 'read']],
+
+  // Financial-sensitive (billing) - may include patient/billing details
+  'invoice:created': [['billing', 'read']],
+  'invoice:updated': [['billing', 'read']],
+  'payment.recorded': [['billing', 'read']],
+
+  // PHI / clinical (EMR)
+  'clinical-note:created': [['emr', 'read']],
+  'clinical-note:updated': [['emr', 'read']],
+  'clinical-note:deleted': [['emr', 'read']],
+  'treatment-plan:created': [['emr', 'read']],
+  'treatment-plan:updated': [['emr', 'read']],
+  'chart:updated': [['emr', 'read']],
+
+  // PHI / prescriptions
+  'prescription:created': [['prescriptions', 'read']],
+  'prescription:updated': [['prescriptions', 'read']],
+  'prescription:deleted': [['prescriptions', 'read']],
+
+  // PHI / consents
+  'consent:created': [['consents', 'read']],
+  'consent:updated': [['consents', 'read']],
+  'consent:signed': [['consents', 'read']],
+  'consent:declined': [['consents', 'read']],
+  'consent:withdrawn': [['consents', 'read']],
+  'consent:deleted': [['consents', 'read']],
+
+  // Financial-sensitive (patient finance): least-privilege to finance modules
+  'wallet:updated': [['wallet', 'read'], ['billing', 'read']],
+  'installment:created': [['wallet', 'read'], ['billing', 'read']],
+  'installment:updated': [['wallet', 'read'], ['billing', 'read']],
+  'installment:paid': [['wallet', 'read'], ['billing', 'read']],
+  'installment.overdue': [['wallet', 'read'], ['billing', 'read']],
+
+  // Financial-sensitive (accounting)
+  'expense:created': [['accounting', 'read']],
+  'expense:deleted': [['accounting', 'read']],
+  'drawing:created': [['accounting', 'read']],
+  'drawing:deleted': [['accounting', 'read']],
+  'commission:updated': [['accounting', 'read']],
+  'dayclose:closed': [['accounting', 'read']],
+
+  // Operational / inventory-sensitive
+  'inventory:created': [['inventory', 'read']],
+  'inventory:updated': [['inventory', 'read']],
+  'inventory:deleted': [['inventory', 'read']],
+  'stock.low': [['inventory', 'read']],
+  'stock.expiring': [['inventory', 'read']],
+  'stock.expired': [['inventory', 'read']],
+
+  // Operational / admin-sensitive
+  'user:created': [['users', 'read']],
+  'user:updated': [['users', 'read']],
+  'user:deleted': [['users', 'read']],
+  'user:toggled': [['users', 'read']],
+  'role:created': [['roles', 'read']],
+  'role:updated': [['roles', 'read']],
+  'role:deleted': [['roles', 'read']],
+  'branch:created': [['branches', 'read']],
+  'branch:updated': [['branches', 'read']],
+  'branch:deleted': [['branches', 'read']],
+
+  // Operational automation alerts (least-privilege): settings readers
+  'automation:notify': [['settings', 'read']],
+
+  // PHI/operational chat content
+  'chat:message': [['chat', 'read']],
+  'chat:read': [['chat', 'read']],
+});
+
+// Explicit allowlist for approved non-sensitive events on PHI-capable delivery paths.
+// Currently none: all known clinic events carry clinic/patient/financial/operational data.
+export const PHI_CAPABLE_NON_SENSITIVE_ALLOWLIST = Object.freeze(new Set([]));
+
+function hasPermission(socket, module, action = 'read') {
+  if (!socket?.user) return false;
+  if (socket.user.siteAdmin) return true;
+  if (socket.user.isSystemAdmin) return true;
+  const actions = socket.user.permissions?.[module];
+  return Array.isArray(actions) && actions.includes(action);
+}
+
+function canReceivePhiCapableEvent(socket, event) {
+  if (socket?.user?.siteAdmin || socket?.user?.isSystemAdmin) return true;
+  if (PHI_CAPABLE_NON_SENSITIVE_ALLOWLIST.has(event)) return true;
+  const requirements = PHI_CAPABLE_EVENT_PERMISSION_REQUIREMENTS[event];
+  if (!requirements) return false; // deny unknown events on PHI-capable paths
+  return requirements.some(([module, action]) => hasPermission(socket, module, action));
+}
+
 function branchRoom(branchId) {
   return branchId ? `branch:${String(branchId)}` : null;
 }
@@ -162,6 +269,7 @@ export function initSocket(httpServer) {
         // DIFFERENT tenant must not grant this socket platform privileges.
         let isSystemAdmin = false;
         let isTenantWide = false;
+        let permissions = {};
         if (user.roleId) {
           const roleFilter = { _id: user.roleId };
           if (user.tenant) {
@@ -175,11 +283,10 @@ export function initSocket(httpServer) {
             // the REST routes about who is clinic-wide. `isTenantWide` — not
             // `isSystemAdmin` — is the correct signal: making clinic_manager
             // plan-bound must not shrink a multi-branch manager to one branch.
-            const perms = {};
             for (const perm of roleDoc?.permissions || []) {
-              perms[perm.module] = perm.actions || [];
+              permissions[perm.module] = perm.actions || [];
             }
-            isTenantWide = roleDoc ? isClinicWideRole(roleDoc, perms) : false;
+            isTenantWide = roleDoc ? isClinicWideRole(roleDoc, permissions) : false;
           }
         }
 
@@ -190,6 +297,7 @@ export function initSocket(httpServer) {
           tenant: user.tenant ? user.tenant.toString() : null,
           isSystemAdmin,
           isTenantWide,
+          permissions,
         };
 
         // Tag impersonated sessions so room membership below can restrict
@@ -266,7 +374,13 @@ export function initSocket(httpServer) {
       socket.join(userRoom(socket.user._id));
       // Join tenant-scoped chat channels — each tenant has isolated rooms and
       // the chat module must be included in the tenant's subscription plan.
-      if (socket.user.tenant && !socket.user.isSystemAdmin && planIncludesModule(socket.user.tenantPlan, 'chat')) {
+      // Require chat read permission to receive channel messages (PHI/operational chat content).
+      if (
+        socket.user.tenant &&
+        !socket.user.isSystemAdmin &&
+        planIncludesModule(socket.user.tenantPlan, 'chat') &&
+        hasPermission(socket, 'chat', 'read')
+      ) {
         CHAT_CHANNELS.forEach((ch) => socket.join(chatChannelRoom(socket.user.tenant, ch)));
       }
     }
@@ -320,6 +434,15 @@ export function initSocket(httpServer) {
       // Only authenticated clinic staff of the tenant (never impersonated
       // sessions) may watch the live queue room.
       if (socket.user.impersonating || !socket.user.tenant) return;
+      const perms = socket.user.permissions || {};
+      const canReadQueue =
+        socket.user.isSystemAdmin ||
+        perms?.queue?.includes?.('read') ||
+        perms?.appointments?.includes?.('read');
+      if (!canReadQueue) {
+        socket.emit('error', { message: 'Not authorized to subscribe to queue' });
+        return;
+      }
       // The tenant queue room carries patient names/ids for every branch, so
       // a branch-scoped user must use their own per-branch room instead.
       if (!socket.user.isTenantWide) {
@@ -389,6 +512,7 @@ export function emitToBranch(branchId, event, payload) {
   for (const socketId of roomSockets) {
     const socket = io.sockets.sockets.get(socketId);
     if (!socket) continue;
+    if (!canReceivePhiCapableEvent(socket, event)) continue;
     const data = socket.user?.impersonating ? sanitize(payload) : payload;
     io.to(socketId).emit(event, data);
   }
@@ -423,6 +547,7 @@ export function emitToTenantQueue(tenantId, event, payload, branchId) {
       if (delivered.has(socketId)) continue;
       const socket = io.sockets.sockets.get(socketId);
       if (!socket) continue;
+      if (!canReceivePhiCapableEvent(socket, event)) continue;
       delivered.add(socketId);
       const data = socket.user?.impersonating ? sanitize(payload) : payload;
       io.to(socketId).emit(event, data);
@@ -460,6 +585,7 @@ export function emitToChat({ recipient, channel, senderId, tenantId, branchId, e
     for (const socketId of roomSockets) {
       const socket = io.sockets.sockets.get(socketId);
       if (!socket) continue;
+      if (!canReceivePhiCapableEvent(socket, event)) continue;
       const data = socket.user?.impersonating ? sanitize(payload) : payload;
       io.to(socketId).emit(event, data);
     }

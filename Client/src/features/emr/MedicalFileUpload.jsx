@@ -13,7 +13,7 @@ const MAX_BYTES = 20 * 1024 * 1024;
 // told off.
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
 
-export default function MedicalFileUpload({ onUploaded }) {
+export default function MedicalFileUpload({ patientId, onUploaded }) {
   const dispatch = useDispatch();
   const { t } = useT();
   const inputRef = useRef(null);
@@ -23,6 +23,12 @@ export default function MedicalFileUpload({ onUploaded }) {
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (!patientId) {
+      dispatch(showErrorDialog({ message: t('emr.upload.missingPatient') || 'Patient is required before uploading files' }));
+      if (inputRef.current) inputRef.current.value = '';
+      return;
+    }
 
     if (file.size > MAX_BYTES) {
       dispatch(showErrorDialog({ message: t('emr.upload.tooLarge') || 'File exceeds 20 MB limit' }));
@@ -40,7 +46,7 @@ export default function MedicalFileUpload({ onUploaded }) {
     setUploading(true);
     setProgress(0);
     try {
-      const result = await emrApi.uploadFile(file, setProgress);
+      const result = await emrApi.uploadFile(file, { patientId, onProgress: setProgress });
       onUploaded?.(result.file);
     } catch (err) {
       dispatch(showErrorDialog(err));

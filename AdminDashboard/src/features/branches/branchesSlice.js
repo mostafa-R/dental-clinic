@@ -109,8 +109,14 @@ const branchesSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
+      .addCase(createBranch.rejected, (state, action) => {
+        state.error = action.payload;
+      })
       .addCase(createBranch.fulfilled, (state, action) => {
         state.items.unshift(action.payload);
+      })
+      .addCase(updateBranch.rejected, (state, action) => {
+        state.error = action.payload;
       })
       .addCase(updateBranch.fulfilled, (state, action) => {
         const index = state.items.findIndex(
@@ -122,6 +128,9 @@ const branchesSlice = createSlice({
         if (state.selectedBranch?._id === action.payload._id) {
           state.selectedBranch = action.payload;
         }
+      })
+      .addCase(deleteBranch.rejected, (state, action) => {
+        state.error = action.payload;
       })
       .addCase(deleteBranch.fulfilled, (state, action) => {
         state.items = state.items.filter((b) => b._id !== action.payload);

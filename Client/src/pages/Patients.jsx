@@ -50,6 +50,7 @@ export default function Patients() {
   useSocketEvent(SOCKET_EVENTS.PATIENT_CREATED, refetch);
   useSocketEvent(SOCKET_EVENTS.PATIENT_UPDATED, refetch);
   useSocketEvent(SOCKET_EVENTS.PATIENT_ARCHIVED, refetch);
+  useSocketEvent(SOCKET_EVENTS.PATIENT_MERGED, refetch);
 
   const openCreate = () => {
     setEditing(null);

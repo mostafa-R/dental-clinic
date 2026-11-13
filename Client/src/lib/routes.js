@@ -39,6 +39,7 @@ export const NAV_ROUTES = [
   { path: '/chat', module: 'chat', labelKey: 'nav.chat', section: 'nav.section.communication' },
   { path: '/users', module: 'users', labelKey: 'nav.users', section: 'nav.section.administration' },
   { path: '/roles', module: 'roles', labelKey: 'nav.roles', section: 'nav.section.administration' },
+  { path: '/automations', module: 'automations', labelKey: 'nav.automations', section: 'nav.section.administration' },
   { path: '/settings', module: 'settings', labelKey: 'nav.settings', section: 'nav.section.administration' },
   // Reached from a patient row, a dashboard card or a search result, never
   // from the sidebar. Registered so the guard gates the URL even though there

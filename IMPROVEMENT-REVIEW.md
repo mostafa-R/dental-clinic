@@ -176,3 +176,41 @@ it, consider lazy-charts behind `React.lazy` on first paint.
 
 *Modeling note: this review is static analysis + one Admin build run; no test suites were
 re-run. The P0 items can be verified in ~1h with a staging deploy and DevTools network check.*
+
+## Implementation status (2026-11-12)
+
+Items 1–5 of the suggested order are implemented; recharts unification is deferred.
+
+- **1. Cache-Control** — `server/middleware/security.js` now sends
+  `Cache-Control: no-store` (plus `Pragma: no-cache`) on every `/api/*` response,
+  leaving Swagger UI assets cacheable. Dead `X-XSS-Protection` / `Expect-CT`
+  headers removed from the same middleware.
+- **2. Admin edge proxy** — `AdminDashboard/middleware.js` is now a 1:1 port of
+  `Client/middleware.ts` (hop-by-hop stripping, `Set-Cookie` re-append,
+  spoof-proof `x-forwarded-for`, `BACKEND_TIMEOUT_MS`, 504/502 distinction) and
+  `vercel.json` excludes `api/` and `socket.io/` from the SPA rewrite.
+- **3. CSP + audit noise** — strict CSP headers in both `vercel.json` files
+  (no `unsafe-eval` in production; Client's meta tag kept so dev stays usable).
+  `securityAudit` rewritten with a `res.on('finish')` listener, no `Error`
+  construction, 4xx logged only for `{401,403,429}`, 5xx via new
+  `logErrorData()`; body limits are now upload-aware
+  (`uploadAwareBodyLimiter`: 55 MB only for `/emr/attachments`, 1 MB elsewhere)
+  and the API is gzip-compressed (`compression`, 1 KB threshold).
+- **4. Admin build/docs** — `vite.config.js` splits `vendor` (React/Redux/router)
+  and `recharts` chunks: entry went 352.65 kB → 159.72 kB raw (108.91 → 48.47
+  gzip), vendor is now immutable across deploys. Added `AdminDashboard/README.md`,
+  `BACKEND_TIMEOUT_MS` env docs and the multi-origin `CLIENT_URL` requirement in
+  `server/.env.example`. `/socket.io` dev proxy added (was missing entirely).
+- **5. UX** — `ConfirmDialog` gained a type-to-confirm mode; tenant
+  delete/archive (single and detail page) require the tenant name, bulk
+  archive/delete require the selected count. Per-route titles added for the public
+  pages (`useDocumentTitle`) plus description/OG tags in `Client/index.html`.
+  The reviewed "Settings page gaps" were already implemented in the current
+  code (allowedDomains / allowedSiteIps / maxTenants all render) — the design
+  spec note was stale.
+
+Outstanding: **recharts 2.15 (Admin) vs 3.9 (Client)** major-version skew —
+deferred as a breaking upgrade to be done with an actual Admin session for
+visual verification. Also unrelated and fixed while verifying: missing `useRef`
+imports in `Client/src/pages/Appointments.jsx` and `Inventory.jsx` (both pages
+crashed on render and now pass `routesRender.test.jsx`).

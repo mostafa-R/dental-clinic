@@ -132,10 +132,22 @@ const alertsSlice = createSlice({
         state.active = action.payload.alerts || [];
       })
       .addCase(acknowledgeAlert.pending, (state, action) => { state.managingId = action.meta.arg; state.error = null; })
-      .addCase(acknowledgeAlert.fulfilled, applyMutation)
+      .addCase(acknowledgeAlert.fulfilled, (state, action) => {
+        applyMutation(state, action);
+        const alert = action.payload?.alert;
+        if (state.detail?._id && alert?._id === state.detail._id) {
+          state.detail = alert;
+        }
+      })
       .addCase(acknowledgeAlert.rejected, (state, action) => { state.managingId = null; state.error = action.payload; })
       .addCase(resolveAlert.pending, (state, action) => { state.managingId = action.meta.arg; state.error = null; })
-      .addCase(resolveAlert.fulfilled, applyMutation)
+      .addCase(resolveAlert.fulfilled, (state, action) => {
+        applyMutation(state, action);
+        const alert = action.payload?.alert;
+        if (state.detail?._id && alert?._id === state.detail._id) {
+          state.detail = alert;
+        }
+      })
       .addCase(resolveAlert.rejected, (state, action) => { state.managingId = null; state.error = action.payload; })
       .addCase(acknowledgeAllAlerts.pending, (state) => { state.error = null; })
       .addCase(acknowledgeAllAlerts.fulfilled, (state) => {
@@ -145,8 +157,6 @@ const alertsSlice = createSlice({
             ? { ...a, status: "acknowledged", acknowledgedAt: new Date().toISOString() }
             : a,
         );
-        state.summary.open = 0;
-        state.summary.active = 0;
       })
       .addCase(acknowledgeAllAlerts.rejected, (state, action) => { state.error = action.payload; })
       .addCase(fetchAlertById.pending, (state) => { state.detailLoading = true; })

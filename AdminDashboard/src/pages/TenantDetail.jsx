@@ -81,6 +81,7 @@ export default function TenantDetail() {
 
   const [showForm, setShowForm] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
+  const [actionError, setActionError] = useState(null);
   const [usageOpen, setUsageOpen] = useState(false);
   const [billingOpen, setBillingOpen] = useState(false);
   const [billingPlan, setBillingPlan] = useState("");
@@ -138,15 +139,27 @@ export default function TenantDetail() {
   };
 
   const runAction = async () => {
+    if (!confirmAction) return;
     const map = {
       suspend: suspendTenant,
       activate: activateTenant,
       archive: archiveTenant,
       delete: deleteTenant,
     };
-    await dispatch(map[confirmAction.type](confirmAction.id));
-    setConfirmAction(null);
-    dispatch(fetchTenantDetail(id));
+    setActionError(null);
+    try {
+      await dispatch(map[confirmAction.type](confirmAction.id)).unwrap();
+      setConfirmAction(null);
+      if (confirmAction.type === "delete") {
+        // Preserve consistent state by refreshing detail; server may return not-found (UI handles gracefully).
+        dispatch(fetchTenantDetail(id));
+      } else {
+        dispatch(fetchTenantDetail(id));
+        dispatch(fetchTenantStats(id));
+      }
+    } catch (err) {
+      setActionError(typeof err === "string" ? err : t("actionFailed", language));
+    }
   };
 
   const isSuperAdmin = user?.role === "super_admin";
@@ -871,11 +884,17 @@ ${users.map((u) => `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc
         </div>
       </Modal>
 
+      {actionError && (
+        <div role="alert" className="mb-4 mt-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-300">
+          {actionError}
+        </div>
+      )}
+
       <ConfirmDialog
         isOpen={!!confirmAction}
-        onClose={() => setConfirmAction(null)}
+        onClose={() => { setConfirmAction(null); setActionError(null); }}
         title={confirmCopy[confirmAction?.type]?.title}
-        message={confirmCopy[confirmAction?.type]?.message}
+        message={actionError ? `${confirmCopy[confirmAction?.type]?.message || ""} ${actionError}`.trim() : confirmCopy[confirmAction?.type]?.message}
         confirmLabel={confirmCopy[confirmAction?.type]?.label}
         cancelLabel={t("cancel", language)}
         variant={confirmAction?.type === "activate" ? "primary" : "danger"}

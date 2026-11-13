@@ -6,6 +6,7 @@ import Modal from '../../components/ui/Modal';
 import MedicalFileUpload from './MedicalFileUpload';
 import { createNote, updateNote, resetFormState } from './emrSlice';
 import { showErrorDialog } from '../ui/uiSlice';
+import { requestConfirm } from '../ui/confirmDialog';
 import { ATTACHMENT_TYPES, isValidAttachmentUrl } from './dental';
 import { useT } from '../../lib/i18n';
 import {
@@ -13,9 +14,17 @@ import {
   toDateTimeInputValue,
   fromDateTimeInputValue,
 } from '../../lib/clinicTime';
+import { emrApi } from './emrApi';
 
 function emptyAttachment() {
   return { type: 'xray', url: '', caption: '' };
+}
+
+function filenameFromAttachment(att) {
+  if (att?.filename) return att.filename;
+  const url = String(att?.url || '');
+  const match = url.match(/\/emr\/attachments\/([^/]+)\/download(?:$|\?)/);
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 // A note's visit timestamp is the clinic's clock, not the browser's: the old
@@ -87,6 +96,26 @@ export default function ClinicalNoteFormModal({ open, patientId, patient, note, 
   };
   const addAttachment = () => setAttachments((prev) => [...prev, emptyAttachment()]);
   const removeAttachment = (idx) => setAttachments((prev) => prev.filter((_, i) => i !== idx));
+  const deleteAttachmentFile = async (idx) => {
+    const att = attachments[idx];
+    const filename = filenameFromAttachment(att);
+    if (!filename) {
+      removeAttachment(idx);
+      return;
+    }
+    const ok = await requestConfirm({
+      title: t('common.confirm'),
+      message: t('emr.attachment.deleteConfirm') || 'Delete this attachment file? This cannot be undone.',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await emrApi.deleteAttachment(filename);
+      removeAttachment(idx);
+    } catch (err) {
+      dispatch(showErrorDialog(err));
+    }
+  };
 
   const submit = async () => {
     if (!doctor) {
@@ -243,8 +272,9 @@ export default function ClinicalNoteFormModal({ open, patientId, patient, note, 
             <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('emr.note.attachments')}</label>
             <div className="flex items-center gap-2">
               <MedicalFileUpload
+                patientId={patientId}
                 onUploaded={(file) => {
-                  setAttachments((prev) => [...prev, { type: file.type || 'xray', url: file.url, caption: file.originalName || '' }]);
+                  setAttachments((prev) => [...prev, { type: file.type || 'xray', url: file.url, caption: file.originalName || '', filename: file.filename }]);
                 }}
               />
               <button type="button" onClick={addAttachment} className="rounded-md bg-brand/5 px-2 py-1 text-xs font-medium text-brand transition hover:bg-brand/10 dark:bg-brand/20 dark:text-brand-light">
@@ -253,20 +283,44 @@ export default function ClinicalNoteFormModal({ open, patientId, patient, note, 
             </div>
           </div>
           <div className="space-y-2">
-            {attachments.map((a, idx) => (
-              <div key={idx} className="flex flex-wrap items-center gap-2">
+            {attachments.map((a, idx) => {
+              const fileName = filenameFromAttachment(a) || a.filename || '';
+              return (
+              <div key={idx} className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 p-2 dark:border-slate-800">
                 <select value={a.type} onChange={(e) => updateAttachment(idx, 'type', e.target.value)} className={`${inputCls} w-32`} aria-label={t('emr.note.attachmentType')}>
                   {ATTACHMENT_TYPES.map((tp) => (
                     <option key={tp} value={tp}>{t(`emr.attachment.${tp}`)}</option>
                   ))}
                 </select>
-                <input value={a.url} onChange={(e) => updateAttachment(idx, 'url', e.target.value)} placeholder={t('emr.note.urlPlaceholder')} className={`${inputCls} flex-1`} />
+                <input value={a.url} onChange={(e) => updateAttachment(idx, 'url', e.target.value)} placeholder={t('emr.note.urlPlaceholder')} className={`${inputCls} min-w-[180px] flex-1`} />
                 <input value={a.caption} onChange={(e) => updateAttachment(idx, 'caption', e.target.value)} placeholder={t('emr.note.caption')} className={`${inputCls} w-44`} />
+                {fileName && <span className="text-[11px] text-slate-500 dark:text-slate-400" title={fileName}>{fileName}</span>}
+                {a.url ? (
+                  <a
+                    href={a.url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="rounded-md px-2 py-1 text-xs font-medium text-brand transition hover:bg-brand/10 dark:text-brand-light dark:hover:bg-brand/20"
+                    title={t('emr.attachment.download') || 'Download'}
+                  >
+                    {t('emr.attachment.download') || 'Download'}
+                  </a>
+                ) : null}
+                {filenameFromAttachment(a) ? (
+                  <button
+                    type="button"
+                    onClick={() => deleteAttachmentFile(idx)}
+                    className="rounded-md px-2 py-1 text-xs font-medium text-rose-600 transition hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/15"
+                    title={t('emr.attachment.deleteFile') || 'Delete file'}
+                  >
+                    {t('emr.attachment.deleteFile') || 'Delete file'}
+                  </button>
+                ) : null}
                 <button type="button" onClick={() => removeAttachment(idx)} disabled={attachments.length <= 1} className="rounded-md p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30 dark:hover:bg-rose-500/15" aria-label={t('common.remove')}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
                 </button>
               </div>
-            ))}
+            );})}
           </div>
           <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">{t('emr.note.attachmentHint')}</p>
         </div>

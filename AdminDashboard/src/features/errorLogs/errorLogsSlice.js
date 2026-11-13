@@ -47,7 +47,11 @@ const errorLogsSlice = createSlice({
     resolvingId: null,
     error: null,
   },
-  reducers: {},
+  reducers: {
+    clearErrorLogsError: (state) => {
+      state.error = null;
+    },
+  },
   extraReducers: (builder) => {
     builder
       .addCase(fetchErrorLogs.pending, (state) => { state.loading = true; state.error = null; })
@@ -58,7 +62,7 @@ const errorLogsSlice = createSlice({
       })
       .addCase(fetchErrorLogs.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
       .addCase(fetchErrorLogStats.fulfilled, (state, action) => { state.stats = action.payload; })
-      .addCase(resolveErrorLog.pending, (state, action) => { state.resolvingId = action.meta.arg; })
+      .addCase(resolveErrorLog.pending, (state, action) => { state.resolvingId = action.meta.arg; state.error = null; })
       .addCase(resolveErrorLog.fulfilled, (state, action) => {
         state.resolvingId = null;
         const updated = action.payload?.log || action.payload;
@@ -67,8 +71,12 @@ const errorLogsSlice = createSlice({
           state.logs[idx] = { ...state.logs[idx], ...updated };
         }
       })
-      .addCase(resolveErrorLog.rejected, (state) => { state.resolvingId = null; });
+      .addCase(resolveErrorLog.rejected, (state, action) => {
+        state.resolvingId = null;
+        state.error = action.payload;
+      });
   },
 });
 
+export const { clearErrorLogsError } = errorLogsSlice.actions;
 export default errorLogsSlice.reducer;

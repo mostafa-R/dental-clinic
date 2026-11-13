@@ -8,7 +8,7 @@ import Pagination from "../components/ui/Pagination";
 import StatCard from "../components/ui/StatCard";
 import { PageLoader } from "../components/ui/Spinner";
 import { ArrowDownTrayIcon, CheckIcon } from "../components/ui/icons";
-import { fetchErrorLogs, fetchErrorLogStats, resolveErrorLog } from "../features/errorLogs/errorLogsSlice";
+import { clearErrorLogsError, fetchErrorLogs, fetchErrorLogStats, resolveErrorLog } from "../features/errorLogs/errorLogsSlice";
 import { fetchTenants } from "../features/tenants/tenantsSlice";
 import { canUserAccess } from "../lib/permissions";
 import { formatDateTime } from "../lib/format";
@@ -23,13 +23,14 @@ const statusVariant = (code) => {
 
 export default function ErrorLogs() {
   const dispatch = useDispatch();
-  const { logs, stats, loading, pagination, resolvingId } = useSelector((state) => state.errorLogs);
+  const { logs, stats, loading, pagination, resolvingId, error } = useSelector((state) => state.errorLogs);
   const { items: tenants } = useSelector((state) => state.tenants);
   const { language } = useSelector((state) => state.ui);
   const user = useSelector((state) => state.auth?.user);
   const [tenantFilter, setTenantFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
+  const [resolveError, setResolveError] = useState(null);
 
   const canResolve = canUserAccess(user, "errorLogs.resolve");
 
@@ -38,6 +39,8 @@ export default function ErrorLogs() {
   }, [dispatch]);
 
   useEffect(() => {
+    setResolveError(null);
+    dispatch(clearErrorLogsError());
     dispatch(fetchErrorLogs({ page, tenantId: tenantFilter || undefined, statusCode: statusFilter || undefined }));
     dispatch(fetchErrorLogStats());
   }, [dispatch, page, tenantFilter, statusFilter]);
@@ -57,6 +60,16 @@ export default function ErrorLogs() {
     });
   };
 
+  const handleResolve = async (id) => {
+    setResolveError(null);
+    dispatch(clearErrorLogsError());
+    try {
+      await dispatch(resolveErrorLog(id)).unwrap();
+    } catch (err) {
+      setResolveError(typeof err === "string" ? err : t("actionFailed", language));
+    }
+  };
+
   return (
     <div className="p-6">
       {stats && (
@@ -64,6 +77,12 @@ export default function ErrorLogs() {
           <StatCard title={t("total", language)} value={stats.stats.total} variant="default" />
           <StatCard title="4xx" value={stats.stats["4xx"]} variant="warning" />
           <StatCard title="5xx" value={stats.stats["5xx"]} variant="danger" />
+        </div>
+      )}
+
+      {(resolveError || error) && (
+        <div role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-300">
+          {resolveError || error}
         </div>
       )}
 
@@ -144,7 +163,7 @@ export default function ErrorLogs() {
                             size="sm"
                             icon={CheckIcon}
                             loading={resolvingId === log._id}
-                            onClick={() => dispatch(resolveErrorLog(log._id))}
+                            onClick={() => handleResolve(log._id)}
                           >
                             {t("resolveError", language)}
                           </Button>

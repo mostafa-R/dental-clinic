@@ -60,6 +60,11 @@ export default function Billing() {
     dispatch(fetchTenants({ limit: 100 }));
   }, [dispatch]);
 
+  const reconcileBillingState = () => {
+    dispatch(fetchRevenueStats());
+    dispatch(fetchSubscriptions());
+  };
+
   const closeAll = () => {
     setPaymentModal(null);
     setEditModal(null);
@@ -75,8 +80,10 @@ export default function Billing() {
   const runAction = async (thunk) => {
     setActionLoading(true);
     setFormError("");
+    dispatch(clearError());
     try {
       await dispatch(thunk).then(unwrapResult);
+      reconcileBillingState();
       return true;
     } catch (err) {
       setFormError(typeof err === "string" ? err : t("actionFailed", language));
@@ -107,7 +114,7 @@ export default function Billing() {
           {t("billing", language)}
         </h2>
         {can("billing.update") && (
-          <Button onClick={() => { setCreateModal(true); setFormError(""); }}>
+          <Button onClick={() => { setFormError(""); dispatch(clearError()); setCreateModal(true); }}>
             {t("newSubscription", language)}
           </Button>
         )}
@@ -248,7 +255,7 @@ export default function Billing() {
                       <div className="flex gap-2">
                         {can("billing.update") && (
                           <button
-                            onClick={() => { setEditModal(sub); setEditPlan(sub.plan); }}
+                            onClick={() => { setFormError(""); dispatch(clearError()); setEditModal(sub); setEditPlan(sub.plan); }}
                             className="text-xs text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
                           >
                             {t("edit", language)}
@@ -256,7 +263,7 @@ export default function Billing() {
                         )}
                         {sub.status === 'past_due' && can("billing.payment") && (
                           <button
-                            onClick={() => { setPaymentModal(sub); setPaymentAmount(String(sub.amount || "")); }}
+                            onClick={() => { setFormError(""); dispatch(clearError()); setPaymentModal(sub); setPaymentAmount(String(sub.amount || "")); }}
                             className="text-xs text-emerald-600 hover:text-emerald-500 dark:text-emerald-400"
                           >
                             {t("processPayment", language)}

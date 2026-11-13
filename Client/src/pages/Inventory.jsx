@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 
 import Button from "../components/ui/Button";
@@ -72,6 +72,9 @@ export default function Inventory() {
   useSocketEvent(SOCKET_EVENTS.INVENTORY_CREATED, refetch);
   useSocketEvent(SOCKET_EVENTS.INVENTORY_UPDATED, refetch);
   useSocketEvent(SOCKET_EVENTS.INVENTORY_DELETED, refetch);
+  useSocketEvent(SOCKET_EVENTS.STOCK_LOW, refetch);
+  useSocketEvent(SOCKET_EVENTS.STOCK_EXPIRING, refetch);
+  useSocketEvent(SOCKET_EVENTS.STOCK_EXPIRED, refetch);
 
   const openCreate = () => {
     setEditing(null);

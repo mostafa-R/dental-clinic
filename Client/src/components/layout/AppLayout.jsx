@@ -2,6 +2,7 @@ import { Suspense, useEffect } from "react";
 import { useSelector } from "react-redux";
 import { Outlet } from "react-router-dom";
 import ChatGlobalListener from "../../features/chat/ChatGlobalListener";
+import AutomationNotifyListener from "../../features/notifications/AutomationNotifyListener";
 import { applyServerPreferences } from "../../features/preferences/usePreferences";
 import { setClinicTimeZone } from "../../lib/clinicTime";
 import { useT } from "../../lib/i18n";
@@ -82,6 +83,7 @@ export default function AppLayout() {
   return (
     <div className="flex h-screen overflow-hidden bg-canvas dark:bg-slate-950">
       <ChatGlobalListener />
+      <AutomationNotifyListener />
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <ImpersonationBanner />

@@ -71,7 +71,14 @@ let port;
 const clients = [];
 
 const BRANCH_ROLE = { _id: oid(10), isSystemAdmin: false, permissions: [{ module: 'appointments', actions: ['read'] }] };
-const CLINIC_WIDE_ROLE = { _id: oid(11), isSystemAdmin: false, permissions: [{ module: 'branches', actions: ['read', 'update'] }] };
+const CLINIC_WIDE_ROLE = {
+  _id: oid(11),
+  isSystemAdmin: false,
+  permissions: [
+    { module: 'branches', actions: ['read', 'update'] },
+    { module: 'appointments', actions: ['read'] },
+  ],
+};
 
 /**
  * A populated `tenant` document: carries plan/status fields AND stringifies to
@@ -267,6 +274,26 @@ describe('Live Queue branch scoping', () => {
     socket.emit('unsubscribe:queue');
     const rooms = await roomsForClient(socket.testToken);
 
+    expect(rooms).not.toContain(`queue:${TENANT}`);
+    expect(rooms).not.toContain(`queue:${TENANT}:${BRANCH_A}`);
+  });
+
+  it('rejects queue subscription without queue/appointments read permission', async () => {
+    const noQueueRole = {
+      _id: oid(12),
+      isSystemAdmin: false,
+      permissions: [{ module: 'branches', actions: ['read'] }],
+    };
+    const user = makeUser({ branch: BRANCH_A, role: noQueueRole, id: oid(25) });
+    const socket = await connect({ user, role: noQueueRole });
+
+    const error = await new Promise((resolve) => {
+      socket.on('error', resolve);
+      socket.emit('subscribe:queue');
+    });
+
+    expect(String(error?.message || '')).toMatch(/not authorized/i);
+    const rooms = await roomsForClient(socket.testToken);
     expect(rooms).not.toContain(`queue:${TENANT}`);
     expect(rooms).not.toContain(`queue:${TENANT}:${BRANCH_A}`);
   });

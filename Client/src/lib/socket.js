@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
-import { store } from '../app/store';
+import { getBoundStore } from '../app/storeBinding';
 import { pushToast } from '../features/ui/uiSlice';
 import { t } from './i18n';
 import { SOCKET_EMITS } from './socketEvents';
+
+function dispatchToast(payload) {
+  try {
+    getBoundStore()?.dispatch(pushToast(payload));
+  } catch {
+    /* best-effort: socket errors must not crash the app */
+  }
+}
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL?.replace(/\/api(\/v1)?$/, '') || '';
 
@@ -165,14 +173,14 @@ export function getSocket() {
   socket.on('error', (data) => {
     if (data?.message?.includes('Session ID unknown')) return;
     console.warn('[socket] server error:', data?.message);
-    store.dispatch(pushToast({ type: 'error', message: data?.message || t('socket.connectionError') }));
+    dispatchToast({ type: 'error', message: data?.message || t('socket.connectionError') });
   });
 
   socket.on('connect_error', (err) => {
     if (isDev) console.debug('[socket] connect_error:', err.message);
     if (err.message?.includes('Unauthorized') || err.message?.includes('Invalid or expired')) {
       setConnectionStatus('disconnected');
-      store.dispatch(pushToast({ type: 'error', message: t('socket.sessionExpired') }));
+      dispatchToast({ type: 'error', message: t('socket.sessionExpired') });
     }
   });
 

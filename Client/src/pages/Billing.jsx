@@ -95,6 +95,7 @@ export default function Billing() {
 
   useSocketEvent(SOCKET_EVENTS.INVOICE_CREATED, refreshAll);
   useSocketEvent(SOCKET_EVENTS.INVOICE_UPDATED, refreshAll);
+  useSocketEvent(SOCKET_EVENTS.PAYMENT_RECORDED, refreshAll);
 
   useEffect(() => () => dispatch(resetBilling()), [dispatch]);
 
@@ -182,6 +183,15 @@ export default function Billing() {
       {canViewSummary && (
         summaryStatus === 'loading' && !summary ? (
           <Card><Spinner label={t('billing.summary.loading')} /></Card>
+        ) : summaryStatus === 'failed' ? (
+          <Card>
+            <EmptyState title={t('billing.loadFailed')} message={t('billing.summary.loadFailed', undefined) || t('common.tryAgain')} />
+            <div className="mt-4 text-center">
+              <Button size="sm" onClick={() => dispatch(fetchBillingSummary())}>
+                {t('common.tryAgain')}
+              </Button>
+            </div>
+          </Card>
         ) : (
           <BillingSummary summary={summary} />
         )

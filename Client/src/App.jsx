@@ -17,6 +17,7 @@ const Accounting = lazy(() => import('./pages/Accounting'));
 const Inventory = lazy(() => import('./pages/Inventory'));
 const Roles = lazy(() => import('./pages/Roles'));
 const Users = lazy(() => import('./pages/Users'));
+const Automations = lazy(() => import('./pages/Automations'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Chat = lazy(() => import('./pages/Chat'));
 const NotFound = lazy(() => import('./pages/NotFound'));
@@ -82,6 +83,7 @@ function App() {
               <Route path="inventory" element={<Inventory />} />
               <Route path="roles" element={<Roles />} />
               <Route path="users" element={<Users />} />
+              <Route path="automations" element={<Automations />} />
               <Route path="settings" element={<Settings />} />
               <Route path="chat" element={<Chat />} />
               <Route path="*" element={<NotFound embedded />} />

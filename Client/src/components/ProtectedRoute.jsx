@@ -7,6 +7,7 @@ import { usePermissionRevalidation } from '../lib/roles';
 import { subscribeBranch, disconnectSocket } from '../lib/socket';
 import FullPageLoader from './FullPageLoader';
 import SuspendedScreen from './SuspendedScreen';
+import AccessDenied from './AccessDenied';
 
 export default function ProtectedRoute() {
   const dispatch = useDispatch();
@@ -63,6 +64,9 @@ export default function ProtectedRoute() {
 
   if (permissionsStatus === 'loading' || permissionsStatus === 'idle') {
     return <FullPageLoader />;
+  }
+  if (permissionsStatus === 'failed') {
+    return <AccessDenied reason="permission" />;
   }
 
   // Check tenant suspension

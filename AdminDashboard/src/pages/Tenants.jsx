@@ -236,17 +236,25 @@ export default function Tenants() {
 
   const runBulkPlanChange = async () => {
     if (!bulkPlan || selected.length === 0) return;
+    const ids = [...selected];
     setBulkLoading(true);
     setBulkError(null);
     const results = await Promise.allSettled(
-      selected.map((id) => dispatch(updateTenant({ id, data: { plan: bulkPlan } }))),
+      ids.map((id) => dispatch(updateTenant({ id, data: { plan: bulkPlan } })).unwrap()),
     );
-    const failed = results.filter((r) => r.status === "rejected").length;
+    const failedIds = ids.filter((_, idx) => results[idx].status === "rejected");
+    const failed = failedIds.length;
     setBulkLoading(false);
+    if (failed) {
+      setBulkError(t("bulkFailed", language));
+      setSelected(failedIds); // preserve selections for failed background operations
+      // keep modal open so user can retry/change plan; keep existing list data and reconcile in background
+      dispatch(fetchTenants({ page: pagination.page, ...filters }));
+      return;
+    }
     setSelected([]);
     setBulkPlanOpen(false);
     setBulkPlan("");
-    if (failed) setBulkError(t("bulkFailed", language));
     dispatch(fetchTenants({ page: pagination.page, ...filters }));
   };
 
@@ -285,17 +293,24 @@ export default function Tenants() {
   );
 
   const runAction = async () => {
+    if (!confirmAction) return;
     const map = {
       suspend: suspendTenant,
       activate: activateTenant,
       archive: archiveTenant,
       delete: deleteTenant,
     };
-    await dispatch(map[confirmAction.type](confirmAction.id));
-    setConfirmAction(null);
+    setBulkError(null);
+    try {
+      await dispatch(map[confirmAction.type](confirmAction.id)).unwrap();
+      setConfirmAction(null);
+    } catch (err) {
+      setBulkError(typeof err === "string" ? err : t("actionFailed", language));
+    }
   };
 
   const runBulkAction = async () => {
+    if (!bulkConfirm) return;
     const { type, ids } = bulkConfirm;
     const map = {
       suspend: suspendTenant,
@@ -312,16 +327,25 @@ export default function Tenants() {
         type !== "activate" ||
         items.find((t) => t._id === id)?.status === TENANT_STATUS.SUSPENDED,
     );
+    const ineligible = ids.filter((id) => !eligible.includes(id));
     setBulkLoading(true);
     setBulkError(null);
     const results = await Promise.allSettled(
-      eligible.map((id) => dispatch(map[type](id))),
+      eligible.map((id) => dispatch(map[type](id)).unwrap()),
     );
-    const failed = results.filter((r) => r.status === "rejected").length;
+    const failedEligible = eligible.filter((_, idx) => results[idx].status === "rejected");
+    const failedCount = failedEligible.length;
     setBulkLoading(false);
+    if (failedCount) {
+      // Preserve selections for failed/ineligible items during failed background operations.
+      setSelected([...new Set([...failedEligible, ...ineligible])]);
+      setBulkConfirm(null);
+      setBulkError(t("bulkFailed", language));
+      dispatch(fetchTenants({ page: pagination.page, ...filters }));
+      return;
+    }
     setSelected([]);
     setBulkConfirm(null);
-    if (failed) setBulkError(t("bulkFailed", language));
     dispatch(fetchTenants({ page: pagination.page, ...filters }));
   };
 
@@ -895,7 +919,7 @@ export default function Tenants() {
 
       <ConfirmDialog
         isOpen={!!confirmAction}
-        onClose={() => setConfirmAction(null)}
+        onClose={() => { setConfirmAction(null); setBulkError(null); }}
         title={t(
           confirmAction?.type === "suspend"
             ? "suspendTitle"

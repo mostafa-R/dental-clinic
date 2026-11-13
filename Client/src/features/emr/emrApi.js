@@ -61,9 +61,13 @@ export const emrApi = {
     api.delete(`${base(patientId)}/clinical-notes/${noteId}`).then((r) => r.data.data),
 
   /* Encrypted file attachments */
-  uploadFile: (file, onProgress) => {
+  uploadFile: (file, options = {}) => {
+    const { patientId, onProgress } = typeof options === 'function'
+      ? { onProgress: options }
+      : (options || {});
     const formData = new FormData();
     formData.append('file', file);
+    if (patientId) formData.append('patient', patientId);
     return api.post('/emr/attachments/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: (e) => {
@@ -73,4 +77,6 @@ export const emrApi = {
       },
     }).then((r) => r.data.data);
   },
+  deleteAttachment: (filename) =>
+    api.delete(`/emr/attachments/${encodeURIComponent(filename)}`).then((r) => r.data.data),
 };
